@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">پاور کٹ ایڈیٹر</string>
+    <string name="motto">سب سے تیز سب سے طاقتور</string>
+    <string name="app_title">پاور کٹ – سب سے تیز سب سے طاقتور</string>
+    <string name="select_video">ویڈیو منتخب کریں</string>
+    <string name="trim_video">فوری کٹائی</string>
+    <string name="export_video">ایکسپورٹ کریں</string>
+    <string name="resolution">ریزولیوشن</string>
+    <string name="quality">کوالٹی</string>
+    <string name="no_watermark">بغیر واٹر مارک</string>
+    <string name="instant_trim_desc">بغیر دوبارہ انکوڈ کیے ملی سیکنڈز میں فائلیں کاٹیں</string>
+    <string name="export_4k">الٹرا ایچ ڈی 4K</string>
+    <string name="export_8k">ایکسٹریم ایچ ڈی 8K</string>
+    <string name="export_1080p">فل ایچ ڈی 1080p</string>
+    <string name="apply_filter">اے آئی فلٹرز لگائیں</string>
+    <string name="gpu_filter_sepia">سیپیا گلو</string>
+    <string name="gpu_filter_grayscale">ونٹیج مونو</string>
+    <string name="gpu_filter_invert">نیین انورٹ</string>
+    <string name="gpu_filter_none">کوئی فلٹر نہیں</string>
+    <string name="language_toggle">English / اردو</string>
+    <string name="current_language">Urdu</string>
+    <string name="video_processing">ویڈیو پروسیس ہو رہی ہے...</string>
+    <string name="video_exporting">بغیر واٹر مارک کے اعلیٰ کوالٹی ویڈیو ایکسپورٹ ہو رہی ہے...</string>
+    <string name="export_success">ویڈیو کامیابی سے ایکسپورٹ ہو گئی!</string>
+    <string name="export_failed">ایکسپورٹ ناکام ہو گئی</string>
+    <string name="timeline">ٹائم لائن</string>
+    <string name="play">چلائیں</string>
+    <string name="pause">روکیں</string>
+    <string name="start_time">شروع کا وقت</string>
+    <string name="end_time">ختم ہونے کا وقت</string>
+    <string name="home">ہوم</string>
+    <string name="editor">ایڈیٹر</string>
+    <string name="done">مکمل</string>
+    <string name="error_file_open">ویڈیو فائل کھولنے میں ناکامی</string>
+
+    <!-- High-priority updates -->
+    <string name="video_speed">ویڈیو کی رفتار</string>
+    <string name="aspect_ratio">اسپیکٹ ریشو</string>
+    <string name="transitions">تبدیلیاں</string>
+    <string name="transition_none">کوئی نہیں</string>
+    <string name="transition_fade">دھیما اثر (Fade)</string>
+    <string name="transition_slide">سلائیڈ (Slide)</string>
+    <string name="transition_dissolve">گھلنا (Dissolve)</string>
+    <string name="audio_mixer">آڈیو مکسر</string>
+    <string name="video_volume">ویڈیو کی آواز</string>
+    <string name="bgm_volume">میوزک کی آواز</string>
+    <string name="add_bgm">بیک گراؤنڈ میوزک شامل کریں</string>
+    <string name="auto_captions">خودکار کیپشنز</string>
+    <string name="captions_off">بند</string>
+    <string name="captions_en">انگریزی (English)</string>
+    <string name="captions_ur">اردو</string>
+    <string name="silence_remover">خاموشی ختم کریں</string>
+
+    <!-- Professional Features strings -->
+    <string name="rotate_flip">گھمائیں اور الٹیں</string>
+    <string name="rotate">گھمائیں (Rotate)</string>
+    <string name="flip_h">افقی الٹیں (Flip H)</string>
+    <string name="flip_v">عمودی الٹیں (Flip V)</string>
+    <string name="crop">فریم کٹائی (Crop)</string>
+    <string name="speed_curve">اسپیڈ کرو (Speed Curve)</string>
+    <string name="curve_constant">مسلسل (Constant)</string>
+    <string name="curve_montage">مونتاج (Montage 2.5x)</string>
+    <string name="curve_hero">ہیرو اسپیڈ (Hero 4x)</string>
+    <string name="curve_flash">فلیش اسپیڈ (Flash 8x)</string>
+    <string name="text_overlays">ٹیکسٹ اور اسٹیکرز</string>
+    <string name="add_text">ٹیکسٹ شامل کریں</string>
+    <string name="sticker">3D اسٹیکر شامل کریں</string>
+    <string name="scrubber">فریم فریم اسکربر</string>
+
+    <!-- Templates, visualizers, masks -->
+    <string name="templates">تیار ٹیمپلیٹس</string>
+    <string name="visualizer">آڈیو ویژولائزر</string>
+    <string name="convert_mp3">بیٹ سنک ویژولائزر</string>
+    <string name="shapes_masks">3D ماسکس</string>
+</resources>
