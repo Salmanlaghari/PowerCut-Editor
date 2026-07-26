@@ -1,7 +1,10 @@
 package com.powercut.editor.domain.export
 
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
@@ -11,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.io.FileInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,14 +40,13 @@ class ExportManager @Inject constructor(
     suspend fun exportProject(project: VideoProject) {
         _exportState.value = Resource.Loading
         try {
-            val outputDirectory = getAppOutputDir()
-            if (!outputDirectory.exists()) {
-                outputDirectory.mkdirs()
+            val secureDir = File(context.cacheDir, "PowerCutExports")
+            if (!secureDir.exists()) {
+                secureDir.mkdirs()
             }
-
-            val outputFileName = "PowerCut_${System.currentTimeMillis()}.mp4"
-            val outputFile = File(outputDirectory, outputFileName)
-            val outputPath = outputFile.absolutePath
+            val tempFileName = "powercut_process_${System.currentTimeMillis()}.mp4"
+            val tempOutputFile = File(secureDir, tempFileName)
+            val tempOutputPath = tempOutputFile.absolutePath
 
             val isInstantTrimPossible = !project.isMuted &&
                     project.selectedFilter == "none" &&
@@ -53,13 +56,24 @@ class ExportManager @Inject constructor(
                     project.transitionType == "none" &&
                     !project.hasBackgroundMusic &&
                     project.autoCaptionsLanguage == "off" &&
-                    !project.isSilenceRemoverEnabled
+                    !project.isSilenceRemoverEnabled &&
+                    project.rotationDegrees == 0f &&
+                    !project.isFlippedHorizontal &&
+                    !project.isFlippedVertical &&
+                    project.cropPreset == "free" &&
+                    project.speedCurve == "constant" &&
+                    project.activeTextOverlay == null &&
+                    project.stickerType == "none" &&
+                    project.activeTemplateId == "none" &&
+                    project.visualizerStyle == "none" &&
+                    !project.isBeatSyncEnabled &&
+                    project.active3DShapeMask == "none"
 
             val success = if (isInstantTrimPossible) {
                 Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")
                 videoProcessor.instantTrim(
                     inputPath = project.videoPath,
-                    outputPath = outputPath,
+                    outputPath = tempOutputPath,
                     startMs = project.trimStartMs,
                     endMs = project.trimEndMs
                 )
@@ -67,7 +81,7 @@ class ExportManager @Inject constructor(
                 Log.d(tag, "Using transcode pipeline for upscale/filters/speed/audio")
                 videoProcessor.processAndExport(
                     inputPath = project.videoPath,
-                    outputPath = outputPath,
+                    outputPath = tempOutputPath,
                     startMs = project.trimStartMs,
                     endMs = project.trimEndMs,
                     resolution = project.targetResolution,
@@ -80,13 +94,34 @@ class ExportManager @Inject constructor(
                     backgroundMusicVolume = project.backgroundMusicVolume,
                     videoVolume = project.videoVolume,
                     autoCaptionsLanguage = project.autoCaptionsLanguage,
-                    isSilenceRemoverEnabled = project.isSilenceRemoverEnabled
+                    isSilenceRemoverEnabled = project.isSilenceRemoverEnabled,
+                    rotationDegrees = project.rotationDegrees,
+                    isFlippedHorizontal = project.isFlippedHorizontal,
+                    isFlippedVertical = project.isFlippedVertical,
+                    cropPreset = project.cropPreset,
+                    speedCurve = project.speedCurve,
+                    activeTextOverlay = project.activeTextOverlay,
+                    textAnimationType = project.textAnimationType,
+                    stickerType = project.stickerType,
+                    activeTemplateId = project.activeTemplateId,
+                    visualizerStyle = project.visualizerStyle,
+                    isBeatSyncEnabled = project.isBeatSyncEnabled,
+                    active3DShapeMask = project.active3DShapeMask
                 )
             }
 
-            if (success) {
-                Log.d(tag, "Successfully exported video to: $outputPath")
-                _exportState.value = Resource.Success(outputPath)
+            if (success && tempOutputFile.exists() && tempOutputFile.length() > 0) {
+                Log.d(tag, "Successfully processed video inside app sandbox: $tempOutputPath")
+
+                val galleryPath = saveToPublicGallery(context, tempOutputFile)
+
+                if (galleryPath != null) {
+                    Log.d(tag, "Successfully registered output in system gallery: $galleryPath")
+                    _exportState.value = Resource.Success(galleryPath)
+                } else {
+                    Log.w(tag, "Could not insert in MediaStore, falling back to secure sandbox path")
+                    _exportState.value = Resource.Success(tempOutputPath)
+                }
             } else {
                 Log.e(tag, "Export failed during video processing")
                 _exportState.value = Resource.Error("Video processing failed. Check logs for details.")
@@ -97,12 +132,49 @@ class ExportManager @Inject constructor(
         }
     }
 
-    private fun getAppOutputDir(): File {
-        val publicMovies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-        return if (publicMovies != null) {
-            File(publicMovies, "PowerCut")
+    private fun saveToPublicGallery(context: Context, sourceFile: File): String? {
+        val resolver = context.contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, "PowerCut_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PowerCut")
+                put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
+        }
+
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         } else {
-            File(context.filesDir, "PowerCut")
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+
+        return try {
+            val uri = resolver.insert(collection, contentValues) ?: return null
+            resolver.openOutputStream(uri)?.use { outStream ->
+                sourceFile.inputStream().use { inStream ->
+                    inStream.copyTo(outStream)
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                "Movies/PowerCut/" + sourceFile.name
+            } else {
+                val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                val powerCutDir = File(publicDir, "PowerCut")
+                if (!powerCutDir.exists()) powerCutDir.mkdirs()
+                val targetFile = File(powerCutDir, "PowerCut_${System.currentTimeMillis()}.mp4")
+                sourceFile.copyTo(targetFile, overwrite = true)
+                targetFile.absolutePath
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to insert exported video into system Gallery database", e)
+            null
         }
     }
 }

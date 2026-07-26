@@ -56,7 +56,7 @@ fun Modifier.tactileClick(
 fun Modifier.glassmorphic(
     shape: Shape = RoundedCornerShape(16.dp),
     borderColor: Color = Color.White.copy(alpha = 0.08f),
-    backColor: Color = Color(0xFF1E1E1E).copy(alpha = 0.82f)
+    backColor: Color = Color(0xFF1A1A22).copy(alpha = 0.8f)
 ): Modifier {
     return this
         .shadow(
@@ -86,24 +86,24 @@ fun Modifier.glassmorphic(
  * Surrounds the element with a glowing neon border to indicate premium focus or active state.
  */
 fun Modifier.neonGlow(
-    color: Color = Color(0xFFFF0055), // Cyber Pink
+    color: Color = Color(0xFFFF5722), // Default Neon Orange
     shape: Shape = RoundedCornerShape(16.dp),
     glowWidth: Dp = 2.dp
 ): Modifier {
     return this
         .shadow(
-            elevation = 8.dp,
+            elevation = 10.dp,
             shape = shape,
             clip = false,
-            ambientColor = color.copy(alpha = 0.5f),
-            spotColor = color.copy(alpha = 0.5f)
+            ambientColor = color.copy(alpha = 0.45f),
+            spotColor = color.copy(alpha = 0.45f)
         )
         .border(
             width = glowWidth,
             brush = Brush.linearGradient(
                 colors = listOf(
                     color,
-                    Color(0xFF00E5FF) // Gradient from Pink to Cyan
+                    Color(0xFF00BCD4) // Gradient from Orange to Cyan
                 )
             ),
             shape = shape

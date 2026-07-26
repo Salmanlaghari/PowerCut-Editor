@@ -11,12 +11,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryNeon,
-    secondary = SecondaryNeon,
-    background = DarkBackground,
-    surface = SurfaceColor,
+    primary = NeonOrange,
+    secondary = CyberCyan,
+    background = DarkBgEnd,
+    surface = GlassBackground,
     onPrimary = TextPrimary,
-    onSecondary = DarkBackground,
+    onSecondary = DarkBgEnd,
     onBackground = TextPrimary,
     onSurface = TextPrimary
 )
@@ -30,7 +30,7 @@ fun PowerCutTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
+            window.statusBarColor = DarkBgStart.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }

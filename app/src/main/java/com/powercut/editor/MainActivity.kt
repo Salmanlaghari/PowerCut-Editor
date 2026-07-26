@@ -30,17 +30,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             val language by viewModel.currentLanguage.collectAsState()
             val layoutDirection = LanguageHelper.getLayoutDirection(language)
+            val isDarkTheme by viewModel.isDarkThemeEnabled.collectAsState()
 
             // Enforce correct RTL/LTR direction dynamically for multi-lingual support
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 PowerCutTheme {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
+                        color = if (isDarkTheme) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onBackground
                     ) {
                         val currentScreen by viewModel.currentScreen.collectAsState()
+                        val currentDashboardTab by viewModel.currentDashboardTab.collectAsState()
                         val project by viewModel.currentProject.collectAsState()
                         val exportState by viewModel.exportState.collectAsState()
+
+                        val settingsRes by viewModel.selectedResolution.collectAsState()
+                        val settingsFps by viewModel.selectedFps.collectAsState()
+                        val isHardwareAccEnabled by viewModel.isHardwareAccEnabled.collectAsState()
+                        val storagePath by viewModel.selectedStoragePath.collectAsState()
 
                         when (currentScreen) {
                             "home" -> {
@@ -49,6 +56,30 @@ class MainActivity : ComponentActivity() {
                                     onLanguageToggle = { viewModel.toggleLanguage() },
                                     onVideoSelected = { uri ->
                                         viewModel.selectVideo(this@MainActivity, uri)
+                                    },
+                                    activeTab = currentDashboardTab,
+                                    onTabSelected = { tab ->
+                                        viewModel.updateDashboardTab(tab)
+                                    },
+                                    settingsResolution = settingsRes,
+                                    onSettingsResolutionChange = { res ->
+                                        viewModel.updateSettingsResolution(res)
+                                    },
+                                    settingsFps = settingsFps,
+                                    onSettingsFpsChange = { fps ->
+                                        viewModel.updateSettingsFps(fps)
+                                    },
+                                    isHardwareAccEnabled = isHardwareAccEnabled,
+                                    onToggleHardwareAcc = {
+                                        viewModel.toggleHardwareAcc()
+                                    },
+                                    storagePath = storagePath,
+                                    onStoragePathChange = { path ->
+                                        viewModel.updateStoragePath(path)
+                                    },
+                                    isDarkTheme = isDarkTheme,
+                                    onToggleTheme = {
+                                        viewModel.toggleTheme()
                                     }
                                 )
                             }
@@ -68,7 +99,7 @@ class MainActivity : ComponentActivity() {
                                             viewModel.updateFilter(filterId)
                                         },
                                         onToggleMute = { viewModel.toggleMute() },
-                                        onExport = { viewModel.startExport() },
+                                        onExport = { viewModel.navigateToExport() },
                                         onDurationRetrieved = { duration ->
                                             viewModel.setVideoDuration(duration)
                                         },
@@ -95,6 +126,42 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onToggleSilenceRemover = {
                                             viewModel.toggleSilenceRemover()
+                                        },
+                                        onUpdateRotation = {
+                                            viewModel.updateRotation()
+                                        },
+                                        onToggleFlipHorizontal = {
+                                            viewModel.toggleFlipHorizontal()
+                                        },
+                                        onToggleFlipVertical = {
+                                            viewModel.toggleFlipVertical()
+                                        },
+                                        onUpdateCropPreset = { crop ->
+                                            viewModel.updateCropPreset(crop)
+                                        },
+                                        onUpdateSpeedCurve = { curve ->
+                                            viewModel.updateSpeedCurve(curve)
+                                        },
+                                        onUpdateTextOverlay = { text ->
+                                            viewModel.updateTextOverlay(text)
+                                        },
+                                        onUpdateTextAnimation = { anim ->
+                                            viewModel.updateTextAnimation(anim)
+                                        },
+                                        onUpdateStickerType = { sticker ->
+                                            viewModel.updateStickerType(sticker)
+                                        },
+                                        onUpdateTemplate = { tempId ->
+                                            viewModel.updateTemplate(tempId)
+                                        },
+                                        onUpdateVisualizerStyle = { style ->
+                                            viewModel.updateVisualizerStyle(style)
+                                        },
+                                        onToggleBeatSync = {
+                                            viewModel.toggleBeatSync()
+                                        },
+                                        onUpdate3DShapeMask = { mask ->
+                                            viewModel.update3DShapeMask(mask)
                                         }
                                     )
                                 } ?: viewModel.resetToHome()
@@ -104,7 +171,10 @@ class MainActivity : ComponentActivity() {
                                     exportState = exportState,
                                     language = language,
                                     onDone = { viewModel.resetToHome() },
-                                    onBackToEditor = { viewModel.navigateToEditor() }
+                                    onBackToEditor = { viewModel.navigateToEditor() },
+                                    onStartExport = { res, fps, wm, hw ->
+                                        viewModel.startExportWithSettings(res, fps, wm, hw)
+                                    }
                                 )
                             }
                         }

@@ -30,22 +30,107 @@
     <string name="start_time">شروع کا وقت</string>
     <string name="end_time">ختم ہونے کا وقت</string>
     <string name="home">ہوم</string>
-    <string name="editor">ایڈیٹر</string>
+    <string name="editor">Editor</string>
     <string name="done">مکمل</string>
     <string name="error_file_open">ویڈیو فائل کھولنے میں ناکامی</string>
 
-    <!-- High-priority updates -->
-    <string name="video_speed">ویڈیو کی رفتار</string>
+    <!-- Phase 1: Dashboard, Navigation, Settings -->
+    <string name="new_project">نیا پروجیکٹ</string>
+    <string name="recent_projects">حالیہ پروجیکٹس</string>
+    <string name="templates">ٹیمپلیٹس</string>
+    <string name="settings">ترتیبات</string>
     <string name="aspect_ratio">اسپیکٹ ریشو</string>
+    <string name="app_intro_desc">اگلی نسل کا پروفیشنل ویڈیو ایڈیٹر</string>
+    <string name="select_theme">تھیم (Theme)</string>
+    <string name="theme_dark">ڈارک موڈ</string>
+    <string name="theme_light">لائٹ موڈ</string>
+    <string name="theme_system">سسٹم ڈیفالٹ</string>
+    <string name="fps_settings">ڈیفالٹ فریم ریٹ</string>
+    <string name="storage_path">اسٹوریج کا مقام</string>
+    <string name="hardware_acceleration">ہارڈ ویئر ایکسلریشن (GPU)</string>
+
+    <!-- Phase 2: Playback & Preview Options -->
+    <string name="frame_step_1">اگلا فریم +1</string>
+    <string name="frame_step_10">اگلا فریم +10</string>
+    <string name="loop_playback">لوپ پلے بیک</string>
+    <string name="ab_repeat">A-B پلے بیک</string>
+    <string name="safe_areas">سیف ایریا گائیڈز</string>
+    <string name="grid_overlay">گرڈ اوورلے</string>
+    <string name="rulers_guides">رولرس اور الائنمنٹ</string>
+    <string name="zoom_fit">زوم فٹ</string>
+    <string name="zoom_100">زوم 100%</string>
+    <string name="zoom_200">زوم 200%</string>
+    <string name="compare_mode">پہلے اور بعد کا موازنہ</string>
+    <string name="snapshot">فریم اسنیپ شاٹ</string>
+    <string name="fullscreen">فل اسکرین پریویو</string>
+    <string name="histogram">ہسٹوگرام اوورلے</string>
+    <string name="audio_waveform">آڈیو ویوفارم</string>
+    <string name="mute_track">ٹریک خاموش کریں</string>
+    <string name="solo_track">سولو ٹریک</string>
+    <string name="lock_track">ٹریک لاک کریں</string>
+
+    <!-- Phase 3: Core Tools & Adjustments -->
+    <string name="split_video">تقسیم کریں (Split)</string>
+    <string name="delete_video">حذف کریں</string>
+    <string name="duplicate_video">ڈپلیکیٹ</string>
+    <string name="reverse_video">الٹا چلائیں</string>
+    <string name="freeze_frame">فریم منجمد کریں</string>
+    <string name="brightness">چمک (Brightness)</string>
+    <string name="contrast">تضاد (Contrast)</string>
+    <string name="saturation">اشباع (Saturation)</string>
+    <string name="exposure">ایکسپوژر</string>
+    <string name="sharpness">نفاست (Sharpness)</string>
+    <string name="blur">دھندلا پن</string>
+    <string name="vignette">وینیٹ (Vignette)</string>
+    <string name="add_text_label">ٹیکسٹ کا انداز</string>
+    <string name="transitions_title">Transitions</string>
+    <string name="filters_title">Filters</string>
+    <string name="speed_title">Speed Control</string>
+
+    <!-- Phase 4: AI Corrections & Content -->
+    <string name="ai_color">اے آئی خودکار رنگ</string>
+    <string name="ai_low_light">اے آئی مدہم روشنی بہتر کریں</string>
+    <string name="ai_noise_reduction">اے آئی آڈیو شور کم کریں</string>
+    <string name="ai_upscale">اے آئی 4K/8K اپ اسکیل</string>
+    <string name="ai_captions">اے آئی خودکار کیپشنز</string>
+    <string name="ai_background_remove">اے آئی پس منظر صاف کریں</string>
+    <string name="ai_skin_smooth">اے آئی چہرہRetouch</string>
+
+    <!-- Phase 5: Extras -->
+    <string name="mp3_to_video">MP3 سے ویڈیو بیٹس</string>
+    <string name="video_to_gif">ویڈیو سے GIF</string>
+    <string name="video_compressor">ویڈیو کمپریسر</string>
+    <string name="video_merger">ویڈیو مرجر</string>
+    <string name="slideshow_maker">سلائیڈ شو میکر</string>
+
+    <!-- Professional Features strings (Consolidated) -->
+    <string name="rotate_flip">گھمائیں اور الٹیں</string>
+    <string name="rotate">گھمائیں (Rotate)</string>
+    <string name="flip_h">افقی الٹیں (Flip H)</string>
+    <string name="flip_v">عمودی الٹیں (Flip V)</string>
+    <string name="crop">فریم کٹائی (Crop)</string>
+    <string name="speed_curve">اسپیڈ کرو (Speed Curve)</string>
+    <string name="curve_constant">مسلسل (Constant)</string>
+    <string name="curve_montage">مونتاج (Montage 2.5x)</string>
+    <string name="curve_hero">ہیرو اسپیڈ (Hero 4x)</string>
+    <string name="curve_flash">فلیش اسپیڈ (Flash 8x)</string>
+    <string name="text_overlays">ٹیکسٹ اور اسٹیکرز</string>
+    <string name="add_text">ٹیکسٹ شامل کریں</string>
+    <string name="sticker">3D اسٹیکر شامل کریں</string>
+    <string name="scrubber">فریم فریم اسکربر</string>
+    <string name="templates_title">تیار ٹیمپلیٹس</string>
+    <string name="visualizer">آڈیو ویژولائزر</string>
+    <string name="convert_mp3">بیٹ سنک ویژولائزر</string>
+    <string name="shapes_masks">3D ماسکس</string>
+    <string name="audio_mixer">آڈیو مکسر</string>
+    <string name="video_volume">ویڈیو کی آواز</string>
+    <string name="bgm_volume">میوزک کی آواز</string>
+    <string name="add_bgm">بیک گراؤنڈ میوزک شامل کریں</string>
     <string name="transitions">تبدیلیاں</string>
     <string name="transition_none">کوئی نہیں</string>
     <string name="transition_fade">دھیما اثر (Fade)</string>
     <string name="transition_slide">سلائیڈ (Slide)</string>
     <string name="transition_dissolve">گھلنا (Dissolve)</string>
-    <string name="audio_mixer">آڈیو مکسر</string>
-    <string name="video_volume">ویڈیو کی آواز</string>
-    <string name="bgm_volume">میوزک کی آواز</string>
-    <string name="add_bgm">بیک گراؤنڈ میوزک شامل کریں</string>
     <string name="auto_captions">خودکار کیپشنز</string>
     <string name="captions_off">بند</string>
     <string name="captions_en">انگریزی (English)</string>
