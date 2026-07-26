@@ -30,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBackIos
 import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -40,6 +39,7 @@ import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ElectricBolt
+import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.ShapeLine
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
@@ -63,9 +64,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -97,13 +102,17 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.powercut.editor.R
 import com.powercut.editor.core.utils.LanguageHelper
+import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
+import com.powercut.editor.domain.ai.AIFilter
 import com.powercut.editor.domain.timeline.TimelineHelper
 import com.powercut.editor.ui.theme.CyberCyan
 import com.powercut.editor.ui.theme.NeonOrange
 import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.tactileClick
+import java.io.File
+import java.util.Locale
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -143,7 +152,16 @@ fun EditorScreen(
     onUpdate3DShapeMask: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val scrollState = rememberScrollState()
+
+    // BGM local Audio Picker
+    val musicPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val audioPath = UriHelper.getPathFromUri(context, uri)
+            onUpdateBackgroundMusic(audioPath)
+        }
+    }
 
     // Initialize ExoPlayer
     val exoPlayer = remember {
@@ -153,7 +171,7 @@ fun EditorScreen(
     }
 
     var isPlaying by remember { mutableStateOf(false) }
-    var currentPlaybackTime by remember { mutableStateOf(10000L) } // Mock starting time in milliseconds
+    var currentPlaybackTime by remember { mutableStateOf(0L) }
 
     // Connect player with video path
     LaunchedEffect(project.videoPath) {
@@ -177,10 +195,43 @@ fun EditorScreen(
         }
     }
 
+    // React to changes in Mute state and Volume
+    LaunchedEffect(project.isMuted, project.videoVolume) {
+        exoPlayer.volume = if (project.isMuted) 0f else project.videoVolume
+    }
+
     // Clean up player on leave
     DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
+        }
+    }
+
+    // Real-time Compose ColorMatrix filter
+    val composeColorFilter = remember(project.selectedFilter) {
+        when (project.selectedFilter.lowercase()) {
+            "grayscale" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+            "sepia" -> ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        0.393f, 0.769f, 0.189f, 0f, 0f,
+                        0.349f, 0.686f, 0.168f, 0f, 0f,
+                        0.272f, 0.534f, 0.131f, 0f, 0f,
+                        0f,     0f,     0f,     1f, 0f
+                    )
+                )
+            )
+            "invert" -> ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -1f,  0f,  0f, 0f, 255f,
+                         0f, -1f,  0f, 0f, 255f,
+                         0f,  0f, -1f, 0f, 255f,
+                         0f,  0f,  0f, 1f,   0f
+                    )
+                )
+            )
+            else -> null
         }
     }
 
@@ -467,7 +518,179 @@ fun EditorScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // DYNAMIC CONTEXTUAL OPTIONS PANEL BASED ON ACTIVE CATEGORY
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .height(96.dp)
+                .glassmorphic(shape = RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            when (activeCategory) {
+                "Edit" -> {
+                    // Trimming, crop, rotation & flips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onUpdateRotation) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.RotateRight, contentDescription = "Rot", tint = Color.White, modifier = Modifier.size(16.dp))
+                                Text("ROTATE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        IconButton(onClick = onToggleFlipHorizontal) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.Flip, contentDescription = "FlipH", tint = Color.White, modifier = Modifier.size(16.dp))
+                                Text("FLIP H", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        IconButton(onClick = onToggleFlipVertical) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.Flip, contentDescription = "FlipV", tint = Color.White, modifier = Modifier.size(16.dp))
+                                Text("FLIP V", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        IconButton(onClick = { onUpdateCropPreset("1:1") }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.Crop, contentDescription = "Crop", tint = Color.White, modifier = Modifier.size(16.dp))
+                                Text("CROP 1:1", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                    }
+                }
+                "Audio" -> {
+                    // Audio mixer, volumes, adding background track
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("VIDEO VOLUME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Slider(
+                                value = project.videoVolume,
+                                onValueChange = onUpdateVideoVolume,
+                                valueRange = 0.0f..1.0f,
+                                colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(CyberCyan.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .clickable { musicPickerLauncher.launch("audio/*") }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("ADD BGM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                        }
+                    }
+                }
+                "Text" -> {
+                    // Text overlays input field
+                    var textInput by remember { mutableStateOf(project.activeTextOverlay ?: "") }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = textInput,
+                            onValueChange = {
+                                textInput = it
+                                onUpdateTextOverlay(if (it.isBlank()) null else it)
+                            },
+                            placeholder = { Text("Burn Subtitle Text...", fontSize = 11.sp, color = Color.Gray) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonOrange,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+                "Stickers" -> {
+                    // 3D shape mask overlay list
+                    val masksList = listOf("none", "circle", "heart", "star", "hexagon", "vignette")
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        items(masksList) { mask ->
+                            val isSel = project.active3DShapeMask == mask
+                            Box(
+                                modifier = Modifier
+                                    .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+                                    .clickable { onUpdate3DShapeMask(mask) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(mask.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                            }
+                        }
+                    }
+                }
+                "Overlay" -> {
+                    // Templates carousel selections
+                    val templates = listOf("none", "spark", "bloom", "vlog", "poetry", "beats", "glitch")
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        items(templates) { temp ->
+                            val isSel = project.activeTemplateId == temp
+                            Box(
+                                modifier = Modifier
+                                    .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+                                    .clickable { onUpdateTemplate(temp) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(temp.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                            }
+                        }
+                    }
+                }
+                "AI" -> {
+                    // AI corrections, auto captions, transitions, silence removers
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onToggleSilenceRemover) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Silence", tint = if (project.isSilenceRemoverEnabled) CyberCyan else Color.White, modifier = Modifier.size(16.dp))
+                                Text("DE-SILENCE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        IconButton(onClick = { onUpdateAutoCaptions(if (project.autoCaptionsLanguage == "en") "ur" else "en") }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.Subtitles, contentDescription = "Caps", tint = if (project.autoCaptionsLanguage != "off") NeonOrange else Color.White, modifier = Modifier.size(16.dp))
+                                Text("CAPTIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                        IconButton(onClick = { onUpdateFilter(if (project.selectedFilter == "grayscale") "none" else "grayscale") }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(imageVector = Icons.Default.Movie, contentDescription = "Filt", tint = if (project.selectedFilter != "none") NeonOrange else Color.White, modifier = Modifier.size(16.dp))
+                                Text("AI FILTER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // 5. PROFESSIONAL MULTI-TRACK TIMELINE
         Box(

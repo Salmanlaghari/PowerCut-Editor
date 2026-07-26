@@ -99,7 +99,7 @@ class MainActivity : ComponentActivity() {
                                             viewModel.updateFilter(filterId)
                                         },
                                         onToggleMute = { viewModel.toggleMute() },
-                                        onExport = { viewModel.startExport() },
+                                        onExport = { viewModel.navigateToExport() },
                                         onDurationRetrieved = { duration ->
                                             viewModel.setVideoDuration(duration)
                                         },
@@ -171,7 +171,10 @@ class MainActivity : ComponentActivity() {
                                     exportState = exportState,
                                     language = language,
                                     onDone = { viewModel.resetToHome() },
-                                    onBackToEditor = { viewModel.navigateToEditor() }
+                                    onBackToEditor = { viewModel.navigateToEditor() },
+                                    onStartExport = { res, fps, wm, hw ->
+                                        viewModel.startExportWithSettings(res, fps, wm, hw)
+                                    }
                                 )
                             }
                         }

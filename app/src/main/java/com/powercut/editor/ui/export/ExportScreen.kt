@@ -63,13 +63,17 @@ fun ExportScreen(
     exportState: Resource<String>,
     language: String,
     onDone: () -> Unit,
-    onBackToEditor: () -> Unit
+    onBackToEditor: () -> Unit,
+    onStartExport: (resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) -> Unit
 ) {
     var selectedResIndex by remember { mutableStateOf(2) } // default 1080p (FHD)
     var selectedFpsIndex by remember { mutableStateOf(1) } // default 30 fps
 
     var isNoWatermarkEnabled by remember { mutableStateOf(true) }
     var isHardwareAccEnabled by remember { mutableStateOf(true) }
+
+    val resolutionsList = listOf("480p", "720p", "1080p", "4k")
+    val fpsList = listOf(24, 30, 60, 120)
 
     Box(
         modifier = Modifier
@@ -84,7 +88,7 @@ fun ExportScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             when (exportState) {
-                is Resource.Idle, is Resource.Loading -> {
+                is Resource.Idle -> {
                     // 1. HEADER BAR
                     Row(
                         modifier = Modifier
@@ -298,7 +302,14 @@ fun ExportScreen(
                                 shape = RoundedCornerShape(16.dp)
                             )
                             .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-                            .tactileClick(onClick = onDone),
+                            .tactileClick {
+                                onStartExport(
+                                    resolutionsList[selectedResIndex],
+                                    fpsList[selectedFpsIndex],
+                                    isNoWatermarkEnabled,
+                                    isHardwareAccEnabled
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -307,6 +318,41 @@ fun ExportScreen(
                             Text("EXPORT & SAVE", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 1.sp)
                         }
                     }
+                }
+
+                is Resource.Loading -> {
+                    // Header Bar during loading
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 32.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBackToEditor) {
+                            Icon(imageVector = Icons.Default.ArrowBackIos, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text("Export Video", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Processing high-speed output pipeline...", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
+
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(72.dp),
+                        color = NeonOrange,
+                        strokeWidth = 6.dp
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = LanguageHelper.getString(R.string.video_exporting, language),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
                 }
 
                 is Resource.Success -> {

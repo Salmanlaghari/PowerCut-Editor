@@ -263,9 +263,18 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun startExport() {
-        val project = currentProject.value ?: return
+    fun navigateToExport() {
         _currentScreen.value = "export"
+    }
+
+    fun startExportWithSettings(resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) {
+        // Update project configuration before start
+        projectRepository.updateProject { project ->
+            project.copy(
+                targetResolution = resolution
+            )
+        }
+        val project = currentProject.value ?: return
         viewModelScope.launch {
             exportManager.exportProject(project)
         }
@@ -278,6 +287,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun navigateToEditor() {
+        exportManager.resetState()
         _currentScreen.value = "editor"
     }
 }
