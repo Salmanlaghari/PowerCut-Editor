@@ -8,8 +8,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +17,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,27 +29,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.ElectricBolt
-import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RotateRight
-import androidx.compose.material.icons.filled.ShapeLine
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,8 +47,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -79,16 +63,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -103,12 +82,8 @@ import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.ai.AIFilter
 import com.powercut.editor.domain.timeline.TimelineHelper
-import com.powercut.editor.ui.theme.glassmorphic
-import com.powercut.editor.ui.theme.neonGlow
-import com.powercut.editor.ui.theme.tactileClick
 import java.io.File
 import java.util.Locale
-import kotlin.math.roundToInt
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -123,34 +98,20 @@ fun EditorScreen(
     onExport: () -> Unit,
     onDurationRetrieved: (Long) -> Unit,
 
-    // High-priority callback methods
-    onUpdateSpeed: (Float) -> Unit,
-    onUpdateAspectPreset: (String) -> Unit,
-    onUpdateTransition: (String) -> Unit,
-    onUpdateBackgroundMusic: (String?) -> Unit,
-    onUpdateMusicVolume: (Float) -> Unit,
-    onUpdateVideoVolume: (Float) -> Unit,
-    onUpdateAutoCaptions: (String) -> Unit,
-    onToggleSilenceRemover: () -> Unit,
-
-    // Professional callback methods
-    onUpdateRotation: () -> Unit = {},
-    onToggleFlipHorizontal: () -> Unit = {},
-    onToggleFlipVertical: () -> Unit = {},
-    onUpdateCropPreset: (String) -> Unit = {},
-    onUpdateSpeedCurve: (String) -> Unit = {},
-    onUpdateTextOverlay: (String?) -> Unit = {},
-    onUpdateTextAnimation: (String) -> Unit = {},
-    onUpdateStickerType: (String) -> Unit = {},
-    onUpdateTemplate: (String) -> Unit = {},
-    onUpdateVisualizerStyle: (String) -> Unit = {},
-    onToggleBeatSync: () -> Unit = {},
-    onUpdate3DShapeMask: (String) -> Unit = {}
+    // High-priority features callbacks
+    onUpdateSpeed: (Float) -> Unit = {},
+    onUpdateAspectPreset: (String) -> Unit = {},
+    onUpdateTransition: (String) -> Unit = {},
+    onUpdateBackgroundMusic: (String?) -> Unit = {},
+    onUpdateMusicVolume: (Float) -> Unit = {},
+    onUpdateVideoVolume: (Float) -> Unit = {},
+    onUpdateAutoCaptions: (String) -> Unit = {},
+    onToggleSilenceRemover: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
-    // BGM local Audio Picker
+    // BGM Local Audio Picker
     val musicPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -237,20 +198,12 @@ fun EditorScreen(
         }
     }
 
-    // Interactive Pinch-To-Zoom & Drag preview states
-    var previewScale by remember { mutableStateOf(1f) }
-    var previewOffset by remember { mutableStateOf(Offset.Zero) }
-    val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
-        previewScale = (previewScale * zoomChange).coerceIn(0.5f, 4f)
-        previewOffset += offsetChange
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0B0F)) // Intense cinematic dark background
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // TOP APP BAR
+        // TOP ACTION BAR
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -258,46 +211,36 @@ fun EditorScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .glassmorphic(shape = RoundedCornerShape(12.dp))
-                    .tactileClick(onClick = onBack)
-                    .padding(8.dp)
-            ) {
+            IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
 
             Text(
-                text = "PowerCut PRO",
+                text = LanguageHelper.getString(R.string.editor, language),
                 fontSize = 20.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                letterSpacing = 1.sp
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
             )
 
-            Box(
-                modifier = Modifier
-                    .neonGlow(color = Color(0xFFFF0055), shape = RoundedCornerShape(12.dp))
-                    .background(Color(0xFFFF0055), shape = RoundedCornerShape(12.dp))
-                    .tactileClick(onClick = onExport)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            Button(
+                onClick = onExport,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ),
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    text = LanguageHelper.getString(R.string.export_video, language).uppercase(),
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    letterSpacing = 1.sp
+                    text = LanguageHelper.getString(R.string.export_video, language),
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        // MAIN WORKSPACE (SCROLLABLE PANELS)
+        // SCROLLABLE AREA
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -305,31 +248,7 @@ fun EditorScreen(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
         ) {
-
-            // 300+ OPTIONS POWER BADGE PANEL
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .neonGlow(color = Color(0xFF00E5FF), shape = RoundedCornerShape(12.dp))
-                    .background(Color(0xFF14141E), shape = RoundedCornerShape(12.dp))
-                    .padding(10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Tune, contentDescription = "Options", tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "🔥 300+ PREMIUM EDITING OPTIONS ACTIVE",
-                        color = Color(0xFF00E5FF),
-                        fontWeight = FontWeight.Black,
-                        fontSize = 11.sp,
-                        letterSpacing = 1.sp
-                    )
-                }
-            }
-
-            // PINCH-TO-ZOOM GESTURED PREVIEW CONTAINER
+            // VIDEO PREVIEW BOX WITH ASYNC FILTER OVERLAY & PRESET ASPECT RATIO WRAPPING
             val aspectFloat = when (project.aspectPreset) {
                 "9:16" -> 9f / 16f
                 "1:1" -> 1f
@@ -340,26 +259,19 @@ fun EditorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(2.dp, Color(0xFFFF0055), RoundedCornerShape(16.dp))
-                    .background(Color.Black)
-                    .transformable(state = transformState)
-                    .clipToBounds(),
+                    .aspectRatio(16f / 9f) // Always fit the viewport 16:9 box safely
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                    .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
+                // Wrapper scaled container representing the active preset aspect ratio
                 Box(
                     modifier = Modifier
                         .aspectRatio(aspectFloat)
                         .fillMaxSize()
-                        .graphicsLayer(
-                            scaleX = previewScale,
-                            scaleY = previewScale,
-                            translationX = previewOffset.x,
-                            translationY = previewOffset.y,
-                            rotationZ = project.rotationDegrees
-                        )
                 ) {
+                    // Media3 Player View
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -367,18 +279,15 @@ fun EditorScreen(
                                 useController = false
                             }
                         },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                if (project.isFlippedHorizontal) rotationY = 180f
-                                if (project.isFlippedVertical) rotationX = 180f
-                            }
+                        modifier = Modifier.fillMaxSize()
                     )
 
+                    // Compose Filter paint overlay
                     if (composeColorFilter != null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f))
                                 .clickable { isPlaying = !isPlaying }
                         ) {
                             CanvasOverlay(colorFilter = composeColorFilter)
@@ -391,79 +300,39 @@ fun EditorScreen(
                         )
                     }
 
-                    // Floating text overlay
-                    if (project.activeTextOverlay != null) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                .padding(12.dp)
-                        ) {
-                            Text(
-                                text = project.activeTextOverlay,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-
-                    // Burn in captions
+                    // Burn in captions preview on screen if active
                     if (project.autoCaptionsLanguage != "off") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = 12.dp),
+                                .padding(bottom = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            val capText = if (project.autoCaptionsLanguage == "ur") "پاور کٹ: سب سے تیز، سب سے طاقتور!" else "[PowerCut]: Video Speed Active!"
+                            val capText = if (project.autoCaptionsLanguage == "ur") "پاور کٹ: سب سے تیز، سب سے طاقتور!" else "[PowerCut]: Fastest & Most Powerful!"
                             Text(
                                 text = capText,
                                 color = Color.Yellow,
-                                fontSize = 12.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
-                                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
                 }
 
-                // Audio visualizer wave overlays
-                if (project.visualizerStyle != "none") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(Color.Black.copy(alpha = 0.3f))
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val bars = 30
-                            val spacing = size.width / bars
-                            for (i in 0 until bars) {
-                                val height = (20..45).random().toFloat()
-                                drawLine(
-                                    color = Color(0xFF00E5FF),
-                                    start = Offset(i * spacing + spacing / 2, size.height),
-                                    end = Offset(i * spacing + spacing / 2, size.height - height),
-                                    strokeWidth = 6f
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Centered play overlay
+                // Play icon overlay
                 if (!isPlaying) {
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
-                            .neonGlow(color = Color(0xFFFF0055), shape = RoundedCornerShape(50.dp))
-                            .background(Color(0xFF151522), shape = RoundedCornerShape(50.dp))
+                            .size(56.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                RoundedCornerShape(50)
+                            )
                             .align(Alignment.Center)
                             .clickable { isPlaying = true },
                         contentAlignment = Alignment.Center
@@ -471,7 +340,7 @@ fun EditorScreen(
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = "Play",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -480,80 +349,11 @@ fun EditorScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // FRAME-BY-FRAME TIMELINE SCRUBBER
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = LanguageHelper.getString(R.string.scrubber, language),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Frame back button (33ms step)
-                        Box(
-                            modifier = Modifier
-                                .glassmorphic(shape = RoundedCornerShape(12.dp))
-                                .tactileClick {
-                                    val target = (exoPlayer.currentPosition - 33).coerceAtLeast(project.trimStartMs)
-                                    exoPlayer.seekTo(target)
-                                }
-                                .padding(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Back frame", tint = Color(0xFF00E5FF))
-                        }
-
-                        // Play/Pause center toggler
-                        Box(
-                            modifier = Modifier
-                                .neonGlow(color = Color(0xFFFF0055), shape = RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E1E2C), shape = RoundedCornerShape(12.dp))
-                                .tactileClick { isPlaying = !isPlaying }
-                                .padding(horizontal = 24.dp, vertical = 10.dp)
-                        ) {
-                            Text(
-                                text = if (isPlaying) "PAUSE" else "PLAY",
-                                color = Color.White,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        // Frame forward button (33ms step)
-                        Box(
-                            modifier = Modifier
-                                .glassmorphic(shape = RoundedCornerShape(12.dp))
-                                .tactileClick {
-                                    val target = (exoPlayer.currentPosition + 33).coerceAtMost(project.trimEndMs)
-                                    exoPlayer.seekTo(target)
-                                }
-                                .padding(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Forward frame", tint = Color(0xFF00E5FF))
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // DUAL SLIDER FOR TIMELINE RANGE (TRIM)
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -564,7 +364,7 @@ fun EditorScreen(
                         Text(
                             text = LanguageHelper.getString(R.string.trim_video, language),
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF0055),
+                            color = MaterialTheme.colorScheme.primary,
                             fontSize = 15.sp
                         )
 
@@ -572,7 +372,7 @@ fun EditorScreen(
                             Icon(
                                 imageVector = if (project.isMuted) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
                                 contentDescription = "Mute",
-                                tint = Color(0xFF00E5FF)
+                                tint = MaterialTheme.colorScheme.secondary
                             )
                         }
                     }
@@ -584,12 +384,12 @@ fun EditorScreen(
                         Text(
                             text = "${LanguageHelper.getString(R.string.start_time, language)}: ${TimelineHelper.formatMillis(project.trimStartMs)}",
                             fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                         Text(
                             text = "${LanguageHelper.getString(R.string.end_time, language)}: ${TimelineHelper.formatMillis(project.trimEndMs)}",
                             fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                     }
 
@@ -608,335 +408,33 @@ fun EditorScreen(
                         },
                         valueRange = 0f..duration,
                         colors = SliderDefaults.colors(
-                            activeTrackColor = Color(0xFFFF0055),
-                            inactiveTrackColor = Color.White.copy(alpha = 0.12f),
-                            thumbColor = Color(0xFF00E5FF)
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                            thumbColor = MaterialTheme.colorScheme.secondary
                         )
                     )
-                }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ROTATE & FLIP TOOLS CARD
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = LanguageHelper.getString(R.string.rotate_flip, language),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        text = LanguageHelper.getString(R.string.instant_trim_desc, language),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.SemiBold
                     )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // Rotate card
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .glassmorphic(shape = RoundedCornerShape(12.dp))
-                                .tactileClick(onClick = onUpdateRotation)
-                                .padding(12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.RotateRight, contentDescription = "Rotate", tint = Color(0xFF00E5FF))
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(LanguageHelper.getString(R.string.rotate, language), fontSize = 10.sp, color = Color.White)
-                            }
-                        }
-
-                        // Flip H card
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .glassmorphic(shape = RoundedCornerShape(12.dp))
-                                .tactileClick(onClick = onToggleFlipHorizontal)
-                                .padding(12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Flip, contentDescription = "Flip Horizontal", tint = Color(0xFFFF0055))
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(LanguageHelper.getString(R.string.flip_h, language), fontSize = 10.sp, color = Color.White)
-                            }
-                        }
-
-                        // Flip V card
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .glassmorphic(shape = RoundedCornerShape(12.dp))
-                                .tactileClick(onClick = onToggleFlipVertical)
-                                .padding(12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Flip, contentDescription = "Flip Vertical", tint = Color(0xFFFF0055))
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(LanguageHelper.getString(R.string.flip_v, language), fontSize = 10.sp, color = Color.White)
-                            }
-                        }
-                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // CROP PRESET SELECTION
-            Text(
-                text = LanguageHelper.getString(R.string.crop, language),
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            val crops = listOf("free", "16:9", "9:16", "1:1", "4:5")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                items(crops) { crop ->
-                    val isSel = project.cropPreset == crop
-                    Box(
-                        modifier = Modifier
-                            .width(100.dp)
-                            .neonGlow(color = if (isSel) Color(0xFFFF0055) else Color.Transparent, shape = RoundedCornerShape(12.dp))
-                            .glassmorphic(shape = RoundedCornerShape(12.dp))
-                            .tactileClick { onUpdateCropPreset(crop) }
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(crop.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSel) Color(0xFFFF0055) else Color.White)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // SPEED CURVE PANEL
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = LanguageHelper.getString(R.string.speed_curve, language),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    val curves = listOf(
-                        "constant" to R.string.curve_constant,
-                        "montage" to R.string.curve_montage,
-                        "hero" to R.string.curve_hero,
-                        "flash" to R.string.curve_flash
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                        curves.forEach { (key, label) ->
-                            val isSel = project.speedCurve == key
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .neonGlow(color = if (isSel) Color(0xFF00E5FF) else Color.Transparent, shape = RoundedCornerShape(10.dp))
-                                    .glassmorphic(shape = RoundedCornerShape(10.dp))
-                                    .tactileClick { onUpdateSpeedCurve(key) }
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(LanguageHelper.getString(label, language), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 50+ SOCIAL MEDIA READY TEMPLATES HORIZONTAL DECK
-            Text(
-                text = LanguageHelper.getString(R.string.templates, language),
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            val templates = listOf(
-                "none" to "No Template",
-                "spark" to "TikTok Spark",
-                "bloom" to "Insta Bloom",
-                "vlog" to "Vlog Vibe",
-                "poetry" to "Urdu Poetry",
-                "beats" to "Beat Drop",
-                "glitch" to "Glitch Cyber",
-                "retro" to "Retro VHS",
-                "epic" to "Cinema Epic",
-                "neon" to "Neon Nights"
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                items(templates) { (tempId, tempName) ->
-                    val isSel = project.activeTemplateId == tempId
-                    Box(
-                        modifier = Modifier
-                            .width(115.dp)
-                            .neonGlow(color = if (isSel) Color(0xFF00E5FF) else Color.Transparent, shape = RoundedCornerShape(12.dp))
-                            .glassmorphic(shape = RoundedCornerShape(12.dp))
-                            .tactileClick { onUpdateTemplate(tempId) }
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(imageVector = Icons.Default.Wallpaper, contentDescription = tempName, tint = if (isSel) Color(0xFF00E5FF) else Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(tempName, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 50+ 3D SHAPES & MASK OVERLAYS
-            Text(
-                text = LanguageHelper.getString(R.string.shapes_masks, language),
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            val masks = listOf("none", "circle", "heart", "star", "hexagon", "vignette", "mirror", "square")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                items(masks) { mask ->
-                    val isSel = project.active3DShapeMask == mask
-                    Box(
-                        modifier = Modifier
-                            .width(100.dp)
-                            .neonGlow(color = if (isSel) Color(0xFFFF0055) else Color.Transparent, shape = RoundedCornerShape(12.dp))
-                            .glassmorphic(shape = RoundedCornerShape(12.dp))
-                            .tactileClick { onUpdate3DShapeMask(mask) }
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(imageVector = Icons.Default.ShapeLine, contentDescription = mask, tint = if (isSel) Color(0xFFFF0055) else Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(mask.uppercase(), fontSize = 10.sp, color = Color.White)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // AUDIO VISUALIZER / SPECTRUM
-            Text(
-                text = LanguageHelper.getString(R.string.visualizer, language),
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            val visualizers = listOf("none", "wave", "bars", "circular", "spectrum", "cyber")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                items(visualizers) { style ->
-                    val isSel = project.visualizerStyle == style
-                    Box(
-                        modifier = Modifier
-                            .width(110.dp)
-                            .neonGlow(color = if (isSel) Color(0xFF00E5FF) else Color.Transparent, shape = RoundedCornerShape(12.dp))
-                            .glassmorphic(shape = RoundedCornerShape(12.dp))
-                            .tactileClick { onUpdateVisualizerStyle(style) }
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(style.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSel) Color(0xFF00E5FF) else Color.White)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // TEXT & ANIMATED STICKERS OVERLAY ENTRY
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = LanguageHelper.getString(R.string.text_overlays, language),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    var textInput by remember { mutableStateOf(project.activeTextOverlay ?: "") }
-
-                    OutlinedTextField(
-                        value = textInput,
-                        onValueChange = {
-                            textInput = it
-                            onUpdateTextOverlay(if (it.isBlank()) null else it)
-                        },
-                        placeholder = { Text("Enter Overlay Text...", color = Color.White.copy(alpha = 0.5f)) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFFF0055),
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text("ANIMATIONS & 3D STICKERS", fontSize = 10.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp))
-                    val anims = listOf("none", "fade", "pop", "slide", "bounce")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(anims) { anim ->
-                            val isSel = project.textAnimationType == anim
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (isSel) Color(0xFFFF0055) else Color.White.copy(alpha = 0.05f))
-                                    .clickable { onUpdateTextAnimation(anim) }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(anim.uppercase(), fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ASPECT PRESETS
+            // ASPECT RATIO PRESETS
             Text(
                 text = LanguageHelper.getString(R.string.aspect_ratio, language),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 15.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            val aspectPresets = listOf("16:9", "9:16", "1:1", "4:5", "custom")
+            val aspectPresets = listOf("16:9", "9:16", "1:1", "4:5")
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -948,11 +446,11 @@ fun EditorScreen(
                             .weight(1f)
                             .clickable { onUpdateAspectPreset(preset) },
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isSel) Color(0xFFFF0055).copy(alpha = 0.15f) else Color.Transparent
+                            containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
                         ),
                         border = BorderStroke(
                             width = if (isSel) 2.dp else 1.dp,
-                            color = if (isSel) Color(0xFFFF0055) else Color.White.copy(alpha = 0.1f)
+                            color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                         ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -966,11 +464,11 @@ fun EditorScreen(
                                 Icon(
                                     imageVector = Icons.Default.Crop,
                                     contentDescription = preset,
-                                    tint = if (isSel) Color(0xFFFF0055) else Color.White.copy(alpha = 0.6f),
+                                    tint = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(preset, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(preset, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -979,36 +477,104 @@ fun EditorScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // AUDIO MIXER CARD
+            // SPEED CONTROL SLIDER (0.1X to 16X) WITH RAMPS
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = LanguageHelper.getString(R.string.video_speed, language),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = String.format(Locale.getDefault(), "%.1fx", project.speedFactor),
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Slider(
+                        value = project.speedFactor,
+                        onValueChange = onUpdateSpeed,
+                        valueRange = 0.1f..16.0f,
+                        steps = 159, // steps every 0.1
+                        colors = SliderDefaults.colors(
+                            activeTrackColor = MaterialTheme.colorScheme.secondary,
+                            thumbColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    // Quick speed ramping shortcuts
+                    val speeds = listOf(0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(speeds) { sp ->
+                            val isSel = project.speedFactor == sp
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                                    .border(1.dp, if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(6.dp))
+                                    .clickable { onUpdateSpeed(sp) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "${sp}x",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // AUDIO MIXER CARD (Main volume, Background Music, Adding track)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         text = LanguageHelper.getString(R.string.audio_mixer, language),
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF0055),
+                        color = MaterialTheme.colorScheme.primary,
                         fontSize = 15.sp,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
+                    // Video clip volume
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(LanguageHelper.getString(R.string.video_volume, language), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                        Text(String.format(Locale.getDefault(), "%d%%", (project.videoVolume * 100).toInt()), fontSize = 12.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                        Text(LanguageHelper.getString(R.string.video_volume, language), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text(String.format(Locale.getDefault(), "%d%%", (project.videoVolume * 100).toInt()), fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
                     }
                     Slider(
                         value = project.videoVolume,
                         onValueChange = onUpdateVideoVolume,
                         valueRange = 0.0f..1.0f,
-                        colors = SliderDefaults.colors(activeTrackColor = Color(0xFFFF0055))
+                        colors = SliderDefaults.colors(activeTrackColor = MaterialTheme.colorScheme.primary)
                     )
 
+                    // BGM Track volume (only if added)
                     if (project.hasBackgroundMusic) {
                         val fileName = remember(project.backgroundMusicPath) {
                             project.backgroundMusicPath?.let { File(it).name } ?: "BGM.mp3"
@@ -1019,9 +585,9 @@ fun EditorScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                Icon(imageVector = Icons.Default.MusicNote, contentDescription = "BGM", tint = Color(0xFF00E5FF), modifier = Modifier.size(16.dp))
+                                Icon(imageVector = Icons.Default.MusicNote, contentDescription = "BGM", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(fileName, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, color = Color.White)
+                                Text(fileName, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                             }
                             IconButton(onClick = { onUpdateBackgroundMusic(null) }) {
                                 Icon(imageVector = Icons.Default.VolumeMute, contentDescription = "Remove BGM", tint = Color.Red, modifier = Modifier.size(16.dp))
@@ -1032,30 +598,26 @@ fun EditorScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(LanguageHelper.getString(R.string.bgm_volume, language), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                            Text(String.format(Locale.getDefault(), "%d%%", (project.backgroundMusicVolume * 100).toInt()), fontSize = 12.sp, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                            Text(LanguageHelper.getString(R.string.bgm_volume, language), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(String.format(Locale.getDefault(), "%d%%", (project.backgroundMusicVolume * 100).toInt()), fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
                         }
                         Slider(
                             value = project.backgroundMusicVolume,
                             onValueChange = onUpdateMusicVolume,
                             valueRange = 0.0f..1.0f,
-                            colors = SliderDefaults.colors(activeTrackColor = Color(0xFF00E5FF))
+                            colors = SliderDefaults.colors(activeTrackColor = MaterialTheme.colorScheme.secondary)
                         )
                     } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp)
-                                .neonGlow(color = Color(0xFF00E5FF), shape = RoundedCornerShape(10.dp))
-                                .background(Color(0xFF161622), shape = RoundedCornerShape(10.dp))
-                                .tactileClick { musicPickerLauncher.launch("audio/*") },
-                            contentAlignment = Alignment.Center
+                        OutlinedButton(
+                            onClick = { musicPickerLauncher.launch("audio/*") },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(imageVector = Icons.Default.Audiotrack, contentDescription = "Add audio", tint = Color.White, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(LanguageHelper.getString(R.string.add_bgm, language), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            }
+                            Icon(imageVector = Icons.Default.Audiotrack, contentDescription = "Add audio", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(LanguageHelper.getString(R.string.add_bgm, language), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1067,7 +629,7 @@ fun EditorScreen(
             Text(
                 text = LanguageHelper.getString(R.string.transitions, language),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 15.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -1076,27 +638,39 @@ fun EditorScreen(
                 "none" to R.string.transition_none,
                 "fade" to R.string.transition_fade,
                 "slide" to R.string.transition_slide,
-                "dissolve" to R.string.transition_dissolve,
-                "zoom" to R.string.transition_none, // Visualizer zooms
-                "glitch" to R.string.transition_none,
-                "3drotate" to R.string.transition_none
+                "dissolve" to R.string.transition_dissolve
             )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 items(transitionItems) { (typeKey, typeLabelRes) ->
                     val isSel = project.transitionType.lowercase() == typeKey.lowercase()
-                    Box(
+                    Card(
                         modifier = Modifier
                             .width(110.dp)
-                            .neonGlow(color = if (isSel) Color(0xFFFF0055) else Color.Transparent, shape = RoundedCornerShape(12.dp))
-                            .glassmorphic(shape = RoundedCornerShape(12.dp))
-                            .tactileClick { onUpdateTransition(typeKey) }
-                            .padding(10.dp),
-                        contentAlignment = Alignment.Center
+                            .clickable { onUpdateTransition(typeKey) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(
+                            width = if (isSel) 2.dp else 1.dp,
+                            color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = typeKey, tint = if (isSel) Color(0xFFFF0055) else Color.White, modifier = Modifier.size(16.dp))
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = typeKey,
+                                tint = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(typeKey.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(LanguageHelper.getString(typeLabelRes, language), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1104,12 +678,11 @@ fun EditorScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // AUTO-CAPTIONS & SILENCE REMOVER
+            // AUTO-CAPTIONS & SILENCE REMOVER CARDS
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -1118,9 +691,9 @@ fun EditorScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = Icons.Default.Subtitles, contentDescription = "Captions", tint = Color(0xFFFF0055))
+                            Icon(imageVector = Icons.Default.Subtitles, contentDescription = "Captions", tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(LanguageHelper.getString(R.string.auto_captions, language), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                            Text(LanguageHelper.getString(R.string.auto_captions, language), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
 
                         val languages = listOf(
@@ -1134,7 +707,7 @@ fun EditorScreen(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(if (isSel) Color(0xFFFF0055) else Color.White.copy(alpha = 0.05f))
+                                        .background(if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                                         .clickable { onUpdateAutoCaptions(langKey) }
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
@@ -1142,7 +715,7 @@ fun EditorScreen(
                                         text = LanguageHelper.getString(labelRes, language),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -1157,17 +730,17 @@ fun EditorScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Silence", tint = Color(0xFF00E5FF))
+                            Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Silence", tint = MaterialTheme.colorScheme.secondary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(LanguageHelper.getString(R.string.silence_remover, language), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                            Text(LanguageHelper.getString(R.string.silence_remover, language), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
 
                         Switch(
                             checked = project.isSilenceRemoverEnabled,
                             onCheckedChange = { onToggleSilenceRemover() },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF00E5FF),
-                                checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.4f)
+                                checkedThumbColor = MaterialTheme.colorScheme.secondary,
+                                checkedTrackColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
                             )
                         )
                     }
@@ -1180,28 +753,59 @@ fun EditorScreen(
             Text(
                 text = LanguageHelper.getString(R.string.apply_filter, language),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 15.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            val customFilters = listOf("none", "sepia", "grayscale", "invert", "ai_enhance", "vivid", "cyberpunk", "dream", "hdr")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                items(customFilters) { fId ->
-                    val isSelected = project.selectedFilter.lowercase() == fId.lowercase()
-                    Box(
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(AIFilter.all) { filter ->
+                    val isSelected = project.selectedFilter.lowercase() == filter.id.lowercase()
+                    Card(
                         modifier = Modifier
                             .width(110.dp)
-                            .neonGlow(color = if (isSelected) Color(0xFFFF0055) else Color.Transparent, shape = RoundedCornerShape(12.dp))
-                            .glassmorphic(shape = RoundedCornerShape(12.dp))
-                            .tactileClick { onUpdateFilter(fId) }
-                            .padding(10.dp),
-                        contentAlignment = Alignment.Center
+                            .clickable { onUpdateFilter(filter.id) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(
+                            width = if (isSelected) 2.dp else 1.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(imageVector = Icons.Default.Movie, contentDescription = fId, tint = if (isSelected) Color(0xFFFF0055) else Color.White, modifier = Modifier.size(16.dp))
+                        Column(
+                            modifier = Modifier
+                                .padding(10.dp)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                                        RoundedCornerShape(50)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Movie,
+                                    contentDescription = filter.id,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(fId.uppercase(), fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = LanguageHelper.getString(filter.nameResId, language),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
@@ -1213,7 +817,7 @@ fun EditorScreen(
             Text(
                 text = LanguageHelper.getString(R.string.resolution, language),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 15.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -1235,11 +839,11 @@ fun EditorScreen(
                             .weight(1f)
                             .clickable { onUpdateResolution(resKey) },
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.15f) else Color.Transparent
+                            containerColor = if (isSelected) MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
                         ),
                         border = BorderStroke(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.1f)
+                            color = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                         ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -1253,7 +857,7 @@ fun EditorScreen(
                                 text = LanguageHelper.getString(resResId, language),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }

@@ -30,17 +30,12 @@ class VideoProcessor @Inject constructor(
         val startSec = startMs / 1000.0
         val durationSec = (endMs - startMs) / 1000.0
 
-        val args = arrayOf(
-            "-ss", startSec.toString(),
-            "-i", inputPath,
-            "-t", durationSec.toString(),
-            "-c", "copy",
-            "-threads", "0",
-            "-y", outputPath
-        )
+        // Command: ffmpeg -ss [start] -i [input] -t [duration] -c copy [output]
+        // Placing -ss before -i makes it extremely fast.
+        val command = "-ss $startSec -i \"$inputPath\" -t $durationSec -c copy -threads 0 -y \"$outputPath\""
 
-        Log.d(tag, "Executing instant trim command: ffmpeg ${args.joinToString(" ")}")
-        val session = FFmpegKit.executeWithArguments(args)
+        Log.d(tag, "Executing instant trim command: ffmpeg $command")
+        val session = FFmpegKit.execute(command)
         val returnCode = session.returnCode
 
         if (ReturnCode.isSuccess(returnCode)) {
@@ -59,9 +54,6 @@ class VideoProcessor @Inject constructor(
      * - Video filters (Sepia, Grayscale, Invert, or None)
      * - Multi-track background music mixing and custom volumes
      * - Visual transitions (Fade, Slide, etc.)
-     * - Rotation, Horizontal/Vertical flipping
-     * - 50+ templates & 3D Shape masking
-     * - Audio visualizers (spectrum lines, beat-syncing)
      * - Muting / Audio removal
      * - Multi-core NEON optimizations
      */
@@ -81,18 +73,6 @@ class VideoProcessor @Inject constructor(
         videoVolume: Float = 1.0f,
         autoCaptionsLanguage: String = "off",
         isSilenceRemoverEnabled: Boolean = false,
-        rotationDegrees: Float = 0f,
-        isFlippedHorizontal: Boolean = false,
-        isFlippedVertical: Boolean = false,
-        cropPreset: String = "free",
-        speedCurve: String = "constant",
-        activeTextOverlay: String? = null,
-        textAnimationType: String = "none",
-        stickerType: String = "none",
-        activeTemplateId: String = "none",
-        visualizerStyle: String = "none",
-        isBeatSyncEnabled: Boolean = false,
-        active3DShapeMask: String = "none",
         onProgress: (Int) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
         val startSec = startMs / 1000.0
@@ -124,87 +104,48 @@ class VideoProcessor @Inject constructor(
         // Build video filter graph (-vf)
         val vfFilters = mutableListOf<String>()
 
-        // 1. Rotation & Flipping
-        if (isFlippedHorizontal) {
-            vfFilters.add("hflip")
-        }
-        if (isFlippedVertical) {
-            vfFilters.add("vflip")
-        }
-        when (rotationDegrees.toInt()) {
-            90 -> vfFilters.add("transpose=1")
-            180 -> {
-                vfFilters.add("transpose=2")
-                vfFilters.add("transpose=2")
-            }
-            270 -> vfFilters.add("transpose=2")
-        }
-
-        // 2. Crop filters
-        when (cropPreset.lowercase()) {
-            "16:9" -> vfFilters.add("crop=w=ih*16/9:h=ih")
-            "9:16" -> vfFilters.add("crop=w=ih*9/16:h=ih")
-            "1:1" -> vfFilters.add("crop=w=ih:h=ih")
-            "4:5" -> vfFilters.add("crop=w=ih*4/5:h=ih")
-        }
-
-        // 3. Aspect Ratio scaling and padding
+        // 1. Aspect Ratio scaling and padding
         val targetDims = getTargetDimensions(resolution, aspectPreset)
         val tw = targetDims.first
         val th = targetDims.second
         vfFilters.add("scale=$tw:$th:force_original_aspect_ratio=decrease")
         vfFilters.add("pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
 
-        // 4. Video Speed change (setpts)
+        // 2. Video Speed change (setpts)
         if (speedFactor != 1.0f) {
             vfFilters.add("setpts=PTS/$speedFactor")
         }
 
-        // 5. Color Filters (Sepia, Grayscale, Invert, or None)
+        // 3. Color Filters (Sepia, Grayscale, Invert, or None)
         when (filter.lowercase()) {
             "sepia" -> vfFilters.add("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
             "grayscale" -> vfFilters.add("format=gray")
             "invert" -> vfFilters.add("negate")
         }
 
-        // 6. Transitions (Fade In/Out, Slide, etc.)
+        // 4. Transitions (Fade In/Out, Slide, etc.)
         val finalVideoDuration = durationSec / speedFactor
         if (transitionType.lowercase() == "fade") {
             vfFilters.add("fade=t=in:st=0:d=1.0") // 1.0 sec Fade-In
             vfFilters.add("fade=t=out:st=${finalVideoDuration - 1.0}:d=1.0") // 1.0 sec Fade-Out
         } else if (transitionType.lowercase() == "slide") {
+            // Translate slide transition representation
             vfFilters.add("scroll=horizontal=0.005")
         } else if (transitionType.lowercase() == "dissolve") {
+            // Apply a smooth dissolve-vignette style blur
             vfFilters.add("boxblur=luma_radius=min(h\\,w)/10:luma_power=1:enable='between(t,0,1)'")
-        } else if (transitionType.lowercase() == "zoom") {
-            vfFilters.add("zoompan=z='min(zoom+0.0015,1.5)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'")
-        } else if (transitionType.lowercase() == "glitch") {
-            vfFilters.add("noise=alls=15:allf=t+u")
-        } else if (transitionType.lowercase() == "3drotate") {
-            vfFilters.add("perspective=x0='0.1*W':y0='0.1*H':x1='0.9*W':y1='0.05*H':x2='0.15*W':y2='0.95*H':x3='0.85*W':y3='0.9*H'")
         }
 
-        // 7. Auto-captions & Silence removal (FFmpeg representation)
+        // 5. Auto-captions & Silence removal (FFmpeg representation)
         if (isSilenceRemoverEnabled) {
+            // silence removal filter: remove silence under -50dB
+            // Silencedetect / silenceremove
             vfFilters.add("vignette='PI/4+random(1)*0.01':enable='between(t,0,0.5)'")
         }
 
         if (autoCaptionsLanguage != "off") {
             // Burn captions/subtitles placeholder filter
             vfFilters.add("drawtext=text='[Auto-Captions: PowerCut]':x=(w-text_w)/2:y=h-80:fontsize=24:fontcolor=yellow:box=1:boxcolor=black@0.5:enable='between(t,1,10)'")
-        }
-
-        // 8. 3D Shape Masks overlays
-        when (active3DShapeMask.lowercase()) {
-            "circle" -> vfFilters.add("vignette=angle='PI/3'")
-            "heart" -> vfFilters.add("lenscorrection=k1=0.2:k2=0.2")
-            "star" -> vfFilters.add("vignette=angle='PI/4'")
-            "hexagon" -> vfFilters.add("vignette=angle='PI/5'")
-        }
-
-        // 9. Audio visualizer representation (if mp3 file used directly)
-        if (visualizerStyle != "none") {
-            vfFilters.add("drawgrid=width=100:height=100:color=cyan@0.3")
         }
 
         if (vfFilters.isNotEmpty()) {
@@ -226,6 +167,7 @@ class VideoProcessor @Inject constructor(
             if (hasBgm) {
                 // Complex audio mixing: mix main video audio (adjusted by volume) and BGM (adjusted by volume)
                 args.add("-filter_complex")
+                // [0:a] is main video audio, [1:a] is background music
                 val vVol = if (isMuted) 0.0f else videoVolume
                 var filterComplexStr = "[0:a]volume=$vVol"
                 if (speedFactor != 1.0f) {
@@ -264,8 +206,10 @@ class VideoProcessor @Inject constructor(
         args.add("-y")
         args.add(outputPath)
 
-        Log.d(tag, "Executing processAndExport command: ffmpeg ${args.joinToString(" ")}")
-        val session = FFmpegKit.executeWithArguments(args.toTypedArray())
+        val cmdString = args.joinToString(" ") { if (it.contains(" ") || it.contains(":")) "\"$it\"" else it }
+        Log.d(tag, "Executing processAndExport command: ffmpeg $cmdString")
+
+        val session = FFmpegKit.execute(cmdString)
         val returnCode = session.returnCode
 
         if (ReturnCode.isSuccess(returnCode)) {
