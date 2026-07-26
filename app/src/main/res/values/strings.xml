@@ -51,26 +51,4 @@
     <string name="captions_en">English</string>
     <string name="captions_ur">Urdu (اردو)</string>
     <string name="silence_remover">Silence Remover</string>
-
-    <!-- Professional Features strings -->
-    <string name="rotate_flip">Rotate &amp; Flip</string>
-    <string name="rotate">Rotate</string>
-    <string name="flip_h">Flip H</string>
-    <string name="flip_v">Flip V</string>
-    <string name="crop">Crop Preset</string>
-    <string name="speed_curve">Speed Curve</string>
-    <string name="curve_constant">Constant</string>
-    <string name="curve_montage">Montage (2.5x)</string>
-    <string name="curve_hero">Hero (4x)</string>
-    <string name="curve_flash">Flash (8x)</string>
-    <string name="text_overlays">Text &amp; Stickers</string>
-    <string name="add_text">Add Text Overlay</string>
-    <string name="sticker">Add 3D Sticker</string>
-    <string name="scrubber">Frame Scrubber</string>
-
-    <!-- Templates, visualizers, masks -->
-    <string name="templates">Ready Templates</string>
-    <string name="visualizer">Audio Visualizer</string>
-    <string name="convert_mp3">Beat Sync Visualizer</string>
-    <string name="shapes_masks">3D Masks</string>
 </resources>

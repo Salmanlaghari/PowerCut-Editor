@@ -51,26 +51,4 @@
     <string name="captions_en">انگریزی (English)</string>
     <string name="captions_ur">اردو</string>
     <string name="silence_remover">خاموشی ختم کریں</string>
-
-    <!-- Professional Features strings -->
-    <string name="rotate_flip">گھمائیں اور الٹیں</string>
-    <string name="rotate">گھمائیں (Rotate)</string>
-    <string name="flip_h">افقی الٹیں (Flip H)</string>
-    <string name="flip_v">عمودی الٹیں (Flip V)</string>
-    <string name="crop">فریم کٹائی (Crop)</string>
-    <string name="speed_curve">اسپیڈ کرو (Speed Curve)</string>
-    <string name="curve_constant">مسلسل (Constant)</string>
-    <string name="curve_montage">مونتاج (Montage 2.5x)</string>
-    <string name="curve_hero">ہیرو اسپیڈ (Hero 4x)</string>
-    <string name="curve_flash">فلیش اسپیڈ (Flash 8x)</string>
-    <string name="text_overlays">ٹیکسٹ اور اسٹیکرز</string>
-    <string name="add_text">ٹیکسٹ شامل کریں</string>
-    <string name="sticker">3D اسٹیکر شامل کریں</string>
-    <string name="scrubber">فریم فریم اسکربر</string>
-
-    <!-- Templates, visualizers, masks -->
-    <string name="templates">تیار ٹیمپلیٹس</string>
-    <string name="visualizer">آڈیو ویژولائزر</string>
-    <string name="convert_mp3">بیٹ سنک ویژولائزر</string>
-    <string name="shapes_masks">3D ماسکس</string>
 </resources>

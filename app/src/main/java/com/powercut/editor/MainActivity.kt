@@ -95,42 +95,6 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onToggleSilenceRemover = {
                                             viewModel.toggleSilenceRemover()
-                                        },
-                                        onUpdateRotation = {
-                                            viewModel.updateRotation()
-                                        },
-                                        onToggleFlipHorizontal = {
-                                            viewModel.toggleFlipHorizontal()
-                                        },
-                                        onToggleFlipVertical = {
-                                            viewModel.toggleFlipVertical()
-                                        },
-                                        onUpdateCropPreset = { crop ->
-                                            viewModel.updateCropPreset(crop)
-                                        },
-                                        onUpdateSpeedCurve = { curve ->
-                                            viewModel.updateSpeedCurve(curve)
-                                        },
-                                        onUpdateTextOverlay = { text ->
-                                            viewModel.updateTextOverlay(text)
-                                        },
-                                        onUpdateTextAnimation = { anim ->
-                                            viewModel.updateTextAnimation(anim)
-                                        },
-                                        onUpdateStickerType = { sticker ->
-                                            viewModel.updateStickerType(sticker)
-                                        },
-                                        onUpdateTemplate = { tempId ->
-                                            viewModel.updateTemplate(tempId)
-                                        },
-                                        onUpdateVisualizerStyle = { style ->
-                                            viewModel.updateVisualizerStyle(style)
-                                        },
-                                        onToggleBeatSync = {
-                                            viewModel.toggleBeatSync()
-                                        },
-                                        onUpdate3DShapeMask = { mask ->
-                                            viewModel.update3DShapeMask(mask)
                                         }
                                     )
                                 } ?: viewModel.resetToHome()

@@ -1,25 +1,5 @@
-# Gradle
-.gradle/
-build/
-app/build/
+# Ignore Gradle project-specific cache directory
+.gradle
 
-# Android Studio / IntelliJ
-.idea/
-*.iml
-*.ipr
-*.iws
-.navigation/
-
-# Local configuration
-local.properties
-
-# Signing secrets & Keystores
-*.jks
-*.keystore
-*.pk8
-*.pem
-private_key.pe1
-
-# OS files
-.DS_Store
-Thumbs.db
+# Ignore Gradle build output directory
+build
