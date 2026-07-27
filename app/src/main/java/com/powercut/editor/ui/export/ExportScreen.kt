@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBackIos
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
@@ -97,7 +97,7 @@ fun ExportScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onBackToEditor) {
-                            Icon(imageVector = Icons.Default.ArrowBackIos, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         Column(modifier = Modifier.padding(start = 8.dp)) {
                             Text("Export Video", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -329,7 +329,7 @@ fun ExportScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onBackToEditor) {
-                            Icon(imageVector = Icons.Default.ArrowBackIos, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                         Column(modifier = Modifier.padding(start = 8.dp)) {
                             Text("Export Video", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)

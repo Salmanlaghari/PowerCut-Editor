@@ -10,14 +10,16 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// POWERCUT PREMIUM DESIGN SYSTEM
-val NeonOrange = Color(0xFFFF5722) // Primary Accent
-val CyberCyan = Color(0xFF00BCD4)  // Secondary Accent
-val DarkBgStart = Color(0xFF1A1A1F) // Background start
-val DarkBgEnd = Color(0xFF121216)   // Background end
+// POWERCUT STUDIO PRO DESIGN SYSTEM (Sophisticated Commercial Palette)
+val NeonOrange = Color(0xFFFF5216) // Studio Warm Coral / Pro Accent
+val CyberCyan = Color(0xFF00E5FF)  // Cyber Ocean-Teal / Secondary Accent
+val DarkBgStart = Color(0xFF0C0C0E) // Deep Charcoal-Black Start
+val DarkBgEnd = Color(0xFF141418)   // Deep Charcoal-Black End
 
-val GlassBackground = Color(0xFF1E1E24).copy(alpha = 0.75f)
-val GlassBorder = Color(0xFFFFFFFF).copy(alpha = 0.08f)
+// 4D Glassmorphic Colors
+val GlassBackground = Color(0xFF16161C).copy(alpha = 0.65f)
+val GlassBorderTop = Color(0xFFFFFFFF).copy(alpha = 0.18f)
+val GlassBorderBottom = Color(0xFFFFFFFF).copy(alpha = 0.04f)
 
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFB3B3B3)
+val TextPrimary = Color(0xFFF5F5F7)
+val TextSecondary = Color(0xFF9E9EAF)

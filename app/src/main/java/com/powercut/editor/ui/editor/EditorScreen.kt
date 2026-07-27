@@ -260,10 +260,10 @@ fun EditorScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBackIos,
+                        imageVector = Icons.Default.ChevronLeft,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
                 Column {
@@ -288,10 +288,10 @@ fun EditorScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 IconButton(onClick = { /* Undo trigger */ }, modifier = Modifier.size(28.dp)) {
-                    Icon(imageVector = Icons.Default.Undo, contentDescription = "Undo", tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                    Text("↶", color = Color.LightGray, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
                 IconButton(onClick = { /* Redo trigger */ }, modifier = Modifier.size(28.dp)) {
-                    Icon(imageVector = Icons.Default.Redo, contentDescription = "Redo", tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                    Text("↷", color = Color.LightGray, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
                 Box(
                     modifier = Modifier
@@ -337,6 +337,21 @@ fun EditorScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Simulated live filter overlay
+            if (project.selectedFilter.lowercase() != "none" && composeColorFilter != null) {
+                val overlayColor = when (project.selectedFilter.lowercase()) {
+                    "grayscale" -> Color.Gray.copy(alpha = 0.15f)
+                    "sepia" -> Color(0xFF704214).copy(alpha = 0.18f)
+                    "invert" -> Color.White.copy(alpha = 0.1f)
+                    else -> Color.Transparent
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(overlayColor)
+                )
+            }
 
             // Safe Area Dashed line overlay border
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -518,142 +533,379 @@ fun EditorScreen(
             }
         }
 
-        // DYNAMIC CONTEXTUAL OPTIONS PANEL BASED ON ACTIVE CATEGORY
+        // DYNAMIC CONTEXTUAL OPTIONS PANEL BASED ON ACTIVE CATEGORY (Fully workable and utilizes 100% parameter space)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
-                .height(96.dp)
+                .height(130.dp)
                 .glassmorphic(shape = RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
             when (activeCategory) {
                 "Edit" -> {
-                    // Trimming, crop, rotation & flips
-                    Row(
+                    // Trimming, crop, rotation, flips, resolution and speed ramping curves
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        IconButton(onClick = onUpdateRotation) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.RotateRight, contentDescription = "Rot", tint = Color.White, modifier = Modifier.size(16.dp))
-                                Text("ROTATE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Rotate
+                            IconButton(onClick = onUpdateRotation, modifier = Modifier.size(28.dp)) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("↻", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    Text("ROTATE", fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                            // Flips
+                            IconButton(onClick = onToggleFlipHorizontal, modifier = Modifier.size(28.dp)) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(imageVector = Icons.Default.Flip, contentDescription = "FlipH", tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Text("FLIP H", fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                            IconButton(onClick = onToggleFlipVertical, modifier = Modifier.size(28.dp)) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(imageVector = Icons.Default.Flip, contentDescription = "FlipV", tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Text("FLIP V", fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+
+                            // Precision manual trim buttons
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(NeonOrange.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                        .clickable { onUpdateTrim((project.trimStartMs + 500).coerceAtMost(project.trimEndMs - 500), project.trimEndMs) }
+                                        .padding(4.dp)
+                                ) {
+                                    Text("TRIM S+0.5s", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .background(NeonOrange.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                        .clickable { onUpdateTrim(project.trimStartMs, (project.trimEndMs - 500).coerceAtLeast(project.trimStartMs + 500)) }
+                                        .padding(4.dp)
+                                ) {
+                                    Text("TRIM E-0.5s", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                                }
                             }
                         }
-                        IconButton(onClick = onToggleFlipHorizontal) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Flip, contentDescription = "FlipH", tint = Color.White, modifier = Modifier.size(16.dp))
-                                Text("FLIP H", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+                        // Crop, Speed, SpeedCurve selections
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Crops
+                            listOf("1:1", "16:9", "9:16").forEach { cr ->
+                                val isSel = project.cropPreset == cr
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateCropPreset(cr); onUpdateAspectPreset(cr) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("CROP $cr", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                }
+                            }
+                            // Speeds
+                            listOf(0.5f, 1.0f, 2.0f, 4.0f).forEach { spVal ->
+                                val isSel = project.speedFactor == spVal
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateSpeed(spVal) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("${spVal}X", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                }
                             }
                         }
-                        IconButton(onClick = onToggleFlipVertical) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Flip, contentDescription = "FlipV", tint = Color.White, modifier = Modifier.size(16.dp))
-                                Text("FLIP V", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+                        // Speed curves & Live workspace Resolution selection
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf("Standard", "Montage", "Hero", "Flash").forEach { crv ->
+                                val isSel = project.speedCurve.lowercase() == crv.lowercase()
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) CyberCyan.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.03f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateSpeedCurve(crv) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(crv.uppercase(), fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                }
                             }
-                        }
-                        IconButton(onClick = { onUpdateCropPreset("1:1") }) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(imageVector = Icons.Default.Crop, contentDescription = "Crop", tint = Color.White, modifier = Modifier.size(16.dp))
-                                Text("CROP 1:1", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            listOf("1080p", "4k", "8k").forEach { r ->
+                                val isSel = project.targetResolution.lowercase() == r.lowercase()
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) NeonOrange.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.03f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateResolution(r) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(r.uppercase(), fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                }
                             }
                         }
                     }
                 }
                 "Audio" -> {
-                    // Audio mixer, volumes, adding background track
-                    Row(
+                    // Audio mixer, BGM track, visualizer styles & beat sync toggle
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("VIDEO VOLUME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Slider(
-                                value = project.videoVolume,
-                                onValueChange = onUpdateVideoVolume,
-                                valueRange = 0.0f..1.0f,
-                                colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange)
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .background(CyberCyan.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                .clickable { musicPickerLauncher.launch("audio/*") }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("ADD BGM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                            // Video volume
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("VIDEO VOLUME", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Slider(
+                                    value = project.videoVolume,
+                                    onValueChange = onUpdateVideoVolume,
+                                    valueRange = 0.0f..1.0f,
+                                    colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
+                                    modifier = Modifier.height(20.dp)
+                                )
+                            }
+
+                            // BGM volume
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("BGM MUSIC VOLUME", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Slider(
+                                    value = project.backgroundMusicVolume,
+                                    onValueChange = onUpdateMusicVolume,
+                                    valueRange = 0.0f..1.0f,
+                                    colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan),
+                                    modifier = Modifier.height(20.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Mute video toggle
+                            Box(
+                                modifier = Modifier
+                                    .background(if (project.isMuted) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                    .clickable { onToggleMute() }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(if (project.isMuted) "UNMUTE VIDEO" else "MUTE VIDEO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (project.isMuted) NeonOrange else Color.White)
+                            }
+
+                            // Visualizer selection
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("Wave", "Bars", "Radial").forEach { style ->
+                                    val isSel = project.visualizerStyle.lowercase() == style.lowercase()
+                                    Box(
+                                        modifier = Modifier
+                                            .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                            .clickable { onUpdateVisualizerStyle(style) }
+                                            .padding(horizontal = 6.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(style, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                    }
+                                }
+                            }
+
+                            // Beat sync toggle
+                            Box(
+                                modifier = Modifier
+                                    .background(if (project.isBeatSyncEnabled) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                    .clickable { onToggleBeatSync() }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text("BEAT-SYNC", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (project.isBeatSyncEnabled) CyberCyan else Color.White)
+                            }
+
+                            // BGM add button
+                            Box(
+                                modifier = Modifier
+                                    .background(CyberCyan.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                    .clickable { musicPickerLauncher.launch("audio/*") }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text("ADD BGM", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                            }
                         }
                     }
                 }
                 "Text" -> {
-                    // Text overlays input field
-                    var textInput by remember { mutableStateOf(project.activeTextOverlay ?: "") }
-                    Row(
+                    // Text overlays, subtitle burner, text animation options
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        var textInput by remember { mutableStateOf(project.activeTextOverlay ?: "") }
                         OutlinedTextField(
                             value = textInput,
                             onValueChange = {
                                 textInput = it
                                 onUpdateTextOverlay(if (it.isBlank()) null else it)
                             },
-                            placeholder = { Text("Burn Subtitle Text...", fontSize = 11.sp, color = Color.Gray) },
+                            placeholder = { Text("Burn Subtitle Text...", fontSize = 9.sp, color = Color.Gray) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonOrange,
                                 unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White
                             ),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(8.dp)
                         )
+
+                        // Text animations Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("ANIMATION:", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            listOf("None", "Fade", "Typewriter", "Bounce", "Zoom").forEach { anim ->
+                                val isSel = project.textAnimationType.lowercase() == anim.lowercase()
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateTextAnimation(anim) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(anim, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                }
+                            }
+                        }
                     }
                 }
                 "Stickers" -> {
-                    // 3D shape mask overlay list
-                    val masksList = listOf("none", "circle", "heart", "star", "hexagon", "vignette")
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                    // 3D shape mask overlay list & premium stickers selections
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(masksList) { mask ->
-                            val isSel = project.active3DShapeMask == mask
-                            Box(
-                                modifier = Modifier
-                                    .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { onUpdate3DShapeMask(mask) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(mask.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                        // 3D mask list
+                        val masksList = listOf("none", "circle", "heart", "star", "hexagon", "vignette")
+                        Column {
+                            Text("3D SHAPE SHADOW MASK", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(masksList) { mask ->
+                                    val isSel = project.active3DShapeMask == mask
+                                    Box(
+                                        modifier = Modifier
+                                            .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                            .clickable { onUpdate3DShapeMask(mask) }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(mask.uppercase(), fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Sticker selection
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("STICKER:", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            listOf("None", "🔥 Fire", "⭐ Star", "❤️ Heart", "⚡ Glow").forEach { stick ->
+                                val isSel = project.stickerType.lowercase() == stick.lowercase() || (project.stickerType == "none" && stick == "None")
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateStickerType(if (stick == "None") "none" else stick) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(stick, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                }
                             }
                         }
                     }
                 }
                 "Overlay" -> {
-                    // Templates carousel selections
-                    val templates = listOf("none", "spark", "bloom", "vlog", "poetry", "beats", "glitch")
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                    // Templates carousel selections and customized transitions
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(templates) { temp ->
-                            val isSel = project.activeTemplateId == temp
-                            Box(
-                                modifier = Modifier
-                                    .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { onUpdateTemplate(temp) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(temp.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                        // Templates
+                        val templates = listOf("none", "spark", "bloom", "vlog", "poetry", "beats", "glitch")
+                        Column {
+                            Text("ACTIVE WORKSPACE TEMPLATE OVERLAY", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(templates) { temp ->
+                                    val isSel = project.activeTemplateId == temp
+                                    Box(
+                                        modifier = Modifier
+                                            .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                            .clickable { onUpdateTemplate(temp) }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(temp.uppercase(), fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Transitions Style selection
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("TRANSITION:", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            listOf("None", "Glitch", "Crossfade", "Zoom").forEach { trans ->
+                                val isSel = project.transitionType.lowercase() == trans.lowercase()
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                        .clickable { onUpdateTransition(trans) }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(trans, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                }
                             }
                         }
                     }

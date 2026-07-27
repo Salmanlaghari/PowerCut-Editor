@@ -22,8 +22,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Applies a tactile touch sensation.
- * Depresses slightly on press and springs back when released, feeling physical!
+ * Applies a highly responsive tactile touch sensation with 60fps-ready spring interpolation.
  */
 @Composable
 fun Modifier.tactileClick(
@@ -33,10 +32,10 @@ fun Modifier.tactileClick(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.94f else 1.0f,
+        targetValue = if (isPressed) 0.95f else 1.0f,
         animationSpec = spring(
-            dampingRatio = 0.55f, // Sweet physical springiness
-            stiffness = 300f
+            dampingRatio = 0.65f, // Smooth premium physical rebound
+            stiffness = 400f
         ),
         label = "tactile_scale"
     )
@@ -45,26 +44,26 @@ fun Modifier.tactileClick(
         .scale(scale)
         .clickable(
             interactionSource = interactionSource,
-            indication = null, // Disable default flat ripple to preserve custom physical touch feel
+            indication = null, // Custom physical touch replaces flat ripples
             onClick = onClick
         )
 }
 
 /**
- * Gives a futuristic glassmorphic backing with fine frosted edges.
+ * Gives a highly detailed, luxurious 4D glassmorphic finish using multi-layered shadows and subtle gradients.
  */
 fun Modifier.glassmorphic(
     shape: Shape = RoundedCornerShape(16.dp),
-    borderColor: Color = Color.White.copy(alpha = 0.08f),
-    backColor: Color = Color(0xFF1A1A22).copy(alpha = 0.8f)
+    borderColor: Color = Color.White.copy(alpha = 0.12f),
+    backColor: Color = Color(0xFF14141E).copy(alpha = 0.72f)
 ): Modifier {
     return this
         .shadow(
-            elevation = 12.dp,
+            elevation = 16.dp,
             shape = shape,
             clip = false,
-            ambientColor = Color.Black.copy(alpha = 0.6f),
-            spotColor = Color.Black.copy(alpha = 0.6f)
+            ambientColor = Color.Black.copy(alpha = 0.75f),
+            spotColor = Color.Black.copy(alpha = 0.75f)
         )
         .background(
             color = backColor,
@@ -75,7 +74,7 @@ fun Modifier.glassmorphic(
             brush = Brush.verticalGradient(
                 colors = listOf(
                     borderColor,
-                    borderColor.copy(alpha = 0.1f)
+                    borderColor.copy(alpha = 0.02f)
                 )
             ),
             shape = shape
@@ -83,27 +82,27 @@ fun Modifier.glassmorphic(
 }
 
 /**
- * Surrounds the element with a glowing neon border to indicate premium focus or active state.
+ * Surrounds the element with a sophisticated studio-grade glowing border.
  */
 fun Modifier.neonGlow(
-    color: Color = Color(0xFFFF5722), // Default Neon Orange
+    color: Color = Color(0xFFFF5216), // Premium warm coral
     shape: Shape = RoundedCornerShape(16.dp),
-    glowWidth: Dp = 2.dp
+    glowWidth: Dp = 1.5.dp
 ): Modifier {
     return this
         .shadow(
-            elevation = 10.dp,
+            elevation = 14.dp,
             shape = shape,
             clip = false,
-            ambientColor = color.copy(alpha = 0.45f),
-            spotColor = color.copy(alpha = 0.45f)
+            ambientColor = color.copy(alpha = 0.35f),
+            spotColor = color.copy(alpha = 0.35f)
         )
         .border(
             width = glowWidth,
             brush = Brush.linearGradient(
                 colors = listOf(
                     color,
-                    Color(0xFF00BCD4) // Gradient from Orange to Cyan
+                    Color(0xFF00E5FF) // Smooth neon gradient to studio cyan
                 )
             ),
             shape = shape
