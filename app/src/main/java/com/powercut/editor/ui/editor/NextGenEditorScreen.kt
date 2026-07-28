@@ -7,7 +7,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,13 +42,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.CallSplit
-import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -67,15 +59,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -89,8 +77,6 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import com.powercut.editor.R
-import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.ui.theme.CyberCyan
@@ -115,19 +101,19 @@ private fun formatTime(ms: Long): String {
 }
 
 // Tool categories for the bottom bar
-enum class EditorTool(val label: String, val emoji: String, val icon: ImageVector) {
-    HOME("Home", "🏠", Icons.Default.ChevronLeft),
-    LAYERS("Layers", "📑", Icons.Default.List),
-    TRIM("Trim", "✂️", Icons.Default.CallSplit),
-    SPLIT("Split", "🎞️", Icons.Default.CallSplit),
-    SPEED("Speed", "⚡", Icons.Default.FlashOn),
-    CROP("Crop", "📐", Icons.Default.CropFree),
-    AUDIO("Audio", "🔊", Icons.Default.MusicNote),
-    TEXT("Text", "🔤", Icons.Default.TextFields),
-    FILTERS("Filters", "🎨", Icons.Default.Palette),
-    EFFECTS("Effects", "✨", Icons.Default.AutoAwesome),
-    STICKERS("Stickers", "😄", Icons.Default.Add),
-    TRANSITIONS("Trans", "🔀", Icons.Default.AutoAwesome)
+enum class EditorTool(val label: String, val emoji: String) {
+    HOME("Home", "🏠"),
+    LAYERS("Layers", "📑"),
+    TRIM("Trim", "✂️"),
+    SPLIT("Split", "🎞️"),
+    SPEED("Speed", "⚡"),
+    CROP("Crop", "📐"),
+    AUDIO("Audio", "🔊"),
+    TEXT("Text", "🔤"),
+    FILTERS("Filters", "🎨"),
+    EFFECTS("Effects", "✨"),
+    STICKERS("Stickers", "😄"),
+    TRANSITIONS("Trans", "🔀")
 }
 
 @OptIn(UnstableApi::class, ExperimentalLayoutApi::class)
