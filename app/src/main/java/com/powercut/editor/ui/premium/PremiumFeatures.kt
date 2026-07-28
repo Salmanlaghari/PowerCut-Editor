@@ -626,7 +626,7 @@ object ExportSettings {
         PremiumOption("ex_thumbnail_strip", "Thumbnail Strip", "Generate video thumbnail sprite sheet", "🖼️", "Export")
     )
 
-    val all get() = resolutions + frameRates + codecs + profiles + bitrates + containers + audioExport + hdrColorSpace + additional
+    val all get() = resolutions + frameRates + codecs + profiles + bitrates + containers + audioExport.map { when (it) { is PremiumOption -> it; is SliderControl -> PremiumOption(it.id, it.name, "Adjust ${it.name}", it.emoji, "Audio Export"); else -> PremiumOption((it as SelectorOption).id, it.name, "Select ${it.name}", it.emoji, "Audio Export") } } + hdrColorSpace + additional
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -794,7 +794,7 @@ object StickersOverlays {
         PremiumOption("to_watermark_text", "Animated Watermark", "Animated pulsing watermark text", "💧", "Text Overlay")
     )
 
-    val all get() = emojiStickers + shapeOverlays + watermarks + pip + splitScreen + textOverlayPresets
+    val all get() = emojiStickers + shapeOverlays + watermarks.map { if (it is PremiumOption) it else PremiumOption((it as SliderControl).id, it.name, "Adjust ${it.name}", it.emoji, "Watermark") } + pip.map { if (it is PremiumOption) it else PremiumOption((it as SliderControl).id, it.name, "Adjust ${it.name}", it.emoji, "PiP") } + splitScreen + textOverlayPresets
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -863,7 +863,7 @@ object ProjectSettings {
         PremiumOption("ks_double_tap_split", "Double-Tap Split", "Double-tap timeline to split clip", "✂️", "Shortcuts")
     )
 
-    val all get() = general + timeline + preview + misc + shortcuts
+    val all get() = general.map { if (it is PremiumOption) it else PremiumOption((it as SelectorOption).id, it.name, "Select ${it.name}", it.emoji, "General") } + timeline.map { if (it is PremiumOption) it else PremiumOption((it as SelectorOption).id, it.name, "Select ${it.name}", it.emoji, "Timeline") } + preview.map { if (it is PremiumOption) it else PremiumOption((it as SelectorOption).id, it.name, "Select ${it.name}", it.emoji, "Preview") } + misc.map { if (it is PremiumOption) it else PremiumOption((it as SelectorOption).id, it.name, "Select ${it.name}", it.emoji, "Performance") } + shortcuts
 }
 
 // ═══════════════════════════════════════════════════════════════
