@@ -330,4 +330,17 @@ class MainActivity : ComponentActivity() {
             loadRewardedAd()
         }
     }
+                                    onDone = { viewModel.resetToHome() },
+                                    onBackToEditor = { viewModel.navigateToEditor() },
+                                    onStartExport = { res, fps, wm, hw ->
+                                        viewModel.startExportWithSettings(res, fps, wm, hw)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
