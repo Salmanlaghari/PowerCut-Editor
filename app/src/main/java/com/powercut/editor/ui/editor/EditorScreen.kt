@@ -3,7 +3,6 @@ package com.powercut.editor.ui.editor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,47 +29,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBackIos
-import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.RotateRight
-import androidx.compose.material.icons.filled.ShapeLine
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -105,8 +80,6 @@ import com.powercut.editor.R
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
-import com.powercut.editor.domain.ai.AIFilter
-import com.powercut.editor.domain.timeline.TimelineHelper
 import com.powercut.editor.ui.theme.CyberCyan
 import com.powercut.editor.ui.theme.NeonOrange
 import com.powercut.editor.ui.theme.glassmorphic
@@ -114,7 +87,6 @@ import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.tactileClick
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.premiumAccentGradient
-import java.io.File
 import java.util.Locale
 
 private fun formatTime(ms: Long): String {
@@ -370,7 +342,6 @@ fun EditorScreen(
         }
 
         // 2. PREVIEW CONTAINER AREA (Strictly aspect-ratio bound dynamically)
-        // 2. PREVIEW CONTAINER AREA (Strictly 16:9 Aspect)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -489,107 +460,6 @@ fun EditorScreen(
                     ) {
                         Icon(imageVector = Icons.Default.Fullscreen, contentDescription = "Fullscreen", tint = Color.White, modifier = Modifier.size(12.dp))
                     }
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.Black)
-                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            // Media3 / ExoPlayer View
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exoPlayer
-                        useController = false
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Simulated live filter overlay
-            if (project.selectedFilter.lowercase() != "none" && composeColorFilter != null) {
-                val overlayColor = when (project.selectedFilter.lowercase()) {
-                    "grayscale" -> Color.Gray.copy(alpha = 0.15f)
-                    "sepia" -> Color(0xFF704214).copy(alpha = 0.18f)
-                    "invert" -> Color.White.copy(alpha = 0.1f)
-                    else -> Color.Transparent
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(overlayColor)
-                )
-            }
-
-            // Safe Area Dashed line overlay border
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val inset = size.width * 0.08f
-                drawRect(
-                    color = Color.White.copy(alpha = 0.2f),
-                    topLeft = Offset(inset, inset),
-                    size = size.copy(width = size.width - inset * 2, height = size.height - inset * 2),
-                    style = Stroke(
-                        width = 2f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                    )
-                )
-            }
-
-            // Central glass-styled Play/Pause button overlay
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .background(Color.White.copy(alpha = 0.15f), CircleShape)
-                    .border(2.dp, Color.White.copy(alpha = 0.3f), CircleShape)
-                    .clickable { isPlaying = !isPlaying },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = "Play/Pause Overlay",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            // Sample text overlay centered at bottom
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "PowerCut ✨",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Top-Right Zoom + Fullscreen icons overlay
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(6.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(imageVector = Icons.Default.ZoomIn, contentDescription = "Zoom", tint = Color.White, modifier = Modifier.size(12.dp))
-                }
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(6.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(imageVector = Icons.Default.Fullscreen, contentDescription = "Fullscreen", tint = Color.White, modifier = Modifier.size(12.dp))
                 }
             }
         }
