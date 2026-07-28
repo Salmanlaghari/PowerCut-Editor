@@ -24,21 +24,22 @@ jobs:
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
+    - name: Prepare Signing Key and Config
+      run: |
+        if [ -n "${{ secrets.POWERCUT_KEYSTORE_BASE64 }}" ]; then
+          echo "${{ secrets.POWERCUT_KEYSTORE_BASE64 }}" | base64 --decode > app/powercut-release.jks
+          echo "POWERCUT_STORE_PASSWORD=${{ secrets.POWERCUT_STORE_PASSWORD }}" >> local.properties
+          echo "POWERCUT_KEY_ALIAS=${{ secrets.POWERCUT_KEY_ALIAS }}" >> local.properties
+          echo "POWERCUT_KEY_PASSWORD=${{ secrets.POWERCUT_KEY_PASSWORD }}" >> local.properties
+        fi
+      shell: bash
+
     - name: Build Debug & Release APK/AAB
       run: ./gradlew assembleDebug assembleRelease bundleRelease --stacktrace
-
-    - name: Sign APK (if keystore secrets are provided)
-      # We provide a standard placeholder/signing step for a signed production release.
-      # If secrets are not available, it safely packages the unsigned/release builds.
-      uses: r0adkll/sign-android-release@v1
-      id: sign_app
-      with:
-        releaseDirectory: app/build/outputs/apk/release
-        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-        alias: ${{ secrets.ALIAS }}
-        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
-      continue-on-error: true
+      env:
+        POWERCUT_STORE_PASSWORD: ${{ secrets.POWERCUT_STORE_PASSWORD }}
+        POWERCUT_KEY_ALIAS: ${{ secrets.POWERCUT_KEY_ALIAS }}
+        POWERCUT_KEY_PASSWORD: ${{ secrets.POWERCUT_KEY_PASSWORD }}
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4

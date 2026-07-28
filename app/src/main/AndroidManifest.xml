@@ -17,6 +17,12 @@
         android:requestLegacyExternalStorage="true"
         tools:targetApi="34">
 
+        <!-- Google AdMob Metadata (Test App ID) -->
+        <!-- TODO: replace with real AdMob ID before release -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~1458002511" />
+
         <activity
             android:name="com.powercut.editor.MainActivity"
             android:exported="true"

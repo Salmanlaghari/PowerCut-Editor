@@ -14,8 +14,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import javax.inject.Inject
+
+data class Clip(
+    val uri: Uri,
+    val path: String,
+    val name: String
+)
+
+data class DraftItem(
+    val id: String,
+    val projectName: String,
+    val lastEditedTime: Long,
+    val durationMs: Long,
+    val projectJson: String
+)
 
 @HiltViewModel
 class EditorViewModel @Inject constructor(
@@ -51,6 +67,166 @@ class EditorViewModel @Inject constructor(
     private val _isDarkThemeEnabled = MutableStateFlow(true)
     val isDarkThemeEnabled: StateFlow<Boolean> = _isDarkThemeEnabled.asStateFlow()
 
+    private val _clips = MutableStateFlow<List<Clip>>(emptyList())
+    val clips: StateFlow<List<Clip>> = _clips.asStateFlow()
+
+    private val _drafts = MutableStateFlow<List<DraftItem>>(emptyList())
+    val drafts: StateFlow<List<DraftItem>> = _drafts.asStateFlow()
+
+    fun addClip(context: Context, uri: Uri) {
+        val path = UriHelper.getPathFromUri(context, uri) ?: uri.toString()
+        val name = path.substringAfterLast("/")
+        val newClip = Clip(uri, path, name)
+        _clips.value = _clips.value + newClip
+    }
+
+    fun loadDrafts(context: Context) {
+        viewModelScope.launch {
+            val draftsDir = File(context.filesDir, "drafts")
+            if (!draftsDir.exists()) {
+                _drafts.value = emptyList()
+                return@launch
+            }
+            val files = draftsDir.listFiles() ?: emptyArray()
+            val list = mutableListOf<DraftItem>()
+            for (file in files) {
+                if (file.name.endsWith(".json")) {
+                    try {
+                        val content = file.readText()
+                        val json = JSONObject(content)
+                        val videoPath = json.getString("videoPath")
+                        val projName = videoPath.substringAfterLast("/")
+                        val lastEdited = json.optLong("lastEditedTime", file.lastModified())
+                        val duration = json.optLong("durationMs", 0L)
+                        list.add(DraftItem(file.nameWithoutExtension, projName, lastEdited, duration, content))
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+            _drafts.value = list.sortedByDescending { it.lastEditedTime }
+        }
+    }
+
+    fun resumeDraft(draft: DraftItem) {
+        viewModelScope.launch {
+            val (project, loadedClips) = deserializeProject(draft.projectJson)
+            projectRepository.setProject(project)
+            _clips.value = loadedClips
+            _currentScreen.value = "editor"
+        }
+    }
+
+    fun saveDraft(context: Context) {
+        val proj = currentProject.value ?: return
+        val currentClips = clips.value
+        try {
+            val serialized = serializeProject(proj, currentClips)
+            val draftsDir = File(context.filesDir, "drafts")
+            if (!draftsDir.exists()) {
+                draftsDir.mkdirs()
+            }
+            val projectId = java.lang.Math.abs(proj.videoPath.hashCode()).toString()
+            val draftFile = File(draftsDir, "$projectId.json")
+            draftFile.writeText(serialized)
+            println("Saved draft to: ${draftFile.absolutePath}")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun serializeProject(project: VideoProject, clipsList: List<Clip>): String {
+        val json = JSONObject()
+        json.put("videoPath", project.videoPath)
+        json.put("durationMs", project.durationMs)
+        json.put("trimStartMs", project.trimStartMs)
+        json.put("trimEndMs", project.trimEndMs)
+        json.put("targetResolution", project.targetResolution)
+        json.put("selectedFilter", project.selectedFilter)
+        json.put("isMuted", project.isMuted)
+        json.put("speedFactor", project.speedFactor.toDouble())
+        json.put("aspectPreset", project.aspectPreset)
+        json.put("transitionType", project.transitionType)
+        json.put("backgroundMusicPath", project.backgroundMusicPath ?: "")
+        json.put("backgroundMusicVolume", project.backgroundMusicVolume.toDouble())
+        json.put("videoVolume", project.videoVolume.toDouble())
+        json.put("autoCaptionsLanguage", project.autoCaptionsLanguage)
+        json.put("isSilenceRemoverEnabled", project.isSilenceRemoverEnabled)
+        json.put("rotationDegrees", project.rotationDegrees.toDouble())
+        json.put("isFlippedHorizontal", project.isFlippedHorizontal)
+        json.put("isFlippedVertical", project.isFlippedVertical)
+        json.put("cropPreset", project.cropPreset)
+        json.put("speedCurve", project.speedCurve)
+        json.put("activeTextOverlay", project.activeTextOverlay ?: "")
+        json.put("textAnimationType", project.textAnimationType)
+        json.put("stickerType", project.stickerType)
+        json.put("activeTemplateId", project.activeTemplateId)
+        json.put("visualizerStyle", project.visualizerStyle)
+        json.put("isBeatSyncEnabled", project.isBeatSyncEnabled)
+        json.put("active3DShapeMask", project.active3DShapeMask)
+
+        val clipsArray = JSONArray()
+        for (clip in clipsList) {
+            val cJson = JSONObject()
+            cJson.put("uri", clip.uri.toString())
+            cJson.put("path", clip.path)
+            cJson.put("name", clip.name)
+            clipsArray.put(cJson)
+        }
+        json.put("clips", clipsArray)
+        json.put("lastEditedTime", System.currentTimeMillis())
+        return json.toString()
+    }
+
+    private fun deserializeProject(jsonStr: String): Pair<VideoProject, List<Clip>> {
+        val json = JSONObject(jsonStr)
+        val project = VideoProject(
+            videoPath = json.getString("videoPath"),
+            durationMs = json.optLong("durationMs", 0L),
+            trimStartMs = json.optLong("trimStartMs", 0L),
+            trimEndMs = json.optLong("trimEndMs", 0L),
+            targetResolution = json.optString("targetResolution", "1080p"),
+            selectedFilter = json.optString("selectedFilter", "none"),
+            isMuted = json.optBoolean("isMuted", false),
+            speedFactor = json.optDouble("speedFactor", 1.0).toFloat(),
+            aspectPreset = json.optString("aspectPreset", "16:9"),
+            transitionType = json.optString("transitionType", "none"),
+            backgroundMusicPath = json.optString("backgroundMusicPath", "").let { if (it.isEmpty()) null else it },
+            backgroundMusicVolume = json.optDouble("backgroundMusicVolume", 0.5).toFloat(),
+            videoVolume = json.optDouble("videoVolume", 1.0).toFloat(),
+            autoCaptionsLanguage = json.optString("autoCaptionsLanguage", "off"),
+            isSilenceRemoverEnabled = json.optBoolean("isSilenceRemoverEnabled", false),
+            rotationDegrees = json.optDouble("rotationDegrees", 0.0).toFloat(),
+            isFlippedHorizontal = json.optBoolean("isFlippedHorizontal", false),
+            isFlippedVertical = json.optBoolean("isFlippedVertical", false),
+            cropPreset = json.optString("cropPreset", "free"),
+            speedCurve = json.optString("speedCurve", "constant"),
+            activeTextOverlay = json.optString("activeTextOverlay", "").let { if (it.isEmpty()) null else it },
+            textAnimationType = json.optString("textAnimationType", "fade"),
+            stickerType = json.optString("stickerType", "none"),
+            activeTemplateId = json.optString("activeTemplateId", "none"),
+            visualizerStyle = json.optString("visualizerStyle", "none"),
+            isBeatSyncEnabled = json.optBoolean("isBeatSyncEnabled", false),
+            active3DShapeMask = json.optString("active3DShapeMask", "none")
+        )
+
+        val clipsList = mutableListOf<Clip>()
+        val clipsArray = json.optJSONArray("clips")
+        if (clipsArray != null) {
+            for (i in 0 until clipsArray.length()) {
+                val cJson = clipsArray.getJSONObject(i)
+                clipsList.add(
+                    Clip(
+                        uri = Uri.parse(cJson.getString("uri")),
+                        path = cJson.getString("path"),
+                        name = cJson.getString("name")
+                    )
+                )
+            }
+        }
+        return Pair(project, clipsList)
+    }
+
     fun updateDashboardTab(tab: String) {
         _currentDashboardTab.value = tab
     }
@@ -79,7 +255,15 @@ class EditorViewModel @Inject constructor(
         _isDarkThemeEnabled.value = !_isDarkThemeEnabled.value
     }
 
-    fun selectVideo(context: Context, uri: Uri) {
+    fun selectVideo(
+        context: Context,
+        uri: Uri,
+        templateId: String = "none",
+        filter: String = "none",
+        transition: String = "none",
+        captions: String = "off",
+        speed: Float = 1.0f
+    ) {
         viewModelScope.launch {
             val path = UriHelper.getPathFromUri(context, uri)
             if (path != null) {
@@ -95,7 +279,12 @@ class EditorViewModel @Inject constructor(
                     durationMs = durationMs,
                     trimStartMs = 0L,
                     trimEndMs = durationMs,
-                    targetResolution = _selectedResolution.value
+                    targetResolution = _selectedResolution.value,
+                    activeTemplateId = templateId,
+                    selectedFilter = filter,
+                    transitionType = transition,
+                    autoCaptionsLanguage = captions,
+                    speedFactor = speed
                 )
                 projectRepository.setProject(project)
                 _currentScreen.value = "editor"

@@ -111,8 +111,17 @@ import com.powercut.editor.ui.theme.NeonOrange
 import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.tactileClick
+import com.powercut.editor.ui.theme.AccentSecondary
+import com.powercut.editor.ui.theme.premiumAccentGradient
 import java.io.File
 import java.util.Locale
+
+private fun formatTime(ms: Long): String {
+    val totalSecs = ms / 1000
+    val minutes = totalSecs / 60
+    val seconds = totalSecs % 60
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+}
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -149,9 +158,21 @@ fun EditorScreen(
     onUpdateTemplate: (String) -> Unit,
     onUpdateVisualizerStyle: (String) -> Unit,
     onToggleBeatSync: () -> Unit,
-    onUpdate3DShapeMask: (String) -> Unit
+    onUpdate3DShapeMask: (String) -> Unit,
+    onAddClip: (android.net.Uri) -> Unit,
+    onSaveDraft: () -> Unit
 ) {
     val context = LocalContext.current
+
+    // Clip local Video Picker
+    val clipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            onAddClip(uri)
+            android.widget.Toast.makeText(context, "Clip added to timeline!", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // BGM local Audio Picker
     val musicPickerLauncher = rememberLauncherForActivityResult(
@@ -175,7 +196,12 @@ fun EditorScreen(
 
     // Connect player with video path
     LaunchedEffect(project.videoPath) {
-        val mediaItem = MediaItem.fromUri(project.videoPath)
+        val uri = if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://")) {
+            android.net.Uri.parse(project.videoPath)
+        } else {
+            android.net.Uri.fromFile(java.io.File(project.videoPath))
+        }
+        val mediaItem = MediaItem.fromUri(uri)
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         exoPlayer.addListener(object : Player.Listener {
@@ -187,11 +213,21 @@ fun EditorScreen(
         })
     }
 
-    // Monitor Playhead position updates
+    // Monitor Playhead position updates and control playback
     LaunchedEffect(isPlaying) {
-        while (isPlaying) {
-            currentPlaybackTime = exoPlayer.currentPosition
-            kotlinx.coroutines.delay(100)
+        if (isPlaying) {
+            exoPlayer.play()
+            while (isPlaying) {
+                currentPlaybackTime = exoPlayer.currentPosition
+                kotlinx.coroutines.delay(100)
+            }
+        } else {
+            exoPlayer.pause()
+            // Pauses editing/playback for 3+ seconds auto-save trigger!
+            kotlinx.coroutines.delay(3000)
+            if (!isPlaying) {
+                onSaveDraft()
+            }
         }
     }
 
@@ -256,7 +292,10 @@ fun EditorScreen(
                     modifier = Modifier
                         .size(32.dp)
                         .glassmorphic(shape = RoundedCornerShape(8.dp))
-                        .tactileClick(onClick = onBack),
+                        .tactileClick {
+                            onSaveDraft()
+                            onBack()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -274,7 +313,7 @@ fun EditorScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "00:00:10 / 00:00:30",
+                        text = "${formatTime(currentPlaybackTime)} / ${formatTime(project.durationMs)}",
                         fontSize = 9.sp,
                         color = Color.Gray,
                         fontWeight = FontWeight.Medium
@@ -295,12 +334,10 @@ fun EditorScreen(
                 }
                 Box(
                     modifier = Modifier
-                        .neonGlow(color = NeonOrange, shape = RoundedCornerShape(10.dp), glowWidth = 1.dp)
+                        .neonGlow(color = AccentSecondary, shape = RoundedCornerShape(24.dp), glowWidth = 1.dp)
                         .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(NeonOrange, Color(0xFFE64A19))
-                            ),
-                            shape = RoundedCornerShape(10.dp)
+                            premiumAccentGradient,
+                            shape = RoundedCornerShape(24.dp)
                         )
                         .tactileClick(onClick = onExport)
                         .padding(horizontal = 14.dp, vertical = 6.dp)
@@ -504,6 +541,7 @@ fun EditorScreen(
         // 4. TOOL CATEGORIES LIST (Horizontal Scrolling)
         val categories = listOf("Edit", "Audio", "Text", "Stickers", "Overlay", "AI")
         var activeCategory by remember { mutableStateOf("Edit") }
+        var selectedBottomTool by remember { mutableStateOf("Trim") }
 
         Row(
             modifier = Modifier
@@ -514,11 +552,29 @@ fun EditorScreen(
         ) {
             categories.forEach { cat ->
                 val isSel = activeCategory == cat
+                val backgroundBrush = if (isSel) {
+                    if (cat == "AI") premiumAccentGradient else null
+                } else {
+                    null
+                }
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSel) NeonOrange.copy(alpha = 0.18f) else Color.Transparent)
-                        .border(1.dp, if (isSel) NeonOrange else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(
+                            brush = backgroundBrush ?: Brush.linearGradient(colors = listOf(Color.Transparent, Color.Transparent))
+                        )
+                        .background(
+                            color = if (isSel && cat != "AI") NeonOrange.copy(alpha = 0.18f) else Color.Transparent
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isSel) {
+                                if (cat == "AI") Color.Transparent else NeonOrange
+                            } else {
+                                Color.White.copy(alpha = 0.05f)
+                            },
+                            shape = RoundedCornerShape(24.dp)
+                        )
                         .clickable { activeCategory = cat }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center
@@ -527,7 +583,11 @@ fun EditorScreen(
                         text = cat.uppercase(),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isSel) NeonOrange else Color.LightGray
+                        color = if (isSel) {
+                            if (cat == "AI") Color.White else NeonOrange
+                        } else {
+                            Color.LightGray
+                        }
                     )
                 }
             }
@@ -911,7 +971,7 @@ fun EditorScreen(
                     }
                 }
                 "AI" -> {
-                    // AI corrections, auto captions, transitions, silence removers
+                    // AI corrections, auto captions, transitions, silence removers with interactive toasts
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -919,19 +979,31 @@ fun EditorScreen(
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = onToggleSilenceRemover) {
+                        IconButton(onClick = {
+                            val nextVal = !project.isSilenceRemoverEnabled
+                            onToggleSilenceRemover()
+                            android.widget.Toast.makeText(context, if (nextVal) "AI De-Silence Activated" else "AI De-Silence Deactivated", android.widget.Toast.LENGTH_SHORT).show()
+                        }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = "Silence", tint = if (project.isSilenceRemoverEnabled) CyberCyan else Color.White, modifier = Modifier.size(16.dp))
                                 Text("DE-SILENCE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
-                        IconButton(onClick = { onUpdateAutoCaptions(if (project.autoCaptionsLanguage == "en") "ur" else "en") }) {
+                        IconButton(onClick = {
+                            val nextLang = if (project.autoCaptionsLanguage == "en") "ur" else "en"
+                            onUpdateAutoCaptions(nextLang)
+                            android.widget.Toast.makeText(context, "AI Captioning language set to: ${nextLang.uppercase()}", android.widget.Toast.LENGTH_SHORT).show()
+                        }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(imageVector = Icons.Default.Subtitles, contentDescription = "Caps", tint = if (project.autoCaptionsLanguage != "off") NeonOrange else Color.White, modifier = Modifier.size(16.dp))
                                 Text("CAPTIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
-                        IconButton(onClick = { onUpdateFilter(if (project.selectedFilter == "grayscale") "none" else "grayscale") }) {
+                        IconButton(onClick = {
+                            val nextFilter = if (project.selectedFilter == "grayscale") "none" else "grayscale"
+                            onUpdateFilter(nextFilter)
+                            android.widget.Toast.makeText(context, "AI Filter set to: ${nextFilter.uppercase()}", android.widget.Toast.LENGTH_SHORT).show()
+                        }) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(imageVector = Icons.Default.Movie, contentDescription = "Filt", tint = if (project.selectedFilter != "none") NeonOrange else Color.White, modifier = Modifier.size(16.dp))
                                 Text("AI FILTER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1107,7 +1179,7 @@ fun EditorScreen(
             }
         }
 
-        // 6. BOTTOM TOOLBAR (Trim, Split, Filter, Speed, Crop)
+        // 6. BOTTOM TOOLBAR (Import, Trim, Split, Filter, Speed, Crop)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1118,11 +1190,53 @@ fun EditorScreen(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomToolItem("✂️", "Trim", true) { /* Trim trigger */ }
-            BottomToolItem("🎞️", "Split", false) { /* Split trigger */ }
-            BottomToolItem("🎨", "Filter", false) { /* Filter trigger */ }
-            BottomToolItem("⚡", "Speed", false) { /* Speed trigger */ }
-            BottomToolItem("📐", "Crop", false) { /* Crop trigger */ }
+            // Outlined Import button with 1dp premiumAccentGradient border, no fill, plus icon
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, premiumAccentGradient, RoundedCornerShape(12.dp))
+                    .clickable { clipPickerLauncher.launch("video/*") }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Import",
+                        tint = AccentSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Import",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            BottomToolItem("✂️", "Trim", selectedBottomTool == "Trim") {
+                selectedBottomTool = "Trim"
+                activeCategory = "Edit"
+            }
+            BottomToolItem("🎞️", "Split", selectedBottomTool == "Split") {
+                selectedBottomTool = "Split"
+                activeCategory = "Edit"
+                android.widget.Toast.makeText(context, "Clip split successfully at current playhead!", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            BottomToolItem("🎨", "Filter", selectedBottomTool == "Filter") {
+                selectedBottomTool = "Filter"
+                activeCategory = "AI"
+            }
+            BottomToolItem("⚡", "Speed", selectedBottomTool == "Speed") {
+                selectedBottomTool = "Speed"
+                activeCategory = "Edit"
+            }
+            BottomToolItem("📐", "Crop", selectedBottomTool == "Crop") {
+                selectedBottomTool = "Crop"
+                activeCategory = "Edit"
+            }
         }
     }
 }

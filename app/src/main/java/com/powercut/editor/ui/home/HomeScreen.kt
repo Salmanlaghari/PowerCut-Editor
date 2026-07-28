@@ -1,6 +1,9 @@
 package com.powercut.editor.ui.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.powercut.editor.ui.editor.DraftItem
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,6 +39,19 @@ import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.ui.theme.*
 import kotlinx.coroutines.delay
 
+data class Template(
+    val title: String,
+    val subtitle: String,
+    val category: String, // "Cinematic", "Reels", "Urdu Status", "Wedding", "Travel", etc.
+    val imageRes: Int,
+    val gradient: List<Color>,
+    val templateId: String,
+    val defaultFilter: String = "none",
+    val defaultTransition: String = "none",
+    val defaultAutoCaptions: String = "off",
+    val defaultSpeed: Float = 1.0f
+)
+
 @Composable
 fun HomeScreen(
     language: String,
@@ -52,9 +68,22 @@ fun HomeScreen(
     storagePath: String,
     onStoragePathChange: (String) -> Unit,
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    draftsList: List<DraftItem>,
+    onDraftSelected: (DraftItem) -> Unit,
+    onTemplateVideoSelected: (android.net.Uri, String, String, String, String, Float) -> Unit
 ) {
     var isAppLoadingIntro by remember { mutableStateOf(true) }
+    var activeClickedTemplate by remember { mutableStateOf<Template?>(null) }
+
+    val templateVideoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null && activeClickedTemplate != null) {
+            val t = activeClickedTemplate!!
+            onTemplateVideoSelected(uri, t.templateId, t.defaultFilter, t.defaultTransition, t.defaultAutoCaptions, t.defaultSpeed)
+        }
+    }
 
     LaunchedEffect(Unit) {
         delay(1200)
@@ -219,20 +248,39 @@ fun HomeScreen(
                     }
                 }
 
-                // Render specific tabs with huge workable feature list
-                when (activeTab) {
-                    "dashboard" -> DashboardView(onVideoSelected, language)
-                    "templates" -> TemplatesView(language)
-                    "exports" -> ExportsView(language)
-                    "settings" -> SettingsView(
-                        language,
-                        settingsResolution, onSettingsResolutionChange,
-                        settingsFps, onSettingsFpsChange,
-                        isHardwareAccEnabled, onToggleHardwareAcc,
-                        storagePath, onStoragePathChange,
-                        isDarkTheme, onToggleTheme
-                    )
+                // Render specific tabs with huge workable feature list inside a weighted Box
+                Box(modifier = Modifier.weight(1f)) {
+                    when (activeTab) {
+                        "dashboard" -> DashboardView(
+                            onVideoSelected = onVideoSelected,
+                            language = language,
+                            onTemplateSelected = { template ->
+                                activeClickedTemplate = template
+                                templateVideoLauncher.launch("video/*")
+                            }
+                        )
+                        "templates" -> TemplatesView(
+                            language = language,
+                            onTemplateSelected = { template ->
+                                activeClickedTemplate = template
+                                templateVideoLauncher.launch("video/*")
+                            }
+                        )
+                        "drafts" -> com.powercut.editor.ui.drafts.DraftsScreen(draftsList, onDraftSelected, language)
+                        "exports" -> ExportsView(language)
+                        "settings" -> SettingsView(
+                            language,
+                            settingsResolution, onSettingsResolutionChange,
+                            settingsFps, onSettingsFpsChange,
+                            isHardwareAccEnabled, onToggleHardwareAcc,
+                            storagePath, onStoragePathChange,
+                            isDarkTheme, onToggleTheme
+                        )
+                    }
                 }
+
+                // Adaptive Banner Ad view at the bottom of the home screen (only on Home, above navigation bar)
+                BannerAdView(modifier = Modifier.padding(vertical = 4.dp))
             }
 
             // FLOATING GLASS NAVIGATION BAR
@@ -253,6 +301,7 @@ fun HomeScreen(
                 ) {
                     BottomTabItem(Icons.Default.Home, "Home", activeTab == "dashboard") { onTabSelected("dashboard") }
                     BottomTabItem(Icons.Default.Wallpaper, "Templates", activeTab == "templates") { onTabSelected("templates") }
+                    BottomTabItem(Icons.Default.Drafts, "Drafts", activeTab == "drafts") { onTabSelected("drafts") }
                     BottomTabItem(Icons.Default.Movie, "Exports", activeTab == "exports") { onTabSelected("exports") }
                     BottomTabItem(Icons.Default.Settings, "Settings", activeTab == "settings") { onTabSelected("settings") }
                 }
@@ -262,9 +311,113 @@ fun HomeScreen(
 }
 
 @Composable
+fun BannerAdView(modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+
+    val adView = remember {
+        com.google.android.gms.ads.AdView(context).apply {
+            setAdSize(com.google.android.gms.ads.AdSize.BANNER)
+            // TODO: replace with real AdMob IDs before release
+            adUnitId = com.powercut.editor.core.utils.AdConstants.BANNER_TEST_ID
+        }
+    }
+
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> adView.resume()
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> adView.pause()
+                androidx.lifecycle.Lifecycle.Event.ON_DESTROY -> adView.destroy()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            adView.destroy()
+        }
+    }
+
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(50.dp),
+        factory = { adView },
+        update = { valAdView ->
+            valAdView.loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
+        }
+    )
+}
+
+// 50+ Premium Studio Templates List divided across multiple professional categories
+val allStudioTemplates = listOf(
+    // Cinematic
+    Template("Cinema Classic", "Cinematic Film Grade", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF2C3E50), Color(0xFFFD746C)), "spark", "sepia", "crossfade"),
+    Template("Hollywood Noir", "Moody monochrome look", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF4B79A1), Color(0xFF283E51)), "none", "grayscale", "none"),
+    Template("Vintage Analog", "80s retro texture", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF8E44AD), Color(0xFF3498DB)), "none", "sepia", "glitch", "off", 1.0f),
+    Template("Golden Horizon", "Sunset panning grade", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFFE65C00), Color(0xFFF9D423)), "bloom", "none", "zoom"),
+    Template("Anamorphic Dream", "Dynamic cinema cropping", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF1F1C2C), Color(0xFF928DAB)), "none", "none", "crossfade"),
+    Template("Retro Faded", "Old-school fade style", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF141E30), Color(0xFF243B55)), "none", "sepia", "none"),
+    Template("Cyberpunk 2077", "Neon violet grade", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF00C6FF), Color(0xFF0072FF)), "glitch", "none", "glitch"),
+    Template("Classic Indie", "Soft contrast tone", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF70e1f5), Color(0xFFffd194)), "none", "none", "none"),
+    Template("Neon Shadows", "Dark neon aesthetic", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF3A6073), Color(0xFF3A6073)), "none", "grayscale", "zoom"),
+    Template("Teal & Orange Pro", "Blockbuster movie color", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFFf857a6), Color(0xFFff5858)), "spark", "none", "crossfade"),
+
+    // Reels
+    Template("Reel Beat Drop", "High-energy transition beats", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFD38312), Color(0xFFA83279)), "beats", "none", "glitch", "en", 1.5f),
+    Template("TikTok Fast Cut", "Rapid rhythm splits", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFF2193b0), Color(0xFF6dd5ed)), "beats", "none", "zoom", "off", 2.0f),
+    Template("Instagram Sparkle", "Glow outline filter", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFee9ca7), Color(0xFFffdde1)), "spark", "none", "crossfade"),
+    Template("Trending Glitch", "Digital glitch splits", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFbdc3c7), Color(0xFF2c3e50)), "glitch", "invert", "glitch"),
+    Template("Hyper-Speed Vibe", "Up-tempo active motion", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFF06beb6), Color(0xFF48b1bf)), "none", "none", "zoom", "off", 4.0f),
+    Template("Slow-Mo Pop", "Dynamic speed ramping", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFe65c00), Color(0xFFF9D423)), "none", "none", "crossfade", "off", 0.5f),
+    Template("Neon Pulse", "Rhythmic beat synchronize", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFF348F50), Color(0xFF56B4D3)), "beats", "none", "glitch"),
+    Template("Vertical Flow", "Mobile native split cuts", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFE55D87), Color(0xFF5FC3E4)), "none", "none", "none"),
+    Template("Groovy Zoom", "Zoom-on-beat synchronize", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFF11998e), Color(0xFF38ef7d)), "beats", "none", "zoom"),
+    Template("Split Screen", "Dynamic split layout panels", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFFF4E50), Color(0xFFF9D423)), "none", "none", "none"),
+
+    // Lyric / Urdu Status
+    Template("Urdu Poetry Flow", "Teal lyric aesthetic", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF004FF9), Color(0xFFFFF94C)), "poetry", "none", "crossfade", "ur"),
+    Template("Sad Shayari Tone", "Moody slow crossfades", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF310F54), Color(0xFFFFF94C)), "poetry", "grayscale", "none", "ur"),
+    Template("Romantic Gazal", "Glow transitions shadi", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF654ea3), Color(0xFFeaafc8)), "poetry", "sepia", "crossfade", "ur"),
+    Template("Aesthetic Naat", "Clean vertical captioning", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF185a9d), Color(0xFF12c2e9)), "none", "none", "none", "ur"),
+    Template("Golden Words", "Classic quote overlay burn", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF4568DC), Color(0xFFB06AB3)), "none", "none", "none", "ur"),
+    Template("Dark Aesthetic Status", "Faded low exposure shayari", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF232526), Color(0xFF414345)), "poetry", "grayscale", "crossfade", "ur"),
+    Template("Lyrical Neon", "Cyber lyric burning format", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFFf12711), Color(0xFFf5af19)), "poetry", "none", "glitch", "ur"),
+    Template("Classic Urdu Ghazal", "Textured paper layout", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF56ab2f), Color(0xFFa8ff78)), "poetry", "sepia", "none", "ur"),
+    Template("Retro Shayari", "VHS tape aesthetic status", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF00c6ff), Color(0xFF0072ff)), "poetry", "none", "glitch", "ur"),
+    Template("Modern Urdu Vibe", "Bold typography cuts poetry", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF749BFF), Color(0xFF12c2e9)), "poetry", "none", "zoom", "ur"),
+
+    // Wedding / Slow-mo
+    Template("Slow-Mo Wedding", "Soft pink bloom portrait", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFFE91E63), Color(0xFFF06292)), "bloom", "none", "crossfade", "off", 0.75f),
+    Template("Golden Shadi", "Warm luxury wedding preset", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFFf953c6), Color(0xFFb91d73)), "bloom", "sepia", "crossfade"),
+    Template("Royal Baaraat", "Vibrant colors celebration", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFF009688), Color(0xFF35a7ff)), "spark", "none", "zoom"),
+    Template("Classic Walima", "Elegant soft transitions shadi", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFFFFE000), Color(0xFF799F0C)), "none", "none", "crossfade"),
+    Template("Mehndi Beat Drop", "High-energy dance edits shadi", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFF4568DC), Color(0xFFB06AB3)), "beats", "none", "glitch"),
+    Template("Shadi Film Reel", "Vintage film burn wedding", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFF1D976C), Color(0xFF93F9B9)), "none", "sepia", "none"),
+    Template("Eternal Love", "Dreamy slow pan walima", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFFFF5F6D), Color(0xFFFFC371)), "bloom", "none", "crossfade", "off", 0.5f),
+    Template("Vibrant Sangeet", "Pulsating highlights mehndi", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFFD66D75), Color(0xFFE29587)), "beats", "none", "zoom"),
+    Template("Bride Portrait", "Ultra soft vignette shadi", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFF614385), Color(0xFF516395)), "bloom", "none", "none"),
+    Template("Royal Entrance", "Cinematic entrance pan shadi", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFF02AAB0), Color(0xFF00CDAC)), "none", "none", "zoom"),
+
+    // Travel
+    Template("Travel Cinematic", "Warm sunset color grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFF05F57), Color(0xFF3E2723)), "vlog", "none", "zoom"),
+    Template("Mountain Slow Pan", "Vibrant green color grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF24C6DC), Color(0xFF514A9D)), "vlog", "none", "crossfade", "off", 0.8f),
+    Template("Sea Breeze Blue", "Bright blue exposure grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF00C9FF), Color(0xFF92FE9D)), "vlog", "none", "none"),
+    Template("Urban Explorer", "Fast splits & active cuts", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF076585), Color(0xFFfff)), "beats", "none", "zoom"),
+    Template("Desert Safari Gold", "Intense warm desert grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFFF7E5F), Color(0xFFFEB47B)), "vlog", "sepia", "crossfade"),
+    Template("Road Trip Tape", "VHS overlay travel format", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF141E30), Color(0xFF243B55)), "none", "none", "glitch"),
+    Template("Island Wanderer", "Deep saturation look travel", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF4CA1AF), Color(0xFFC4E0E5)), "vlog", "none", "none"),
+    Template("Cinematic Vlog 4K", "Sharp color contrast grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFf4c4f3), Color(0xFFfc67fa)), "vlog", "none", "crossfade"),
+    Template("Forest Serenity", "Moody green deep forest", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF11998e), Color(0xFF38ef7d)), "none", "none", "none"),
+    Template("Adventure Awaits", "Action sports action cuts", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFFF4E50), Color(0xFFF9D423)), "none", "none", "zoom", "off", 1.5f)
+)
+
+@Composable
 fun DashboardView(
     onVideoSelected: (android.net.Uri) -> Unit,
-    language: String
+    language: String,
+    onTemplateSelected: (Template) -> Unit
 ) {
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -289,12 +442,12 @@ fun DashboardView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(115.dp)
-                    .neonGlow(color = NeonOrange, shape = RoundedCornerShape(20.dp))
+                    .neonGlow(color = NeonOrange, shape = RoundedCornerShape(24.dp))
                     .background(
-                        Brush.verticalGradient(colors = listOf(NeonOrange, Color(0xFFD84315))),
-                        shape = RoundedCornerShape(20.dp)
+                        premiumAccentGradient,
+                        shape = RoundedCornerShape(24.dp)
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
                     .tactileClick { pickerLauncher.launch("video/*") },
                 contentAlignment = Alignment.Center
             ) {
@@ -450,39 +603,76 @@ fun DashboardView(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            val templatesList = listOf(
-                Pair("🔥 Reels Beat-Sync", Brush.horizontalGradient(colors = listOf(NeonOrange, Color(0xFFFF9800)))),
-                Pair("✨ Cinema Classic", Brush.horizontalGradient(colors = listOf(Color(0xFF7C4DFF), Color(0xFF536DFE)))),
-                Pair("🎵 Urdu Poetry Flow", Brush.horizontalGradient(colors = listOf(CyberCyan, Color(0xFF009688)))),
-                Pair("💖 Slow-Mo Wedding", Brush.horizontalGradient(colors = listOf(Color(0xFFE91E63), Color(0xFFF06292))))
+            // The 5 requested image-backed templates for the home screen dashboard
+            val dashboardTemplates = listOf(
+                Template("Cinema Classic", "Cinematic Film Grade", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF2C3E50), Color(0xFFFD746C)), "spark", "sepia", "crossfade"),
+                Template("Urdu Poetry Flow", "Teal Lyric Aesthetic", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF004FF9), Color(0xFFFFF94C)), "poetry", "none", "crossfade", "ur"),
+                Template("Slow-Mo Wedding", "Soft Pink Bloom Portrait", "Wedding", R.drawable.template_slow_mo, listOf(Color(0xFFE91E63), Color(0xFFF06292)), "bloom", "none", "crossfade", "off", 0.75f),
+                Template("Reel Beat Drop", "High Energy Transition", "Reels", R.drawable.template_reel_beat, listOf(Color(0xFFD38312), Color(0xFFA83279)), "beats", "none", "glitch", "en", 1.5f),
+                Template("Travel Cinematic", "Warm Sunset Color Grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFF05F57), Color(0xFF3E2723)), "vlog", "none", "zoom")
             )
 
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(templatesList) { (title, brush) ->
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) {
+                items(dashboardTemplates) { template ->
                     Box(
                         modifier = Modifier
                             .size(110.dp, 160.dp)
-                            .background(brush, RoundedCornerShape(16.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
-                            .tactileClick { /* Select Template */ },
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                            .tactileClick { onTemplateSelected(template) },
                         contentAlignment = Alignment.BottomStart
                     ) {
+                        // Fallback background gradient
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .background(Brush.horizontalGradient(template.gradient))
+                        )
+
+                        // Render actual JPEG Template image
+                        if (template.imageRes != 0) {
+                            Image(
+                                painter = painterResource(id = template.imageRes),
+                                contentDescription = template.title,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // Transparent black scrim at bottom
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
                                 .background(
                                     Brush.verticalGradient(
-                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f))
+                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
                                     )
                                 )
                         )
-                        Text(
-                            text = title,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(10.dp)
-                        )
+
+                        // Title and subtitle overlay at bottom-left
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = template.title,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = template.subtitle,
+                                fontSize = 8.sp,
+                                color = Color.LightGray
+                            )
+                        }
                     }
                 }
             }
@@ -600,12 +790,31 @@ fun DashboardView(
 }
 
 @Composable
-fun TemplatesView(language: String) {
+fun TemplatesView(
+    language: String,
+    onTemplateSelected: (Template) -> Unit
+) {
     var selectedCategory by remember { mutableStateOf("All") }
     val categories = if (language == "ur") {
-        listOf("سب", "سنیماٹک", "ریلز", "اردو اسٹیٹس", "ویلاگ", "ریٹرو")
+        listOf("سب", "سنیماٹک", "ریلز", "اردو اسٹیٹس", "شادی", "ویلاگ / سفر")
     } else {
-        listOf("All", "Cinematic", "Reels", "Urdu Status", "Vlog", "Retro")
+        listOf("All", "Cinematic", "Reels", "Urdu Status", "Wedding", "Travel")
+    }
+
+    val filteredTemplates = remember(selectedCategory) {
+        if (selectedCategory == "All" || selectedCategory == "سب") {
+            allStudioTemplates
+        } else {
+            val engCategory = when (selectedCategory) {
+                "سنیماٹک" -> "Cinematic"
+                "ریلز" -> "Reels"
+                "اردو اسٹیٹس" -> "Urdu Status"
+                "شادی" -> "Wedding"
+                "ویلاگ / سفر" -> "Travel"
+                else -> selectedCategory
+            }
+            allStudioTemplates.filter { it.category == engCategory }
+        }
     }
 
     Column(
@@ -615,24 +824,32 @@ fun TemplatesView(language: String) {
     ) {
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = if (language == "ur") "ٹرینڈنگ پرو ٹیمپلیٹس" else "Trending Pro Templates",
+            text = if (language == "ur") "پریمیم اسٹوڈیو ٹیمپلیٹس" else "Premium Studio Templates",
             fontSize = 16.sp,
-            fontWeight = FontWeight.Black,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.5.sp,
             color = Color.White
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Horizontal Category Switcher
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Horizontal Category Switcher (Buttery Smooth 60fps Scrolling)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 8.dp)
+        ) {
             items(categories) { cat ->
                 val isSel = selectedCategory == cat
                 Box(
                     modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
-                            RoundedCornerShape(10.dp)
+                            if (isSel) NeonOrange.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f)
                         )
-                        .border(1.dp, if (isSel) NeonOrange else Color.Transparent, RoundedCornerShape(10.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (isSel) NeonOrange else Color.White.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
                         .clickable { selectedCategory = cat }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
@@ -641,40 +858,86 @@ fun TemplatesView(language: String) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Premium Grid Cards of templates
-        val items = listOf(
-            Triple("Cinematic Gold", "15 Clips • 30s", "120k Used"),
-            Triple("Cyberpunk Glitch Beat", "8 Clips • 15s", "84k Used"),
-            Triple("Urdu Poetry Nostalgia", "1 Clip • 45s", "240k Used"),
-            Triple("Classic Vlog Transitions", "20 Clips • 1m", "50k Used")
-        )
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(items) { (name, stats, used) ->
+        // Grid Cards of templates inside a fast scrolling LazyColumn (Buttery Smooth 60fps)
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 80.dp)
+        ) {
+            items(filteredTemplates) { template ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glassmorphic(shape = RoundedCornerShape(16.dp))
-                        .padding(16.dp)
+                        .height(130.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp))
+                        .tactileClick { onTemplateSelected(template) }
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                    // Fallback background gradient
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Brush.horizontalGradient(template.gradient))
+                    )
+
+                    // Render actual JPEG Template image
+                    if (template.imageRes != 0) {
+                        Image(
+                            painter = painterResource(id = template.imageRes),
+                            contentDescription = template.title,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // Transparent black scrim at bottom
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .align(Alignment.BottomStart)
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                                )
+                            )
+                    )
+
+                    // Title and subtitle overlay at bottom-left
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Column {
-                            Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(stats, color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .background(CyberCyan.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(used, color = CyberCyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Text(
+                            text = template.title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "${template.subtitle} • Preset: ${template.templateId.uppercase()}",
+                            fontSize = 10.sp,
+                            color = Color.LightGray
+                        )
+                    }
+
+                    // Category Pill Overlay Top-Right
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = template.category.uppercase(),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberCyan
+                        )
                     }
                 }
             }

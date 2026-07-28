@@ -53,13 +53,13 @@ fun Modifier.tactileClick(
  * Gives a highly detailed, luxurious 4D glassmorphic finish using multi-layered shadows and subtle gradients.
  */
 fun Modifier.glassmorphic(
-    shape: Shape = RoundedCornerShape(16.dp),
-    borderColor: Color = Color.White.copy(alpha = 0.12f),
-    backColor: Color = Color(0xFF14141E).copy(alpha = 0.72f)
+    shape: Shape = RoundedCornerShape(24.dp),
+    borderColor: Color = Color(0xFFFFFFFF).copy(alpha = 0.08f),
+    backColor: Color = Color(0xFF161B26).copy(alpha = 0.72f)
 ): Modifier {
     return this
         .shadow(
-            elevation = 16.dp,
+            elevation = 2.dp,
             shape = shape,
             clip = false,
             ambientColor = Color.Black.copy(alpha = 0.75f),
@@ -85,8 +85,8 @@ fun Modifier.glassmorphic(
  * Surrounds the element with a sophisticated studio-grade glowing border.
  */
 fun Modifier.neonGlow(
-    color: Color = Color(0xFFFF5216), // Premium warm coral
-    shape: Shape = RoundedCornerShape(16.dp),
+    color: Color = Color(0xFFFF6B35), // Premium AccentSecondary
+    shape: Shape = RoundedCornerShape(24.dp),
     glowWidth: Dp = 1.5.dp
 ): Modifier {
     return this
@@ -102,7 +102,7 @@ fun Modifier.neonGlow(
             brush = Brush.linearGradient(
                 colors = listOf(
                     color,
-                    Color(0xFF00E5FF) // Smooth neon gradient to studio cyan
+                    Color(0xFF7C5CFF) // electric violet (AccentPrimary)
                 )
             ),
             shape = shape

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -22,16 +24,33 @@ android {
         }
     }
 
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { localProperties.load(it) }
+    }
+
     signingConfigs {
         create("release") {
-            val keystoreFile = file("keystore.jks")
-            if (keystoreFile.exists()) {
+            val keystoreFile = file("powercut-release.jks")
+            val storePass = localProperties.getProperty("POWERCUT_STORE_PASSWORD") ?: System.getenv("POWERCUT_STORE_PASSWORD")
+            val keyAliasStr = localProperties.getProperty("POWERCUT_KEY_ALIAS") ?: System.getenv("POWERCUT_KEY_ALIAS")
+            val keyPass = localProperties.getProperty("POWERCUT_KEY_PASSWORD") ?: System.getenv("POWERCUT_KEY_PASSWORD")
+
+            if (keystoreFile.exists() && storePass != null && keyAliasStr != null && keyPass != null) {
                 storeFile = keystoreFile
-                storePassword = "powercut123"
-                keyAlias = "powercut"
-                keyPassword = "powercut123"
+                storePassword = storePass
+                keyAlias = keyAliasStr
+                keyPassword = keyPass
                 enableV1Signing = true
                 enableV2Signing = true
+            } else {
+                val debugConfig = signingConfigs.getByName("debug")
+                storeFile = debugConfig.storeFile
+                storePassword = debugConfig.storePassword
+                keyAlias = debugConfig.keyAlias
+                keyPassword = debugConfig.keyPassword
+                println("Release keystore missing or credentials not configured, using debug signing (install may show 'invalid package' on some devices).")
             }
         }
     }
@@ -39,10 +58,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            val keystoreFile = file("keystore.jks")
-            if (keystoreFile.exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -100,6 +116,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // Google AdMob
+    implementation("com.google.android.gms:play-services-ads:23.0.0")
 
     // Testing
     testImplementation(libs.junit)
