@@ -120,11 +120,11 @@ private fun formatTime(ms: Long): String {
 // Tool categories for the bottom bar
 enum class EditorTool(val label: String, val emoji: String, val icon: ImageVector) {
     HOME("Home", "🏠", Icons.Default.ChevronLeft),
-    LAYERS("Layers", "📑", Icons.Default.Layers),
+    LAYERS("Layers", "📑", Icons.Default.List),
     TRIM("Trim", "✂️", Icons.Default.ContentCut),
     SPLIT("Split", "🎞️", Icons.Default.ContentCut),
     SPEED("Speed", "⚡", Icons.Default.Speed),
-    CROP("Crop", "📐", Icons.Default.Crop),
+    CROP("Crop", "📐", Icons.Default.AspectRatio),
     AUDIO("Audio", "🔊", Icons.Default.MusicNote),
     TEXT("Text", "🔤", Icons.Default.TextFields),
     FILTERS("Filters", "🎨", Icons.Default.Tune),
@@ -507,7 +507,7 @@ fun NextGenEditorScreen(
                 }
 
                 // Tool buttons
-                EditorTool.entries.forEach { tool ->
+                EditorTool.values().forEach { tool ->
                     val isActive = selectedTool == tool
                     Box(
                         modifier = Modifier.clip(RoundedCornerShape(10.dp))
@@ -544,7 +544,7 @@ fun NextGenEditorScreen(
                         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)
                     ) {
                         when (selectedTool) {
-                            EditorTool.HOME -> { onSaveDraft(); onBack() }
+                            EditorTool.HOME -> { Text("Use back button to exit", fontSize = 10.sp, color = Color.Gray) }
                             EditorTool.LAYERS -> LayersPanel()
                             EditorTool.TRIM -> TrimPanel(project, onUpdateTrim)
                             EditorTool.SPLIT -> SplitPanel(context)
