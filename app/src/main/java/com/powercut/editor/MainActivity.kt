@@ -28,7 +28,7 @@ import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.AdConstants
-import com.powercut.editor.ui.editor.EditorScreen
+import com.powercut.editor.ui.editor.NextGenEditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
 import com.powercut.editor.ui.home.HomeScreen
@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
                             }
                             "editor" -> {
                                 project?.let { activeProject ->
-                                    EditorScreen(
+                                    NextGenEditorScreen(
                                         project = activeProject,
                                         language = language,
                                         onBack = { viewModel.resetToHome() },
