@@ -38,21 +38,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -121,8 +118,8 @@ private fun formatTime(ms: Long): String {
 enum class EditorTool(val label: String, val emoji: String, val icon: ImageVector) {
     HOME("Home", "🏠", Icons.Default.ChevronLeft),
     LAYERS("Layers", "📑", Icons.Default.List),
-    TRIM("Trim", "✂️", Icons.Default.ContentCut),
-    SPLIT("Split", "🎞️", Icons.Default.ContentCut),
+    TRIM("Trim", "✂️", Icons.Default.CallSplit),
+    SPLIT("Split", "🎞️", Icons.Default.CallSplit),
     SPEED("Speed", "⚡", Icons.Default.FlashOn),
     CROP("Crop", "📐", Icons.Default.CropFree),
     AUDIO("Audio", "🔊", Icons.Default.MusicNote),
