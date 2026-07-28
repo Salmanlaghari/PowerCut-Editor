@@ -318,8 +318,7 @@ fun BannerAdView(modifier: Modifier = Modifier) {
     val adView = remember {
         com.google.android.gms.ads.AdView(context).apply {
             setAdSize(com.google.android.gms.ads.AdSize.BANNER)
-            // TODO: replace with real AdMob IDs before release
-            adUnitId = com.powercut.editor.core.utils.AdConstants.BANNER_TEST_ID
+            adUnitId = com.powercut.editor.core.utils.AdConstants.BANNER_ID
         }
     }
 
@@ -408,7 +407,7 @@ val allStudioTemplates = listOf(
     Template("Desert Safari Gold", "Intense warm desert grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFFF7E5F), Color(0xFFFEB47B)), "vlog", "sepia", "crossfade"),
     Template("Road Trip Tape", "VHS overlay travel format", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF141E30), Color(0xFF243B55)), "none", "none", "glitch"),
     Template("Island Wanderer", "Deep saturation look travel", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF4CA1AF), Color(0xFFC4E0E5)), "vlog", "none", "none"),
-    Template("Cinematic Vlog 4K", "Sharp color contrast grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFf4c4f3), Color(0xFFfc67fa)), "vlog", "none", "crossfade"),
+    Template("Cinematic Vlog 4K", "Bright color contrast grade", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFf4c4f3), Color(0xFFfc67fa)), "vlog", "none", "crossfade"),
     Template("Forest Serenity", "Moody green deep forest", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFF11998e), Color(0xFF38ef7d)), "none", "none", "none"),
     Template("Adventure Awaits", "Action sports action cuts", "Travel", R.drawable.template_travel_cine, listOf(Color(0xFFFF4E50), Color(0xFFF9D423)), "none", "none", "zoom", "off", 1.5f)
 )

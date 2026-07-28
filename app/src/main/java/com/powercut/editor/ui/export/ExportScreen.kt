@@ -64,12 +64,13 @@ fun ExportScreen(
     language: String,
     onDone: () -> Unit,
     onBackToEditor: () -> Unit,
+    isWatermarkRemoved: Boolean,
+    onRemoveWatermarkRequested: () -> Unit,
     onStartExport: (resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) -> Unit
 ) {
     var selectedResIndex by remember { mutableStateOf(2) } // default 1080p (FHD)
     var selectedFpsIndex by remember { mutableStateOf(1) } // default 30 fps
 
-    var isNoWatermarkEnabled by remember { mutableStateOf(true) }
     var isHardwareAccEnabled by remember { mutableStateOf(true) }
 
     val resolutionsList = listOf("480p", "720p", "1080p", "4k")
@@ -262,12 +263,31 @@ fun ExportScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("No Watermark", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Switch(
-                                checked = isNoWatermarkEnabled,
-                                onCheckedChange = { isNoWatermarkEnabled = it },
-                                colors = SwitchDefaults.colors(checkedThumbColor = NeonOrange)
-                            )
+                            Column {
+                                Text("No Watermark", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(
+                                    text = if (isWatermarkRemoved) "Unlocked via Ad!" else "Watch ad to unlock watermark-free export",
+                                    fontSize = 8.sp,
+                                    color = if (isWatermarkRemoved) CyberCyan else Color.LightGray
+                                )
+                            }
+                            if (isWatermarkRemoved) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Unlocked",
+                                    tint = CyberCyan,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .background(NeonOrange.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                        .clickable { onRemoveWatermarkRequested() }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text("REMOVE AD", fontSize = 9.sp, fontWeight = FontWeight.Black, color = NeonOrange)
+                                }
+                            }
                         }
 
                         Row(
@@ -306,7 +326,7 @@ fun ExportScreen(
                                 onStartExport(
                                     resolutionsList[selectedResIndex],
                                     fpsList[selectedFpsIndex],
-                                    isNoWatermarkEnabled,
+                                    isWatermarkRemoved,
                                     isHardwareAccEnabled
                                 )
                             },

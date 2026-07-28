@@ -1,6 +1,9 @@
 package com.powercut.editor
 
+import android.content.Context
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -10,10 +13,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.appopen.AppOpenAd
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.powercut.editor.core.utils.LanguageHelper
+import com.powercut.editor.core.utils.AdConstants
 import com.powercut.editor.ui.editor.EditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
@@ -25,42 +39,22 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val viewModel: EditorViewModel by viewModels()
-    private var interstitialAd: com.google.android.gms.ads.interstitial.InterstitialAd? = null
+    private var appOpenAd: AppOpenAd? = null
+    private var interstitialAd: InterstitialAd? = null
+    private var rewardedAd: RewardedAd? = null
     private var lastShownAt: Long = 0L
 
-    private fun loadInterstitialAd() {
-        val adRequest = com.google.android.gms.ads.AdRequest.Builder().build()
-        com.google.android.gms.ads.interstitial.InterstitialAd.load(
-            this,
-            com.powercut.editor.core.utils.AdConstants.INTERSTITIAL_TEST_ID,
-            adRequest,
-            object : com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback() {
-                override fun onAdLoaded(ad: com.google.android.gms.ads.interstitial.InterstitialAd) {
-                    interstitialAd = ad
-                }
-                override fun onAdFailedToLoad(error: com.google.android.gms.ads.LoadAdError) {
-                    interstitialAd = null
-                }
-            }
-        )
-    }
-
-    private fun showInterstitialAd() {
-        val now = System.currentTimeMillis()
-        if (now - lastShownAt >= 60000L) { // 60 seconds minimum gap
-            interstitialAd?.let { ad ->
-                ad.show(this)
-                lastShownAt = now
-                interstitialAd = null
-                loadInterstitialAd() // pre-load next one
-            }
-        }
-    }
+    private var isWatermarkRemoved by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Load AdMob ads
+        loadAppOpenAd()
         loadInterstitialAd()
+        loadRewardedAd()
+
         setContent {
             val language by viewModel.currentLanguage.collectAsState()
             val layoutDirection = LanguageHelper.getLayoutDirection(language)
@@ -230,10 +224,20 @@ class MainActivity : ComponentActivity() {
                                 ExportScreen(
                                     exportState = exportState,
                                     language = language,
-                                    onDone = { viewModel.resetToHome() },
+                                    onDone = {
+                                        isWatermarkRemoved = false // Reset watermark state
+                                        viewModel.resetToHome()
+                                    },
                                     onBackToEditor = { viewModel.navigateToEditor() },
+                                    isWatermarkRemoved = isWatermarkRemoved,
+                                    onRemoveWatermarkRequested = {
+                                        showRewardedAd {
+                                            isWatermarkRemoved = true
+                                            Toast.makeText(this@MainActivity, "Watermark successfully removed!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
                                     onStartExport = { res, fps, wm, hw ->
-                                        viewModel.startExportWithSettings(res, fps, wm, hw)
+                                        viewModel.startExportWithSettings(res, fps, isWatermarkRemoved || wm, hw)
                                     }
                                 )
                             }
@@ -241,6 +245,89 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun loadAppOpenAd() {
+        AppOpenAd.load(
+            this,
+            AdConstants.APP_OPEN_ID,
+            AdRequest.Builder().build(),
+            AppOpenAd.APP_OPEN_AD_ORIENTATION_PORTRAIT,
+            object : AppOpenAd.AppOpenAdLoadCallback() {
+                override fun onAdLoaded(ad: AppOpenAd) {
+                    appOpenAd = ad
+                    showAppOpenAd()
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    appOpenAd = null
+                }
+            }
+        )
+    }
+
+    private fun showAppOpenAd() {
+        appOpenAd?.show(this)
+    }
+
+    private fun loadInterstitialAd() {
+        val adRequest = AdRequest.Builder().build()
+        InterstitialAd.load(
+            this,
+            AdConstants.INTERSTITIAL_ID,
+            adRequest,
+            object : InterstitialAdLoadCallback() {
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    interstitialAd = ad
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    interstitialAd = null
+                }
+            }
+        )
+    }
+
+    private fun showInterstitialAd() {
+        val now = System.currentTimeMillis()
+        if (now - lastShownAt >= 30000L) { // 30 seconds minimum gap for premium spacing
+            interstitialAd?.let { ad ->
+                ad.show(this)
+                lastShownAt = now
+                interstitialAd = null
+                loadInterstitialAd() // pre-load next one
+            }
+        }
+    }
+
+    private fun loadRewardedAd() {
+        val adRequest = AdRequest.Builder().build()
+        RewardedAd.load(
+            this,
+            AdConstants.REWARDED_ID,
+            adRequest,
+            object : RewardedAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedAd) {
+                    rewardedAd = ad
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    rewardedAd = null
+                }
+            }
+        )
+    }
+
+    private fun showRewardedAd(onEarnedReward: () -> Unit) {
+        rewardedAd?.let { ad ->
+            ad.show(this) {
+                onEarnedReward()
+            }
+            rewardedAd = null
+            loadRewardedAd() // reload the ad unit
+        } ?: run {
+            // Fallback reward if ad failed to load so user flows remain smooth
+            Toast.makeText(this, "Ad loading... Watermark unlocked instantly!", Toast.LENGTH_SHORT).show()
+            onEarnedReward()
+            loadRewardedAd()
         }
     }
 }

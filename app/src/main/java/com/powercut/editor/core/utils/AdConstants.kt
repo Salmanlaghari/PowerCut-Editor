@@ -1,9 +1,8 @@
 package com.powercut.editor.core.utils
 
 object AdConstants {
-    // TODO: replace with real AdMob IDs before release
-    const val BANNER_TEST_ID       = "ca-app-pub-3940256099942544/6300978111"
-
-    // TODO: replace with real AdMob IDs before release
-    const val INTERSTITIAL_TEST_ID = "ca-app-pub-3940256099942544/1033173712"
+    const val APP_OPEN_ID     = "ca-app-pub-8178045957849630/3247890106"
+    const val INTERSTITIAL_ID = "ca-app-pub-8178045957849630/9454205809"
+    const val REWARDED_ID     = "ca-app-pub-8178045957849630/5826640348"
+    const val BANNER_ID       = "ca-app-pub-8178045957849630/6101972511"
 }
