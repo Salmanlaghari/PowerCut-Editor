@@ -234,7 +234,39 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onRemoveLayer = { layerId ->
                                             viewModel.removeLayer(layerId)
-                                        }
+                                        },
+                                        // Green Screen
+                                        onToggleGreenScreen = { viewModel.toggleGreenScreen() },
+                                        onUpdateGreenScreenColor = { viewModel.updateGreenScreenColor(it) },
+                                        onUpdateGreenScreenThreshold = { viewModel.updateGreenScreenThreshold(it) },
+                                        onSelectAutoBackground = { viewModel.selectAutoBackground(it) },
+                                        onPickCustomBackground = { /* picker handled in screen */ },
+                                        // Eraser
+                                        onUpdateEraserMode = { viewModel.updateEraserMode(it) },
+                                        onUpdateEraserBrushSize = { viewModel.updateEraserBrushSize(it) },
+                                        onUpdateEraserTolerance = { viewModel.updateEraserTolerance(it) },
+                                        onToggleEraserSoftEdge = { viewModel.toggleEraserSoftEdge() },
+                                        onUndoEraser = { /* undo handled in screen */ },
+                                        onResetEraser = { viewModel.resetEraser() },
+                                        // Image Editor
+                                        onUpdateImageEditorBrightness = { viewModel.updateImageEditorBrightness(it) },
+                                        onUpdateImageEditorContrast = { viewModel.updateImageEditorContrast(it) },
+                                        onUpdateImageEditorSaturation = { viewModel.updateImageEditorSaturation(it) },
+                                        onUpdateImageEditorBlur = { viewModel.updateImageEditorBlur(it) },
+                                        onUpdateImageEditorSharpen = { viewModel.updateImageEditorSharpen(it) },
+                                        onUpdateImageEditorTemperature = { viewModel.updateImageEditorTemperature(it) },
+                                        onUpdateImageEditorVignette = { viewModel.updateImageEditorVignette(it) },
+                                        onUpdateImageEditorGrain = { viewModel.updateImageEditorGrain(it) },
+                                        onUpdateImageEditorFade = { viewModel.updateImageEditorFade(it) },
+                                        onUpdateImageEditorHighlights = { viewModel.updateImageEditorHighlights(it) },
+                                        onUpdateImageEditorShadows = { viewModel.updateImageEditorShadows(it) },
+                                        onUpdateImageEditorExposure = { viewModel.updateImageEditorExposure(it) },
+                                        onResetImageEditor = { viewModel.resetImageEditor() },
+                                        // Orientation
+                                        onUpdateOrientationMode = { viewModel.updateOrientationMode(it) },
+                                        onToggleVerticalSafeZone = { viewModel.toggleVerticalSafeZone() },
+                                        onToggleHorizontalLetterbox = { viewModel.toggleHorizontalLetterbox() },
+                                        onToggleAutoReframe = { viewModel.toggleAutoReframe() }
                                     )
                                 } ?: viewModel.resetToHome()
                             }

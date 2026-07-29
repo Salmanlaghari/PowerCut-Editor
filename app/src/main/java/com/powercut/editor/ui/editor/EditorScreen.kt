@@ -133,7 +133,43 @@ fun EditorScreen(
     onToggleBeatSync: () -> Unit,
     onUpdate3DShapeMask: (String) -> Unit,
     onAddClip: (android.net.Uri) -> Unit,
-    onSaveDraft: () -> Unit
+    onSaveDraft: () -> Unit,
+
+    // Green Screen callbacks
+    onToggleGreenScreen: () -> Unit,
+    onUpdateGreenScreenColor: (String) -> Unit,
+    onUpdateGreenScreenThreshold: (Float) -> Unit,
+    onSelectAutoBackground: (Int) -> Unit,
+    onPickCustomBackground: () -> Unit,
+
+    // Eraser callbacks
+    onUpdateEraserMode: (String) -> Unit,
+    onUpdateEraserBrushSize: (Float) -> Unit,
+    onUpdateEraserTolerance: (Float) -> Unit,
+    onToggleEraserSoftEdge: () -> Unit,
+    onUndoEraser: () -> Unit,
+    onResetEraser: () -> Unit,
+
+    // Image Editor callbacks
+    onUpdateImageEditorBrightness: (Float) -> Unit,
+    onUpdateImageEditorContrast: (Float) -> Unit,
+    onUpdateImageEditorSaturation: (Float) -> Unit,
+    onUpdateImageEditorBlur: (Float) -> Unit,
+    onUpdateImageEditorSharpen: (Float) -> Unit,
+    onUpdateImageEditorTemperature: (Float) -> Unit,
+    onUpdateImageEditorVignette: (Float) -> Unit,
+    onUpdateImageEditorGrain: (Float) -> Unit,
+    onUpdateImageEditorFade: (Float) -> Unit,
+    onUpdateImageEditorHighlights: (Float) -> Unit,
+    onUpdateImageEditorShadows: (Float) -> Unit,
+    onUpdateImageEditorExposure: (Float) -> Unit,
+    onResetImageEditor: () -> Unit,
+
+    // Orientation callbacks
+    onUpdateOrientationMode: (String) -> Unit,
+    onToggleVerticalSafeZone: () -> Unit,
+    onToggleHorizontalLetterbox: () -> Unit,
+    onToggleAutoReframe: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -540,7 +576,7 @@ fun EditorScreen(
         }
 
         // 4. TOOL CATEGORIES LIST (Horizontal Scrolling Tab Bar wrapper)
-        val categories = listOf("Edit", "Audio", "Text", "Stickers", "Overlay", "AI")
+        val categories = listOf("Edit", "Audio", "Text", "Stickers", "Overlay", "AI", "🎬Chroma", "🧹Erase", "🎨ImgEdit", "📐Orient")
         var activeCategory by remember { mutableStateOf("Edit") }
         var selectedBottomTool by remember { mutableStateOf("Trim") }
 
@@ -986,6 +1022,76 @@ fun EditorScreen(
                                 }
                             }
                         }
+                    }
+                    "🎬Chroma" -> {
+                        com.powercut.editor.ui.editor.tools.GreenScreenPanel(
+                            greenScreenEnabled = project.greenScreenEnabled,
+                            greenScreenColor = project.greenScreenColor,
+                            greenScreenThreshold = project.greenScreenThreshold,
+                            greenScreenAutoBgIndex = project.greenScreenAutoBgIndex,
+                            onToggleGreenScreen = { onToggleGreenScreen() },
+                            onUpdateGreenScreenColor = { onUpdateGreenScreenColor(it) },
+                            onUpdateThreshold = { onUpdateGreenScreenThreshold(it) },
+                            onSelectAutoBackground = { onSelectAutoBackground(it) },
+                            onPickCustomBackground = { onPickCustomBackground() }
+                        )
+                    }
+                    "🧹Erase" -> {
+                        com.powercut.editor.ui.editor.tools.EraserToolsPanel(
+                            eraserMode = project.eraserMode,
+                            eraserBrushSize = project.eraserBrushSize,
+                            eraserTolerance = project.eraserTolerance,
+                            eraserSoftEdge = project.eraserSoftEdge,
+                            onUpdateEraserMode = { onUpdateEraserMode(it) },
+                            onUpdateBrushSize = { onUpdateEraserBrushSize(it) },
+                            onUpdateTolerance = { onUpdateEraserTolerance(it) },
+                            onToggleSoftEdge = { onToggleEraserSoftEdge() },
+                            onUndoEraser = { onUndoEraser() },
+                            onResetEraser = { onResetEraser() }
+                        )
+                    }
+                    "🎨ImgEdit" -> {
+                        com.powercut.editor.ui.editor.tools.ImageEditorPanel(
+                            brightness = project.imageEditorBrightness,
+                            contrast = project.imageEditorContrast,
+                            saturation = project.imageEditorSaturation,
+                            blur = project.imageEditorBlur,
+                            sharpen = project.imageEditorSharpen,
+                            temperature = project.imageEditorTemperature,
+                            vignette = project.imageEditorVignette,
+                            grain = project.imageEditorGrain,
+                            fade = project.imageEditorFade,
+                            highlights = project.imageEditorHighlights,
+                            shadows = project.imageEditorShadows,
+                            exposure = project.imageEditorExposure,
+                            onUpdateBrightness = { onUpdateImageEditorBrightness(it) },
+                            onUpdateContrast = { onUpdateImageEditorContrast(it) },
+                            onUpdateSaturation = { onUpdateImageEditorSaturation(it) },
+                            onUpdateBlur = { onUpdateImageEditorBlur(it) },
+                            onUpdateSharpen = { onUpdateImageEditorSharpen(it) },
+                            onUpdateTemperature = { onUpdateImageEditorTemperature(it) },
+                            onUpdateVignette = { onUpdateImageEditorVignette(it) },
+                            onUpdateGrain = { onUpdateImageEditorGrain(it) },
+                            onUpdateFade = { onUpdateImageEditorFade(it) },
+                            onUpdateHighlights = { onUpdateImageEditorHighlights(it) },
+                            onUpdateShadows = { onUpdateImageEditorShadows(it) },
+                            onUpdateExposure = { onUpdateImageEditorExposure(it) },
+                            onResetAll = { onResetImageEditor() }
+                        )
+                    }
+                    "📐Orient" -> {
+                        com.powercut.editor.ui.editor.tools.OrientationToolsPanel(
+                            orientationMode = project.orientationMode,
+                            aspectPreset = project.aspectPreset,
+                            verticalSafeZone = project.verticalSafeZone,
+                            horizontalLetterbox = project.horizontalLetterbox,
+                            autoReframeEnabled = project.autoReframeEnabled,
+                            onUpdateOrientationMode = { onUpdateOrientationMode(it) },
+                            onUpdateAspectPreset = { onUpdateAspectPreset(it) },
+                            onToggleSafeZone = { onToggleVerticalSafeZone() },
+                            onToggleLetterbox = { onToggleHorizontalLetterbox() },
+                            onToggleAutoReframe = { onToggleAutoReframe() }
+                        )
                     }
                 }
             }

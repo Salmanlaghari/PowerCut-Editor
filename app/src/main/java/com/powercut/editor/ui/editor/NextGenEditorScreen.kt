@@ -140,7 +140,39 @@ fun NextGenEditorScreen(
     onUpdateImageOverlayScale: (Float) -> Unit = {},
     onUpdateSelectedEffect: (String) -> Unit = {},
     onAddLayer: (String) -> Unit = {},
-    onRemoveLayer: (String) -> Unit = {}
+    onRemoveLayer: (String) -> Unit = {},
+    // Green Screen callbacks
+    onToggleGreenScreen: () -> Unit = {},
+    onUpdateGreenScreenColor: (String) -> Unit = {},
+    onUpdateGreenScreenThreshold: (Float) -> Unit = {},
+    onSelectAutoBackground: (Int) -> Unit = {},
+    onPickCustomBackground: () -> Unit = {},
+    // Eraser callbacks
+    onUpdateEraserMode: (String) -> Unit = {},
+    onUpdateEraserBrushSize: (Float) -> Unit = {},
+    onUpdateEraserTolerance: (Float) -> Unit = {},
+    onToggleEraserSoftEdge: () -> Unit = {},
+    onUndoEraser: () -> Unit = {},
+    onResetEraser: () -> Unit = {},
+    // Image Editor callbacks
+    onUpdateImageEditorBrightness: (Float) -> Unit = {},
+    onUpdateImageEditorContrast: (Float) -> Unit = {},
+    onUpdateImageEditorSaturation: (Float) -> Unit = {},
+    onUpdateImageEditorBlur: (Float) -> Unit = {},
+    onUpdateImageEditorSharpen: (Float) -> Unit = {},
+    onUpdateImageEditorTemperature: (Float) -> Unit = {},
+    onUpdateImageEditorVignette: (Float) -> Unit = {},
+    onUpdateImageEditorGrain: (Float) -> Unit = {},
+    onUpdateImageEditorFade: (Float) -> Unit = {},
+    onUpdateImageEditorHighlights: (Float) -> Unit = {},
+    onUpdateImageEditorShadows: (Float) -> Unit = {},
+    onUpdateImageEditorExposure: (Float) -> Unit = {},
+    onResetImageEditor: () -> Unit = {},
+    // Orientation callbacks
+    onUpdateOrientationMode: (String) -> Unit = {},
+    onToggleVerticalSafeZone: () -> Unit = {},
+    onToggleHorizontalLetterbox: () -> Unit = {},
+    onToggleAutoReframe: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -398,7 +430,35 @@ fun NextGenEditorScreen(
                 onUpdateImageOverlayOpacity = onUpdateImageOverlayOpacity,
                 imagePicker = imagePicker,
                 musicPicker = musicPicker,
-                onCollapse = { isPanelExpanded = false }
+                onCollapse = { isPanelExpanded = false },
+                onToggleGreenScreen = onToggleGreenScreen,
+                onUpdateGreenScreenColor = onUpdateGreenScreenColor,
+                onUpdateGreenScreenThreshold = onUpdateGreenScreenThreshold,
+                onSelectAutoBackground = onSelectAutoBackground,
+                onPickCustomBackground = onPickCustomBackground,
+                onUpdateEraserMode = onUpdateEraserMode,
+                onUpdateEraserBrushSize = onUpdateEraserBrushSize,
+                onUpdateEraserTolerance = onUpdateEraserTolerance,
+                onToggleEraserSoftEdge = onToggleEraserSoftEdge,
+                onUndoEraser = onUndoEraser,
+                onResetEraser = onResetEraser,
+                onUpdateImageEditorBrightness = onUpdateImageEditorBrightness,
+                onUpdateImageEditorContrast = onUpdateImageEditorContrast,
+                onUpdateImageEditorSaturation = onUpdateImageEditorSaturation,
+                onUpdateImageEditorBlur = onUpdateImageEditorBlur,
+                onUpdateImageEditorSharpen = onUpdateImageEditorSharpen,
+                onUpdateImageEditorTemperature = onUpdateImageEditorTemperature,
+                onUpdateImageEditorVignette = onUpdateImageEditorVignette,
+                onUpdateImageEditorGrain = onUpdateImageEditorGrain,
+                onUpdateImageEditorFade = onUpdateImageEditorFade,
+                onUpdateImageEditorHighlights = onUpdateImageEditorHighlights,
+                onUpdateImageEditorShadows = onUpdateImageEditorShadows,
+                onUpdateImageEditorExposure = onUpdateImageEditorExposure,
+                onResetImageEditor = onResetImageEditor,
+                onUpdateOrientationMode = onUpdateOrientationMode,
+                onToggleVerticalSafeZone = onToggleVerticalSafeZone,
+                onToggleHorizontalLetterbox = onToggleHorizontalLetterbox,
+                onToggleAutoReframe = onToggleAutoReframe
             )
         }
 
@@ -766,7 +826,8 @@ private fun CapCutToolBar(
         "✂️" to "Edit", "📑" to "Layers", "⚡" to "Speed", "📐" to "Crop",
         "🔊" to "Audio", "🔤" to "Text", "🎨" to "Filters", "✨" to "Effects",
         "😄" to "Stickers", "🔀" to "Trans", "🎭" to "Anim", "🎬" to "3D",
-        "🖼️" to "Image", "📋" to "Template"
+        "🖼️" to "Image", "📋" to "Template",
+        "🎬" to "Chroma", "🧹" to "Erase", "🖌️" to "ImgEdit", "📐" to "Orient"
     )
     Row(
         modifier = Modifier.fillMaxWidth().height(62.dp)
@@ -840,7 +901,39 @@ private fun CapCutToolPanel(
     onUpdateImageOverlayOpacity: (Float) -> Unit,
     imagePicker: androidx.activity.result.ActivityResultLauncher<String>,
     musicPicker: androidx.activity.result.ActivityResultLauncher<String>,
-    onCollapse: () -> Unit
+    onCollapse: () -> Unit,
+    // Green Screen
+    onToggleGreenScreen: () -> Unit = {},
+    onUpdateGreenScreenColor: (String) -> Unit = {},
+    onUpdateGreenScreenThreshold: (Float) -> Unit = {},
+    onSelectAutoBackground: (Int) -> Unit = {},
+    onPickCustomBackground: () -> Unit = {},
+    // Eraser
+    onUpdateEraserMode: (String) -> Unit = {},
+    onUpdateEraserBrushSize: (Float) -> Unit = {},
+    onUpdateEraserTolerance: (Float) -> Unit = {},
+    onToggleEraserSoftEdge: () -> Unit = {},
+    onUndoEraser: () -> Unit = {},
+    onResetEraser: () -> Unit = {},
+    // Image Editor
+    onUpdateImageEditorBrightness: (Float) -> Unit = {},
+    onUpdateImageEditorContrast: (Float) -> Unit = {},
+    onUpdateImageEditorSaturation: (Float) -> Unit = {},
+    onUpdateImageEditorBlur: (Float) -> Unit = {},
+    onUpdateImageEditorSharpen: (Float) -> Unit = {},
+    onUpdateImageEditorTemperature: (Float) -> Unit = {},
+    onUpdateImageEditorVignette: (Float) -> Unit = {},
+    onUpdateImageEditorGrain: (Float) -> Unit = {},
+    onUpdateImageEditorFade: (Float) -> Unit = {},
+    onUpdateImageEditorHighlights: (Float) -> Unit = {},
+    onUpdateImageEditorShadows: (Float) -> Unit = {},
+    onUpdateImageEditorExposure: (Float) -> Unit = {},
+    onResetImageEditor: () -> Unit = {},
+    // Orientation
+    onUpdateOrientationMode: (String) -> Unit = {},
+    onToggleVerticalSafeZone: () -> Unit = {},
+    onToggleHorizontalLetterbox: () -> Unit = {},
+    onToggleAutoReframe: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -863,6 +956,68 @@ private fun CapCutToolPanel(
                 11 -> ThreeDPanel(project, onUpdate3DShapeMask)
                 12 -> ImagePanel(project, imagePicker, onUpdateImageOverlay, onUpdateImageOverlayOpacity)
                 13 -> TemplatePanel(project, onUpdateTemplate)
+                14 -> com.powercut.editor.ui.editor.tools.GreenScreenPanel(
+                    greenScreenEnabled = project.greenScreenEnabled,
+                    greenScreenColor = project.greenScreenColor,
+                    greenScreenThreshold = project.greenScreenThreshold,
+                    greenScreenAutoBgIndex = project.greenScreenAutoBgIndex,
+                    onToggleGreenScreen = onToggleGreenScreen,
+                    onUpdateGreenScreenColor = onUpdateGreenScreenColor,
+                    onUpdateThreshold = onUpdateGreenScreenThreshold,
+                    onSelectAutoBackground = onSelectAutoBackground,
+                    onPickCustomBackground = onPickCustomBackground
+                )
+                15 -> com.powercut.editor.ui.editor.tools.EraserToolsPanel(
+                    eraserMode = project.eraserMode,
+                    eraserBrushSize = project.eraserBrushSize,
+                    eraserTolerance = project.eraserTolerance,
+                    eraserSoftEdge = project.eraserSoftEdge,
+                    onUpdateEraserMode = onUpdateEraserMode,
+                    onUpdateBrushSize = onUpdateEraserBrushSize,
+                    onUpdateTolerance = onUpdateEraserTolerance,
+                    onToggleSoftEdge = onToggleEraserSoftEdge,
+                    onUndoEraser = onUndoEraser,
+                    onResetEraser = onResetEraser
+                )
+                16 -> com.powercut.editor.ui.editor.tools.ImageEditorPanel(
+                    brightness = project.imageEditorBrightness,
+                    contrast = project.imageEditorContrast,
+                    saturation = project.imageEditorSaturation,
+                    blur = project.imageEditorBlur,
+                    sharpen = project.imageEditorSharpen,
+                    temperature = project.imageEditorTemperature,
+                    vignette = project.imageEditorVignette,
+                    grain = project.imageEditorGrain,
+                    fade = project.imageEditorFade,
+                    highlights = project.imageEditorHighlights,
+                    shadows = project.imageEditorShadows,
+                    exposure = project.imageEditorExposure,
+                    onUpdateBrightness = onUpdateImageEditorBrightness,
+                    onUpdateContrast = onUpdateImageEditorContrast,
+                    onUpdateSaturation = onUpdateImageEditorSaturation,
+                    onUpdateBlur = onUpdateImageEditorBlur,
+                    onUpdateSharpen = onUpdateImageEditorSharpen,
+                    onUpdateTemperature = onUpdateImageEditorTemperature,
+                    onUpdateVignette = onUpdateImageEditorVignette,
+                    onUpdateGrain = onUpdateImageEditorGrain,
+                    onUpdateFade = onUpdateImageEditorFade,
+                    onUpdateHighlights = onUpdateImageEditorHighlights,
+                    onUpdateShadows = onUpdateImageEditorShadows,
+                    onUpdateExposure = onUpdateImageEditorExposure,
+                    onResetAll = onResetImageEditor
+                )
+                17 -> com.powercut.editor.ui.editor.tools.OrientationToolsPanel(
+                    orientationMode = project.orientationMode,
+                    aspectPreset = project.aspectPreset,
+                    verticalSafeZone = project.verticalSafeZone,
+                    horizontalLetterbox = project.horizontalLetterbox,
+                    autoReframeEnabled = project.autoReframeEnabled,
+                    onUpdateOrientationMode = onUpdateOrientationMode,
+                    onUpdateAspectPreset = onUpdateAspectPreset,
+                    onToggleSafeZone = onToggleVerticalSafeZone,
+                    onToggleLetterbox = onToggleHorizontalLetterbox,
+                    onToggleAutoReframe = onToggleAutoReframe
+                )
             }
         }
         // Collapse handle

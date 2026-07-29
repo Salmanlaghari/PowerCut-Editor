@@ -496,6 +496,141 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    // ===== GREEN SCREEN / CHROMA KEY =====
+    fun toggleGreenScreen() {
+        projectRepository.updateProject { project ->
+            project.copy(greenScreenEnabled = !project.greenScreenEnabled)
+        }
+    }
+
+    fun updateGreenScreenColor(color: String) {
+        projectRepository.updateProject { project ->
+            project.copy(greenScreenColor = color)
+        }
+    }
+
+    fun updateGreenScreenThreshold(threshold: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(greenScreenThreshold = threshold)
+        }
+    }
+
+    fun selectAutoBackground(index: Int) {
+        projectRepository.updateProject { project ->
+            project.copy(greenScreenAutoBgIndex = index, greenScreenBackgroundPath = null)
+        }
+    }
+
+    fun updateGreenScreenBackground(path: String?) {
+        projectRepository.updateProject { project ->
+            project.copy(greenScreenBackgroundPath = path, greenScreenAutoBgIndex = -1)
+        }
+    }
+
+    // ===== ERASER TOOLS =====
+    fun updateEraserMode(mode: String) {
+        projectRepository.updateProject { project ->
+            project.copy(eraserMode = mode)
+        }
+    }
+
+    fun updateEraserBrushSize(size: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(eraserBrushSize = size)
+        }
+    }
+
+    fun updateEraserTolerance(tolerance: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(eraserTolerance = tolerance)
+        }
+    }
+
+    fun toggleEraserSoftEdge() {
+        projectRepository.updateProject { project ->
+            project.copy(eraserSoftEdge = !project.eraserSoftEdge)
+        }
+    }
+
+    fun resetEraser() {
+        projectRepository.updateProject { project ->
+            project.copy(eraserMode = "none", eraserBrushSize = 30f, eraserTolerance = 0.5f)
+        }
+    }
+
+    // ===== IMAGE EDITOR =====
+    fun updateImageEditorBrightness(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorBrightness = value) }
+    }
+    fun updateImageEditorContrast(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorContrast = value) }
+    }
+    fun updateImageEditorSaturation(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorSaturation = value) }
+    }
+    fun updateImageEditorBlur(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorBlur = value) }
+    }
+    fun updateImageEditorSharpen(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorSharpen = value) }
+    }
+    fun updateImageEditorTemperature(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorTemperature = value) }
+    }
+    fun updateImageEditorVignette(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorVignette = value) }
+    }
+    fun updateImageEditorGrain(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorGrain = value) }
+    }
+    fun updateImageEditorFade(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorFade = value) }
+    }
+    fun updateImageEditorHighlights(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorHighlights = value) }
+    }
+    fun updateImageEditorShadows(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorShadows = value) }
+    }
+    fun updateImageEditorExposure(value: Float) {
+        projectRepository.updateProject { it.copy(imageEditorExposure = value) }
+    }
+    fun resetImageEditor() {
+        projectRepository.updateProject {
+            it.copy(
+                imageEditorBrightness = 0f, imageEditorContrast = 1f, imageEditorSaturation = 1f,
+                imageEditorBlur = 0f, imageEditorSharpen = 0f, imageEditorTemperature = 0f,
+                imageEditorVignette = 0f, imageEditorGrain = 0f, imageEditorFade = 0f,
+                imageEditorHighlights = 0f, imageEditorShadows = 0f, imageEditorExposure = 0f
+            )
+        }
+    }
+
+    // ===== ORIENTATION TOOLS =====
+    fun updateOrientationMode(mode: String) {
+        projectRepository.updateProject { project ->
+            val aspect = when (mode) {
+                "vertical" -> "9:16"
+                "horizontal" -> "16:9"
+                "square" -> "1:1"
+                else -> project.aspectPreset
+            }
+            project.copy(orientationMode = mode, aspectPreset = aspect)
+        }
+    }
+
+    fun toggleVerticalSafeZone() {
+        projectRepository.updateProject { it.copy(verticalSafeZone = !it.verticalSafeZone) }
+    }
+
+    fun toggleHorizontalLetterbox() {
+        projectRepository.updateProject { it.copy(horizontalLetterbox = !it.horizontalLetterbox) }
+    }
+
+    fun toggleAutoReframe() {
+        projectRepository.updateProject { it.copy(autoReframeEnabled = !it.autoReframeEnabled) }
+    }
+
     fun navigateToExport() {
         _currentScreen.value = "export"
     }
