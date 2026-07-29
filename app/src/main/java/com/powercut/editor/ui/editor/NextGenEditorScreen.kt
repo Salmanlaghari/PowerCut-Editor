@@ -708,6 +708,7 @@ private fun CapCutToolPanel(
 
 
 // ─── 0. EDIT PANEL ─────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EditPanel(
     project: VideoProject,
@@ -853,6 +854,7 @@ private fun AudioPanel(
 
 
 // ─── 5. TEXT PANEL ──────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, onUpdateAnim: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -868,6 +870,7 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
 
 
 // ─── 6. FILTERS PANEL ──────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -883,16 +886,18 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
 
 
 // ─── 7. EFFECTS PANEL ──────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit, onUpdateFilter: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         Text("Tap to apply effect on video", fontSize = 8.sp, color = Color.Gray)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             val effects = listOf("🎬 Glitch" to "invert", "📼 VHS" to "sepia", "🔮 Chromatic" to "invert", "☀️ Lens Flare" to "none", "❄️ Snow" to "none", "🌧️ Rain" to "none", "🔥 Fire" to "none", "✨ Sparkle" to "none", "🌫️ Dust" to "sepia", "💨 Motion Blur" to "none", "📳 Shake" to "none", "⚡ Flash" to "invert", "💜 Neon Glow" to "invert", "🔲 Vignette" to "grayscale", "🌈 Rainbow" to "none", "📸 Film Grain" to "sepia", "🔵 Bokeh" to "none", "🎆 Particles" to "none", "💡 Strobe" to "grayscale", "🔍 Zoom Pulse" to "none")
             effects.forEach { (name, filterId) ->
-                val sel = project.selectedEffect == name || (project.selectedEffect == "none" && filterId == "none")
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Effect: $name applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(name, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                val sel = project.selectedEffect == name
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "Effect: $name applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(name, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
@@ -900,6 +905,7 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
 
 
 // ─── 8. STICKERS PANEL ─────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -915,6 +921,7 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
 
 
 // ─── 9. TRANSITIONS PANEL ──────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -930,6 +937,7 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
 
 
 // ─── 10. ANIMATIONS PANEL ──────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -945,6 +953,7 @@ private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Uni
 
 
 // ─── 11. 3D PANEL ──────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
