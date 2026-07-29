@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.ui.theme.*
 
+private data class ImgParam(val key: String, val emoji: String, val label: String, val value: Float, val range: ClosedFloatingPointRange<Float>, val onUpdate: (Float) -> Unit)
+
 @Composable
 fun ImageEditorPanel(
     brightness: Float,
@@ -46,21 +48,19 @@ fun ImageEditorPanel(
 ) {
     var activeParam by remember { mutableStateOf("brightness") }
 
-    data class Param(val key: String, val emoji: String, val label: String, val value: Float, val range: ClosedFloatingPointRange<Float>, val onUpdate: (Float) -> Unit)
-
     val params = listOf(
-        Param("brightness", "☀️", "Brightness", brightness, -1f..1f, onUpdateBrightness),
-        Param("contrast", "🔲", "Contrast", contrast, 0f..2f, onUpdateContrast),
-        Param("saturation", "🎨", "Saturation", saturation, 0f..2f, onUpdateSaturation),
-        Param("exposure", "💡", "Exposure", exposure, -1f..1f, onUpdateExposure),
-        Param("highlights", "✨", "Highlights", highlights, -1f..1f, onUpdateHighlights),
-        Param("shadows", "🌑", "Shadows", shadows, -1f..1f, onUpdateShadows),
-        Param("temperature", "🌡️", "Temperature", temperature, -1f..1f, onUpdateTemperature),
-        Param("blur", "🔵", "Blur", blur, 0f..25f, onUpdateBlur),
-        Param("sharpen", "🔪", "Sharpen", sharpen, 0f..1f, onUpdateSharpen),
-        Param("vignette", "⭕", "Vignette", vignette, 0f..1f, onUpdateVignette),
-        Param("grain", "📺", "Grain", grain, 0f..1f, onUpdateGrain),
-        Param("fade", "🌫️", "Fade", fade, 0f..1f, onUpdateFade),
+        ImgParam("brightness", "☀️", "Brightness", brightness, -1f..1f, onUpdateBrightness),
+        ImgParam("contrast", "🔲", "Contrast", contrast, 0f..2f, onUpdateContrast),
+        ImgParam("saturation", "🎨", "Saturation", saturation, 0f..2f, onUpdateSaturation),
+        ImgParam("exposure", "💡", "Exposure", exposure, -1f..1f, onUpdateExposure),
+        ImgParam("highlights", "✨", "Highlights", highlights, -1f..1f, onUpdateHighlights),
+        ImgParam("shadows", "🌑", "Shadows", shadows, -1f..1f, onUpdateShadows),
+        ImgParam("temperature", "🌡️", "Temperature", temperature, -1f..1f, onUpdateTemperature),
+        ImgParam("blur", "🔵", "Blur", blur, 0f..25f, onUpdateBlur),
+        ImgParam("sharpen", "🔪", "Sharpen", sharpen, 0f..1f, onUpdateSharpen),
+        ImgParam("vignette", "⭕", "Vignette", vignette, 0f..1f, onUpdateVignette),
+        ImgParam("grain", "📺", "Grain", grain, 0f..1f, onUpdateGrain),
+        ImgParam("fade", "🌫️", "Fade", fade, 0f..1f, onUpdateFade),
     )
 
     Column(
