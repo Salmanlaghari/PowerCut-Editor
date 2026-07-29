@@ -243,10 +243,13 @@ class MainActivity : ComponentActivity() {
                                     exportState = exportState,
                                     language = language,
                                     onDone = {
-                                        isWatermarkRemoved = false // Reset watermark state
+                                        isWatermarkRemoved = false
                                         viewModel.resetToHome()
                                     },
                                     onBackToEditor = { viewModel.navigateToEditor() },
+                                    onImportNewVideo = { uri ->
+                                        viewModel.selectVideo(this@MainActivity, uri)
+                                    },
                                     isWatermarkRemoved = isWatermarkRemoved,
                                     onRemoveWatermarkRequested = {
                                         showRewardedAd {
