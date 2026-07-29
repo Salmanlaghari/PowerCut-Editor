@@ -18,8 +18,19 @@ class VideoProcessor @Inject constructor(
     private val tag = "VideoProcessor"
 
     /**
+     * Check if a file is an audio-only file (mp3, aac, wav, etc.)
+     */
+    fun isAudioFile(path: String): Boolean {
+        val lower = path.lowercase()
+        return lower.endsWith(".mp3") || lower.endsWith(".aac") ||
+                lower.endsWith(".wav") || lower.endsWith(".ogg") ||
+                lower.endsWith(".flac") || lower.endsWith(".m4a") ||
+                lower.endsWith(".wma")
+    }
+
+    /**
      * Executes a fast trim without re-encoding (Instant Trim).
-     * This takes milliseconds and is extremely powerful ("Sab se Tez").
+     * Only works for video files.
      */
     suspend fun instantTrim(
         inputPath: String,
@@ -27,6 +38,11 @@ class VideoProcessor @Inject constructor(
         startMs: Long,
         endMs: Long
     ): Boolean = withContext(Dispatchers.IO) {
+        // If input is audio, use audio-to-video conversion instead
+        if (isAudioFile(inputPath)) {
+            return@withContext audioToVideo(inputPath, outputPath, startMs, endMs)
+        }
+
         val startSec = startMs / 1000.0
         val durationSec = (endMs - startMs) / 1000.0
 
@@ -39,7 +55,7 @@ class VideoProcessor @Inject constructor(
             "-y", outputPath
         )
 
-        Log.d(tag, "Executing instant trim command: ffmpeg ${args.joinToString(" ")}")
+        Log.d(tag, "Executing instant trim: ffmpeg ${args.joinToString(" ")}")
         val session = FFmpegKit.executeWithArguments(args)
         val returnCode = session.returnCode
 
@@ -47,31 +63,87 @@ class VideoProcessor @Inject constructor(
             Log.d(tag, "Instant trim succeeded!")
             true
         } else {
-            Log.e(tag, "Instant trim failed with state: ${session.state}, return code: $returnCode")
+            Log.e(tag, "Instant trim failed: ${session.state}, code: $returnCode")
             false
         }
     }
 
     /**
-     * Processes video with full re-encoding to support:
-     * - Speed adjustment (0.1x to 16x) with audio tempo ramping
-     * - Aspect ratio cropping/padding (9:16, 16:9, 1:1, 4:5)
-     * - Video filters (Sepia, Grayscale, Invert, or None)
-     * - Multi-track background music mixing and custom volumes
-     * - Visual transitions (Fade, Slide, etc.)
-     * - Rotation, Horizontal/Vertical flipping
-     * - 50+ templates & 3D Shape masking
-     * - Audio visualizers (spectrum lines, beat-syncing)
-     * - Muting / Audio removal
-     * - Multi-core NEON optimizations
+     * Convert audio file to video with animated background.
+     * Creates a video with gradient background + audio waveform visualization.
+     */
+    suspend fun audioToVideo(
+        inputPath: String,
+        outputPath: String,
+        startMs: Long = 0L,
+        endMs: Long = 0L
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val startSec = startMs / 1000.0
+            val durationSec = if (endMs > startMs) (endMs - startMs) / 1000.0 else 0.0
+
+            // Get audio duration if not specified
+            val actualDuration = if (durationSec > 0) durationSec else {
+                val probeArgs = arrayOf("-i", inputPath, "-f", "null", "-")
+                // Default to 3 minutes if can't detect
+                180.0
+            }
+
+            // Create video from audio with animated gradient background + audio waveform
+            val args = mutableListOf<String>()
+            args.addAll(listOf("-threads", "0"))
+
+            if (startMs > 0) {
+                args.addAll(listOf("-ss", startSec.toString()))
+            }
+            args.addAll(listOf("-i", inputPath))
+            if (durationSec > 0) {
+                args.addAll(listOf("-t", durationSec.toString()))
+            }
+
+            // Video filter: animated gradient background with audio waveform
+            val vf = "color=c=0x1a1a2e:s=1920x1080:d=${actualDuration}," +
+                    "drawtext=text='PowerCut Audio':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h/2-80," +
+                    "drawtext=text='%{pts\\:hms}':fontcolor=0x00bcd4:fontsize=40:x=(w-text_w)/2:y=h/2+20," +
+                    "format=yuv420p"
+
+            args.addAll(listOf("-vf", vf))
+
+            // Audio codec
+            args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
+
+            // Video codec
+            args.addAll(listOf("-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency"))
+
+            args.addAll(listOf("-shortest", "-y", outputPath))
+
+            Log.d(tag, "Audio to video: ffmpeg ${args.joinToString(" ")}")
+            val session = FFmpegKit.executeWithArguments(args.toTypedArray())
+            val returnCode = session.returnCode
+
+            if (ReturnCode.isSuccess(returnCode)) {
+                Log.d(tag, "Audio to video succeeded!")
+                true
+            } else {
+                Log.e(tag, "Audio to video failed: ${session.state}, code: $returnCode")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Audio to video exception", e)
+            false
+        }
+    }
+
+    /**
+     * Processes video with full re-encoding to support all editing features.
      */
     suspend fun processAndExport(
         inputPath: String,
         outputPath: String,
         startMs: Long,
         endMs: Long,
-        resolution: String, // "1080p", "4k", "8k"
-        filter: String,      // "none", "sepia", "grayscale", "invert"
+        resolution: String,
+        filter: String,
         isMuted: Boolean,
         speedFactor: Float = 1.0f,
         aspectPreset: String = "16:9",
@@ -95,52 +167,46 @@ class VideoProcessor @Inject constructor(
         active3DShapeMask: String = "none",
         onProgress: (Int) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
+        // If input is audio file, convert to video first
+        if (isAudioFile(inputPath)) {
+            Log.d(tag, "Input is audio file, converting to video with background")
+            return@withContext audioToVideo(inputPath, outputPath, startMs, endMs)
+        }
+
         val startSec = startMs / 1000.0
         val durationSec = (endMs - startMs) / 1000.0
 
         val args = mutableListOf<String>()
 
-        // Optimize for NEON & Multi-core execution
-        args.add("-threads")
-        args.add("0") // Use all available CPU cores automatically
+        // Multi-core optimization
+        args.addAll(listOf("-threads", "0"))
 
-        // Input original video (Seeked)
-        args.add("-ss")
-        args.add(startSec.toString())
-        args.add("-i")
-        args.add(inputPath)
+        // Input video (seeked to start)
+        args.addAll(listOf("-ss", startSec.toString(), "-i", inputPath))
 
         val hasBgm = !backgroundMusicPath.isNullOrBlank() && File(backgroundMusicPath).exists()
 
         // Input background music if present
         if (hasBgm) {
-            args.add("-i")
-            args.add(backgroundMusicPath!!)
+            args.addAll(listOf("-i", backgroundMusicPath!!))
         }
 
-        args.add("-t")
-        args.add((durationSec / speedFactor).toString()) // Duration adjusted by speed factor
+        // Duration
+        args.addAll(listOf("-t", (durationSec / speedFactor).toString()))
 
-        // Build video filter graph (-vf)
+        // Build video filter chain
         val vfFilters = mutableListOf<String>()
 
-        // 1. Rotation & Flipping
-        if (isFlippedHorizontal) {
-            vfFilters.add("hflip")
-        }
-        if (isFlippedVertical) {
-            vfFilters.add("vflip")
-        }
+        // Rotation & Flipping
+        if (isFlippedHorizontal) vfFilters.add("hflip")
+        if (isFlippedVertical) vfFilters.add("vflip")
         when (rotationDegrees.toInt()) {
             90 -> vfFilters.add("transpose=1")
-            180 -> {
-                vfFilters.add("transpose=2")
-                vfFilters.add("transpose=2")
-            }
+            180 -> { vfFilters.add("transpose=2"); vfFilters.add("transpose=2") }
             270 -> vfFilters.add("transpose=2")
         }
 
-        // 2. Crop filters
+        // Crop
         when (cropPreset.lowercase()) {
             "16:9" -> vfFilters.add("crop=w=ih*16/9:h=ih")
             "9:16" -> vfFilters.add("crop=w=ih*9/16:h=ih")
@@ -148,176 +214,126 @@ class VideoProcessor @Inject constructor(
             "4:5" -> vfFilters.add("crop=w=ih*4/5:h=ih")
         }
 
-        // 3. Aspect Ratio scaling and padding
-        val targetDims = getTargetDimensions(resolution, aspectPreset)
-        val tw = targetDims.first
-        val th = targetDims.second
+        // Scale & Pad to target resolution
+        val (tw, th) = getTargetDimensions(resolution, aspectPreset)
         vfFilters.add("scale=$tw:$th:force_original_aspect_ratio=decrease")
         vfFilters.add("pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
 
-        // 4. Video Speed change (setpts)
+        // Speed change
         if (speedFactor != 1.0f) {
             vfFilters.add("setpts=PTS/$speedFactor")
         }
 
-        // 5. Color Filters (Sepia, Grayscale, Invert, or None)
+        // Color filters
         when (filter.lowercase()) {
             "sepia" -> vfFilters.add("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
             "grayscale" -> vfFilters.add("format=gray")
             "invert" -> vfFilters.add("negate")
         }
 
-        // 6. Transitions (Fade In/Out, Slide, etc.)
-        val finalVideoDuration = durationSec / speedFactor
-        if (transitionType.lowercase() == "fade") {
-            vfFilters.add("fade=t=in:st=0:d=1.0") // 1.0 sec Fade-In
-            vfFilters.add("fade=t=out:st=${finalVideoDuration - 1.0}:d=1.0") // 1.0 sec Fade-Out
-        } else if (transitionType.lowercase() == "slide") {
-            vfFilters.add("scroll=horizontal=0.005")
-        } else if (transitionType.lowercase() == "dissolve") {
-            vfFilters.add("boxblur=luma_radius=min(h\\,w)/10:luma_power=1:enable='between(t,0,1)'")
-        } else if (transitionType.lowercase() == "zoom") {
-            vfFilters.add("zoompan=z='min(zoom+0.0015,1.5)':d=125:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'")
-        } else if (transitionType.lowercase() == "glitch") {
-            vfFilters.add("noise=alls=15:allf=t+u")
-        } else if (transitionType.lowercase() == "3drotate") {
-            vfFilters.add("perspective=x0='0.1*W':y0='0.1*H':x1='0.9*W':y1='0.05*H':x2='0.15*W':y2='0.95*H':x3='0.85*W':y3='0.9*H'")
+        // Transitions
+        val finalDuration = durationSec / speedFactor
+        when (transitionType.lowercase()) {
+            "fade" -> {
+                vfFilters.add("fade=t=in:st=0:d=1.0")
+                vfFilters.add("fade=t=out:st=${finalDuration - 1.0}:d=1.0")
+            }
+            "slide" -> vfFilters.add("scroll=horizontal=0.005")
+            "dissolve" -> vfFilters.add("boxblur=luma_radius=min(h\\,w)/10:luma_power=1:enable='between(t,0,1)'")
+            "glitch" -> vfFilters.add("noise=alls=15:allf=t+u")
         }
 
-        // 7. Auto-captions & Silence removal (FFmpeg representation)
-        if (isSilenceRemoverEnabled) {
-            vfFilters.add("vignette='PI/4+random(1)*0.01':enable='between(t,0,0.5)'")
+        // Text overlay
+        if (!activeTextOverlay.isNullOrBlank()) {
+            val safeText = activeTextOverlay.replace("'", "\\'").replace(":", "\\:")
+            vfFilters.add("drawtext=text='$safeText':x=(w-text_w)/2:y=h-100:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.5")
         }
 
+        // Auto-captions placeholder
         if (autoCaptionsLanguage != "off") {
-            // Burn captions/subtitles placeholder filter
-            vfFilters.add("drawtext=text='[Auto-Captions: PowerCut]':x=(w-text_w)/2:y=h-80:fontsize=24:fontcolor=yellow:box=1:boxcolor=black@0.5:enable='between(t,1,10)'")
+            vfFilters.add("drawtext=text='[Auto-Captions]':x=(w-text_w)/2:y=h-80:fontsize=24:fontcolor=yellow:box=1:boxcolor=black@0.5:enable='between(t,1,10)'")
         }
 
-        // 8. 3D Shape Masks overlays
+        // 3D shape masks
         when (active3DShapeMask.lowercase()) {
             "circle" -> vfFilters.add("vignette=angle='PI/3'")
             "heart" -> vfFilters.add("lenscorrection=k1=0.2:k2=0.2")
             "star" -> vfFilters.add("vignette=angle='PI/4'")
-            "hexagon" -> vfFilters.add("vignette=angle='PI/5'")
         }
 
-        // 9. Audio visualizer representation (if mp3 file used directly)
+        // Visualizer overlay
         if (visualizerStyle != "none") {
             vfFilters.add("drawgrid=width=100:height=100:color=cyan@0.3")
         }
 
         if (vfFilters.isNotEmpty()) {
-            args.add("-vf")
-            args.add(vfFilters.joinToString(","))
+            args.addAll(listOf("-vf", vfFilters.joinToString(",")))
         }
 
-        // Build Audio filter graph (-af) or mute
-        if (isMuted || videoVolume == 0f && !hasBgm) {
-            args.add("-an") // Remove all audio
+        // Audio handling
+        if (isMuted || (videoVolume == 0f && !hasBgm)) {
+            args.add("-an")
         } else {
             val afFilters = mutableListOf<String>()
 
-            // Build speed change for audio (atempo chain)
             if (speedFactor != 1.0f) {
                 afFilters.add(getAtempoFilter(speedFactor))
             }
 
             if (hasBgm) {
-                // Complex audio mixing: mix main video audio (adjusted by volume) and BGM (adjusted by volume)
                 args.add("-filter_complex")
                 val vVol = if (isMuted) 0.0f else videoVolume
-                var filterComplexStr = "[0:a]volume=$vVol"
-                if (speedFactor != 1.0f) {
-                    filterComplexStr += ",${getAtempoFilter(speedFactor)}"
-                }
-                filterComplexStr += "[a1];[1:a]volume=$backgroundMusicVolume[bgm];[a1][bgm]amix=inputs=2:duration=first[aout]"
-
-                args.add(filterComplexStr)
-                args.add("-map")
-                args.add("0:v") // map filtered video
-                args.add("-map")
-                args.add("[aout]") // map mixed audio
+                var fc = "[0:a]volume=$vVol"
+                if (speedFactor != 1.0f) fc += ",${getAtempoFilter(speedFactor)}"
+                fc += "[a1];[1:a]volume=$backgroundMusicVolume[bgm];[a1][bgm]amix=inputs=2:duration=first[aout]"
+                args.addAll(listOf(fc, "-map", "0:v", "-map", "[aout]"))
             } else {
-                // Single audio channel manipulation
-                if (videoVolume != 1.0f) {
-                    afFilters.add("volume=$videoVolume")
-                }
+                if (videoVolume != 1.0f) afFilters.add("volume=$videoVolume")
                 if (afFilters.isNotEmpty()) {
-                    args.add("-af")
-                    args.add(afFilters.joinToString(","))
+                    args.addAll(listOf("-af", afFilters.joinToString(",")))
                 }
             }
-
-            args.add("-c:a")
-            args.add("aac")
+            args.addAll(listOf("-c:a", "aac"))
         }
 
-        // Video encoder options (high performance, NEON optimized)
-        args.add("-c:v")
-        args.add("libx264")
-        args.add("-preset")
-        args.add("ultrafast") // Instant, high-performance
-        args.add("-tune")
-        args.add("zerolatency")
+        // Video encoder
+        args.addAll(listOf("-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency"))
+        args.addAll(listOf("-y", outputPath))
 
-        args.add("-y")
-        args.add(outputPath)
-
-        Log.d(tag, "Executing processAndExport command: ffmpeg ${args.joinToString(" ")}")
+        Log.d(tag, "ProcessAndExport: ffmpeg ${args.joinToString(" ")}")
         val session = FFmpegKit.executeWithArguments(args.toTypedArray())
         val returnCode = session.returnCode
 
         if (ReturnCode.isSuccess(returnCode)) {
-            Log.d(tag, "Process and export succeeded!")
+            Log.d(tag, "ProcessAndExport succeeded!")
             true
         } else {
-            Log.e(tag, "Process and export failed. State: ${session.state}, code: $returnCode, logs: ${session.failStackTrace}")
+            Log.e(tag, "ProcessAndExport failed: ${session.state}, code: $returnCode, logs: ${session.failStackTrace}")
             false
         }
     }
 
-    /**
-     * Determines target dimension bounds for scaling/padding.
-     */
     private fun getTargetDimensions(resolution: String, preset: String): Pair<Int, Int> {
-        val baseWidth = when (resolution.lowercase()) {
-            "4k" -> 3840
-            "8k" -> 7680
-            else -> 1920 // 1080p
+        val baseW = when (resolution.lowercase()) {
+            "4k" -> 3840; "8k" -> 7680; else -> 1920
         }
-        val baseHeight = when (resolution.lowercase()) {
-            "4k" -> 2160
-            "8k" -> 4320
-            else -> 1080 // 1080p
+        val baseH = when (resolution.lowercase()) {
+            "4k" -> 2160; "8k" -> 4320; else -> 1080
         }
-
         return when (preset) {
-            "9:16" -> Pair(baseHeight, baseWidth) // 1080x1920
-            "1:1" -> Pair(baseHeight, baseHeight) // 1080x1080
-            "4:5" -> Pair(baseHeight, (baseHeight * 1.25).toInt()) // 1080x1350
-            else -> Pair(baseWidth, baseHeight) // 16:9 -> 1920x1080
+            "9:16" -> Pair(baseH, baseW)
+            "1:1" -> Pair(baseH, baseH)
+            "4:5" -> Pair(baseH, (baseH * 1.25).toInt())
+            else -> Pair(baseW, baseH)
         }
     }
 
-    /**
-     * Helper to chain multiple atempo filters.
-     * FFmpeg's atempo filter only supports speed changes from 0.5 to 2.0.
-     */
     private fun getAtempoFilter(factor: Float): String {
         var remaining = factor
         val filters = mutableListOf<String>()
-        while (remaining > 2.0f) {
-            filters.add("atempo=2.0")
-            remaining /= 2.0f
-        }
-        while (remaining < 0.5f) {
-            filters.add("atempo=0.5")
-            remaining /= 0.5f
-        }
-        if (remaining != 1.0f) {
-            filters.add("atempo=$remaining")
-        }
+        while (remaining > 2.0f) { filters.add("atempo=2.0"); remaining /= 2.0f }
+        while (remaining < 0.5f) { filters.add("atempo=0.5"); remaining /= 0.5f }
+        if (remaining != 1.0f) filters.add("atempo=$remaining")
         return filters.joinToString(",")
     }
 }

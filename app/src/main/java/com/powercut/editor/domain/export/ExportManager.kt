@@ -63,7 +63,11 @@ class ExportManager @Inject constructor(
             val tempOutputFile = File(secureDir, tempFileName)
             val tempOutputPath = tempOutputFile.absolutePath
 
-            val isInstantTrimPossible = !project.isMuted &&
+            // Check if input is audio file
+            val isAudioInput = videoProcessor.isAudioFile(project.videoPath)
+
+            val isInstantTrimPossible = !isAudioInput &&
+                    !project.isMuted &&
                     project.selectedFilter == "none" &&
                     project.targetResolution == "1080p" &&
                     project.speedFactor == 1.0f &&
