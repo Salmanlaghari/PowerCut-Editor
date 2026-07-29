@@ -103,7 +103,7 @@ data class VideoProject(
 
     val isHorizontalMode: Boolean
         get() = orientationMode == "horizontal" || aspectPreset == "16:9"
-} {
+
     val isTrimmed: Boolean
         get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L
 
