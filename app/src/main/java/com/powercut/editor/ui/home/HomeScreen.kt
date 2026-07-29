@@ -91,17 +91,9 @@ fun HomeScreen(
     var splashScale by remember { mutableFloatStateOf(0.8f) }
 
     LaunchedEffect(Unit) {
-        // Fade in + scale up animation
-        kotlinx.coroutines.coroutineScope {
-            kotlinx.coroutines.launch {
-                kotlinx.coroutines.delay(100)
-                splashAlpha = 1f
-            }
-            kotlinx.coroutines.launch {
-                kotlinx.coroutines.delay(100)
-                splashScale = 1f
-            }
-        }
+        delay(100)
+        splashAlpha = 1f
+        splashScale = 1f
         delay(1500)
         splashAlpha = 0f
         delay(300)
