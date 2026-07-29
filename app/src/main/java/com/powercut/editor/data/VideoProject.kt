@@ -5,77 +5,77 @@ data class VideoProject(
     val durationMs: Long = 0L,
     val trimStartMs: Long = 0L,
     val trimEndMs: Long = 0L,
-    val targetResolution: String = "1080p", // "1080p", "4k", "8k"
-    val selectedFilter: String = "none",   // "none", "sepia", "grayscale", "invert"
+    val targetResolution: String = "1080p",
+    val selectedFilter: String = "none",
     val isMuted: Boolean = false,
 
     // High-priority features
-    val speedFactor: Float = 1.0f, // 0.1x to 16.0x
-    val aspectPreset: String = "16:9", // "16:9", "9:16", "1:1", "4:5", "custom"
-    val transitionType: String = "none", // 50+ cinematic transitions supported
+    val speedFactor: Float = 1.0f,
+    val aspectPreset: String = "16:9",
+    val transitionType: String = "none",
     val backgroundMusicPath: String? = null,
-    val backgroundMusicVolume: Float = 0.5f, // 0.0f to 1.0f
-    val videoVolume: Float = 1.0f, // 0.0f to 1.0f
-    val autoCaptionsLanguage: String = "off", // "off", "en", "ur"
+    val backgroundMusicVolume: Float = 0.5f,
+    val videoVolume: Float = 1.0f,
+    val autoCaptionsLanguage: String = "off",
     val isSilenceRemoverEnabled: Boolean = false,
 
     // Professional Editing Features
-    val rotationDegrees: Float = 0f, // 0, 90, 180, 270
+    val rotationDegrees: Float = 0f,
     val isFlippedHorizontal: Boolean = false,
     val isFlippedVertical: Boolean = false,
-    val cropPreset: String = "free", // "free", "16:9", "9:16", "1:1", "4:5"
-    val speedCurve: String = "constant", // "constant", "montage", "hero", "flash"
+    val cropPreset: String = "free",
+    val speedCurve: String = "constant",
     val activeTextOverlay: String? = null,
     val textAnimationType: String = "fade",
-    val stickerType: String = "none", // Overlays & stickers
+    val stickerType: String = "none",
 
     // Advanced Exclusive features
-    val activeTemplateId: String = "none", // 50+ templates
-    val visualizerStyle: String = "none", // Audio visualizer neon wave styles
+    val activeTemplateId: String = "none",
+    val visualizerStyle: String = "none",
     val isBeatSyncEnabled: Boolean = false,
-    val active3DShapeMask: String = "none", // 50+ shape masks
+    val active3DShapeMask: String = "none",
 
     // NextGen Pro features
-    val imageOverlayPath: String? = null, // Image overlay on video
+    val imageOverlayPath: String? = null,
     val imageOverlayOpacity: Float = 1.0f,
     val imageOverlayScale: Float = 1.0f,
-    val imageOverlayX: Float = 0.5f, // 0-1 normalized
+    val imageOverlayX: Float = 0.5f,
     val imageOverlayY: Float = 0.5f,
-    val selectedEffect: String = "none", // Active visual effect
-    val activeLayers: List<String> = emptyList(), // Multi-layer support
+    val selectedEffect: String = "none",
+    val activeLayers: List<String> = emptyList(),
 
     // Green Screen / Chroma Key
     val greenScreenEnabled: Boolean = false,
-    val greenScreenColor: String = "green", // "green", "blue", "black", "white", "custom"
-    val greenScreenThreshold: Float = 0.4f, // 0.0-1.0 sensitivity
-    val greenScreenBackgroundPath: String? = null, // replacement background
-    val greenScreenAutoBgIndex: Int = -1, // index into 20+ auto backgrounds
+    val greenScreenColor: String = "green",
+    val greenScreenThreshold: Float = 0.4f,
+    val greenScreenBackgroundPath: String? = null,
+    val greenScreenAutoBgIndex: Int = -1,
 
     // Eraser Tools
-    val eraserMode: String = "none", // "none", "background", "object", "area"
-    val eraserBrushSize: Float = 30f, // brush size in pixels
-    val eraserTolerance: Float = 0.5f, // color tolerance 0-1
+    val eraserMode: String = "none",
+    val eraserBrushSize: Float = 30f,
+    val eraserTolerance: Float = 0.5f,
     val eraserSoftEdge: Boolean = true,
 
     // Image Editor
-    val imageEditorBrightness: Float = 0f, // -1 to 1
-    val imageEditorContrast: Float = 1f, // 0 to 2
-    val imageEditorSaturation: Float = 1f, // 0 to 2
-    val imageEditorBlur: Float = 0f, // 0 to 25
-    val imageEditorSharpen: Float = 0f, // 0 to 1
-    val imageEditorTemperature: Float = 0f, // -1 to 1 (cool/warm)
-    val imageEditorVignette: Float = 0f, // 0 to 1
-    val imageEditorGrain: Float = 0f, // 0 to 1
-    val imageEditorFade: Float = 0f, // 0 to 1
-    val imageEditorHighlights: Float = 0f, // -1 to 1
-    val imageEditorShadows: Float = 0f, // -1 to 1
-    val imageEditorExposure: Float = 0f, // -1 to 1
+    val imageEditorBrightness: Float = 0f,
+    val imageEditorContrast: Float = 1f,
+    val imageEditorSaturation: Float = 1f,
+    val imageEditorBlur: Float = 0f,
+    val imageEditorSharpen: Float = 0f,
+    val imageEditorTemperature: Float = 0f,
+    val imageEditorVignette: Float = 0f,
+    val imageEditorGrain: Float = 0f,
+    val imageEditorFade: Float = 0f,
+    val imageEditorHighlights: Float = 0f,
+    val imageEditorShadows: Float = 0f,
+    val imageEditorExposure: Float = 0f,
 
     // Video Orientation Tools
-    val orientationMode: String = "free", // "free", "vertical", "horizontal", "square"
-    val verticalSafeZone: Boolean = false, // show safe zone guides for 9:16
-    val horizontalLetterbox: Boolean = false, // letterbox for 16:9
-    val autoReframeEnabled: Boolean = false // AI auto-reframe for target orientation
+    val orientationMode: String = "free",
+    val verticalSafeZone: Boolean = false,
+    val horizontalLetterbox: Boolean = false,
+    val autoReframeEnabled: Boolean = false
 ) {
     val isTrimmed: Boolean
         get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L
@@ -103,13 +103,4 @@ data class VideoProject(
 
     val isHorizontalMode: Boolean
         get() = orientationMode == "horizontal" || aspectPreset == "16:9"
-
-    val isTrimmed: Boolean
-        get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L
-
-    val isSpeedChanged: Boolean
-        get() = speedFactor != 1.0f
-
-    val hasBackgroundMusic: Boolean
-        get() = !backgroundMusicPath.isNullOrBlank()
 }
