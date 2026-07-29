@@ -40,10 +40,22 @@ class ExportManager @Inject constructor(
     suspend fun exportProject(project: VideoProject) {
         _exportState.value = Resource.Loading
         try {
+            // Check available storage space before export
             val secureDir = File(context.cacheDir, "PowerCutExports")
             if (!secureDir.exists()) {
                 secureDir.mkdirs()
             }
+            val availableSpace = secureDir.freeSpace
+            val minRequiredSpace = 100 * 1024 * 1024L // 100 MB minimum
+            if (availableSpace < minRequiredSpace) {
+                val availableMB = availableSpace / (1024 * 1024)
+                _exportState.value = Resource.Error(
+                    "Storage full! Only ${availableMB}MB available. Free up at least 100MB and try again.",
+                    Exception("Insufficient storage: ${availableMB}MB available")
+                )
+                return
+            }
+
             val tempFileName = "powercut_process_${System.currentTimeMillis()}.mp4"
             val tempOutputFile = File(secureDir, tempFileName)
             val tempOutputPath = tempOutputFile.absolutePath
@@ -124,7 +136,48 @@ class ExportManager @Inject constructor(
                 }
             } else {
                 Log.e(tag, "Export failed during video processing")
-                _exportState.value = Resource.Error("Video processing failed. Check logs for details.")
+                // Try auto-recovery: retry with lower resolution
+                if (project.targetResolution != "1080p") {
+                    Log.d(tag, "Retrying export with 1080p resolution...")
+                    val retrySuccess = videoProcessor.processAndExport(
+                        inputPath = project.videoPath,
+                        outputPath = tempOutputPath,
+                        startMs = project.trimStartMs,
+                        endMs = project.trimEndMs,
+                        resolution = "1080p",
+                        filter = project.selectedFilter,
+                        isMuted = project.isMuted,
+                        speedFactor = project.speedFactor,
+                        aspectPreset = project.aspectPreset,
+                        transitionType = project.transitionType,
+                        backgroundMusicPath = project.backgroundMusicPath,
+                        backgroundMusicVolume = project.backgroundMusicVolume,
+                        videoVolume = project.videoVolume,
+                        autoCaptionsLanguage = project.autoCaptionsLanguage,
+                        isSilenceRemoverEnabled = project.isSilenceRemoverEnabled,
+                        rotationDegrees = project.rotationDegrees,
+                        isFlippedHorizontal = project.isFlippedHorizontal,
+                        isFlippedVertical = project.isFlippedVertical,
+                        cropPreset = project.cropPreset,
+                        speedCurve = project.speedCurve,
+                        activeTextOverlay = project.activeTextOverlay,
+                        textAnimationType = project.textAnimationType,
+                        stickerType = project.stickerType,
+                        activeTemplateId = project.activeTemplateId,
+                        visualizerStyle = project.visualizerStyle,
+                        isBeatSyncEnabled = project.isBeatSyncEnabled,
+                        active3DShapeMask = project.active3DShapeMask
+                    )
+                    if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
+                        val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                        _exportState.value = Resource.Success(galleryPath ?: tempOutputPath)
+                        return
+                    }
+                }
+                _exportState.value = Resource.Error(
+                    "Export failed. Your video may be too large or device storage is full. Try: 1) Lower resolution 2) Free up storage 3) Use a shorter clip",
+                    Exception("Video processing failed")
+                )
             }
         } catch (e: Exception) {
             Log.e(tag, "Export failed with exception", e)
