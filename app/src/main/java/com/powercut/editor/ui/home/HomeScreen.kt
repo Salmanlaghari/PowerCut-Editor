@@ -441,6 +441,16 @@ fun DashboardView(
         }
     }
 
+    // Permission launcher for storage access (must be defined before checkPermissionAndPick)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            pickerLauncher.launch("video/*")
+        }
+    }
+
     // Check and request permission before picking video
     fun checkPermissionAndPick() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -468,16 +478,6 @@ fun DashboardView(
                     android.Manifest.permission.READ_EXTERNAL_STORAGE
                 ))
             }
-        }
-    }
-
-    // Permission launcher for storage access
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            pickerLauncher.launch("video/*")
         }
     }
 
