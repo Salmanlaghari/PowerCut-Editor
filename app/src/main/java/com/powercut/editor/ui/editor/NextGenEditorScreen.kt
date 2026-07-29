@@ -150,6 +150,7 @@ fun NextGenEditorScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var currentPlaybackTime by remember { mutableStateOf(0L) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var isEditingComplete by remember { mutableStateOf(false) } // Final page state
 
     // Layer visibility
     var layerVideoVisible by remember { mutableStateOf(true) }
@@ -212,17 +213,34 @@ fun NextGenEditorScreen(
     // ═══════════════════════════════════════════════════════════
     //  MAIN LAYOUT
     // ═══════════════════════════════════════════════════════════
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0B0D12))) {
 
-        // ─── 1. HEADER ────────────────────────────────────────
-        EditorHeader(
+    if (isEditingComplete) {
+        // ─── FINAL PAGE: Import + Export after editing complete ──
+        EditingCompletePage(
+            project = project,
+            exoPlayer = exoPlayer,
+            isPlaying = isPlaying,
             currentPlaybackTime = currentPlaybackTime,
             durationMs = project.durationMs,
-            onBack = { onSaveDraft(); onBack() },
-            onExport = onExport,
-            onUndo = { },
-            onRedo = { }
+            onPlayPause = { isPlaying = !isPlaying },
+            onBackToEdit = { isEditingComplete = false },
+            onImport = { multiFilePicker.launch("video/*") },
+            onExport = { onSaveDraft(); onExport() },
+            onBack = { onSaveDraft(); onBack() }
         )
+    } else {
+        // ─── NORMAL EDITOR ───────────────────────────────────────
+        Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0B0D12))) {
+
+            // ─── 1. HEADER (Done button instead of Export) ──────
+            EditorHeader(
+                currentPlaybackTime = currentPlaybackTime,
+                durationMs = project.durationMs,
+                onBack = { onSaveDraft(); onBack() },
+                onDone = { isEditingComplete = true },
+                onUndo = { },
+                onRedo = { }
+            )
 
         // ─── 2. VIDEO PREVIEW ─────────────────────────────────
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).weight(1.4f), contentAlignment = Alignment.Center) {
@@ -392,6 +410,151 @@ fun NextGenEditorScreen(
             }
         )
     }
+    } // end else (normal editor)
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  EDITING COMPLETE PAGE — Import + Export after editing done
+// ═══════════════════════════════════════════════════════════════
+@OptIn(UnstableApi::class)
+@Composable
+private fun EditingCompletePage(
+    project: VideoProject,
+    exoPlayer: ExoPlayer,
+    isPlaying: Boolean,
+    currentPlaybackTime: Long,
+    durationMs: Long,
+    onPlayPause: () -> Unit,
+    onBackToEdit: () -> Unit,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
+    onBack: () -> Unit
+) {
+    val aspect = when (project.aspectPreset) {
+        "1:1" -> 1.0f; "9:16" -> 9f/16f; "4:5" -> 4f/5f; else -> 16f/9f
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color(0xFF0B0D12))
+    ) {
+        // Header with back
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(modifier = Modifier.size(30.dp).glassmorphic(shape = RoundedCornerShape(8.dp)).tactileClick(onClick = onBack), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+                Column {
+                    Text("Editing Complete", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Ready to export", fontSize = 10.sp, color = CyberCyan)
+                }
+            }
+            // Back to Edit button
+            Box(
+                modifier = Modifier.glassmorphic(shape = RoundedCornerShape(16.dp)).tactileClick(onClick = onBackToEdit).padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text("✏️ Edit More", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Video Preview (smaller)
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).weight(1f), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.fillMaxHeight().aspectRatio(aspect).clip(RoundedCornerShape(16.dp)).background(Color.Black)
+                    .border(2.dp, CyberCyan.copy(0.3f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AndroidView(
+                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Play overlay
+                Box(
+                    modifier = Modifier.size(56.dp).background(Color.White.copy(0.2f), CircleShape)
+                        .border(2.dp, Color.White.copy(0.4f), CircleShape).clickable { onPlayPause },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Project summary
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(12.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                SummaryItem("⏱️", "Duration", formatTime(durationMs))
+                SummaryItem("📐", "Aspect", project.aspectPreset)
+                SummaryItem("🎬", "Resolution", project.targetResolution.uppercase())
+                SummaryItem("⚡", "Speed", "${project.speedFactor}x")
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // ═══ IMPORT + EXPORT BUTTONS ═══
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // IMPORT BUTTON
+            Box(
+                modifier = Modifier.weight(1f).height(56.dp)
+                    .glassmorphic(shape = RoundedCornerShape(16.dp))
+                    .border(1.dp, CyberCyan.copy(0.4f), RoundedCornerShape(16.dp))
+                    .tactileClick(onClick = onImport)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(22.dp))
+                    Column {
+                        Text("IMPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                        Text("Add more clips", fontSize = 9.sp, color = Color.Gray)
+                    }
+                }
+            }
+
+            // EXPORT BUTTON
+            Box(
+                modifier = Modifier.weight(1f).height(56.dp)
+                    .neonGlow(AccentSecondary, RoundedCornerShape(16.dp), 1.5.dp)
+                    .background(premiumAccentGradient, RoundedCornerShape(16.dp))
+                    .tactileClick(onClick = onExport)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("🎬", fontSize = 20.sp)
+                    Column {
+                        Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, letterSpacing = 0.5.sp)
+                        Text("Save video", fontSize = 9.sp, color = Color.White.copy(0.8f))
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun SummaryItem(emoji: String, label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(emoji, fontSize = 16.sp)
+        Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(label, fontSize = 8.sp, color = Color.Gray)
+    }
 }
 
 
@@ -403,7 +566,7 @@ private fun EditorHeader(
     currentPlaybackTime: Long,
     durationMs: Long,
     onBack: () -> Unit,
-    onExport: () -> Unit,
+    onDone: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit
 ) {
@@ -424,8 +587,8 @@ private fun EditorHeader(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(onClick = onUndo, modifier = Modifier.size(26.dp)) { Text("↶", color = Color.LightGray, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             IconButton(onClick = onRedo, modifier = Modifier.size(26.dp)) { Text("↷", color = Color.LightGray, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-            Box(modifier = Modifier.neonGlow(AccentSecondary, RoundedCornerShape(20.dp), 1.dp).background(premiumAccentGradient, RoundedCornerShape(20.dp)).tactileClick(onClick = onExport).padding(horizontal = 12.dp, vertical = 5.dp)) {
-                Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 10.sp, letterSpacing = 0.5.sp)
+            Box(modifier = Modifier.neonGlow(CyberCyan, RoundedCornerShape(20.dp), 1.dp).background(Brush.horizontalGradient(listOf(CyberCyan, Color(0xFF7C5CFF))), RoundedCornerShape(20.dp)).tactileClick(onClick = onDone).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Text("DONE ✓", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 10.sp, letterSpacing = 0.5.sp)
             }
         }
     }
