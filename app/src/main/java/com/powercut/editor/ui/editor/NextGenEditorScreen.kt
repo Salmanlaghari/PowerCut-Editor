@@ -434,6 +434,7 @@ private fun EditingCompletePage(
     val aspect = when (project.aspectPreset) {
         "1:1" -> 1.0f; "9:16" -> 9f/16f; "4:5" -> 4f/5f; else -> 16f/9f
     }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF0B0D12))
@@ -522,7 +523,7 @@ private fun EditingCompletePage(
                 Text("UPSCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("none" to "Original", "2x" to "2x AI", "4x" to "4x Ultra").forEach { (id, label) ->
-                        Box(Modifier.weight(1f).background(NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Upscale: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).background(NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Upscale: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
                             Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
                         }
                     }
@@ -916,6 +917,7 @@ private fun EditPanel(
     onUpdateTrim: (Long, Long) -> Unit
 ) {
     var editSubTab by remember { mutableStateOf("adjust") }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // Sub-tab bar like CapCut
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1032,7 +1034,7 @@ private fun EditPanel(
             }
             "reverse" -> {
                 Text("REVERSE VIDEO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Reverse applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(ctx, "Reverse applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🔄", fontSize = 28.sp)
                         Text("Tap to Reverse Video", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1042,7 +1044,7 @@ private fun EditPanel(
             }
             "freeze" -> {
                 Text("FREEZE FRAME", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Freeze at ${formatTime(project.trimStartMs)}!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(ctx, "Freeze at ${formatTime(project.trimStartMs)}!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🧊", fontSize = 28.sp)
                         Text("Freeze at Playhead", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1052,7 +1054,7 @@ private fun EditPanel(
             }
             "delete" -> {
                 Text("DELETE SECTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(Color(0xFFFF1744).copy(0.1f), RoundedCornerShape(8.dp)).border(1.dp, Color(0xFFFF1744).copy(0.3f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Section deleted!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().background(Color(0xFFFF1744).copy(0.1f), RoundedCornerShape(8.dp)).border(1.dp, Color(0xFFFF1744).copy(0.3f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(ctx, "Section deleted!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🗑️", fontSize = 28.sp)
                         Text("Delete Selected", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF1744))
