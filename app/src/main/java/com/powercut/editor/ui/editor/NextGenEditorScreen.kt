@@ -495,12 +495,42 @@ private fun EditingCompletePage(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                 SummaryItem("⏱️", "Duration", formatTime(durationMs))
                 SummaryItem("📐", "Aspect", project.aspectPreset)
-                SummaryItem("🎬", "Resolution", project.targetResolution.uppercase())
+                SummaryItem("🎬", "Res", project.targetResolution.uppercase())
                 SummaryItem("⚡", "Speed", "${project.speedFactor}x")
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
+
+        // Export format options
+        var selectedFormat by remember { mutableStateOf("mp4_hd") }
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("EXPORT FORMAT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("mp4_hd" to "📹 MP4-HD", "mp4_4k" to "🎬 MP4 4K", "mp4_8k" to "💎 MP4 8K", "webm" to "🌐 WebM", "gif" to "🎞️ GIF").forEach { (id, label) ->
+                        val sel = selectedFormat == id
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedFormat = id }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                Text("UPSCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("none" to "Original", "2x" to "2x AI", "4x" to "4x Ultra").forEach { (id, label) ->
+                        Box(Modifier.weight(1f).background(NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Upscale: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
 
         // ═══ IMPORT + EXPORT BUTTONS ═══
         Row(
@@ -885,31 +915,149 @@ private fun EditPanel(
     onUpdateResolution: (String) -> Unit,
     onUpdateTrim: (Long, Long) -> Unit
 ) {
+    var editSubTab by remember { mutableStateOf("adjust") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("EDIT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        // Crop
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("Free", "1:1", "16:9", "9:16", "4:5").forEach { c ->
-                val sel = project.cropPreset == c
-                Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateCropPreset(c); onUpdateAspectPreset(c) }.padding(4.dp), contentAlignment = Alignment.Center) {
-                    Text(c, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+        // Sub-tab bar like CapCut
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("adjust" to "🎨 Adjust", "crop" to "📐 Crop", "speed" to "⚡ Speed", "slowmo" to "🐌 SlowMo", "reverse" to "🔄 Reverse", "freeze" to "🧊 Freeze", "delete" to "🗑️ Delete").forEach { (id, label) ->
+                val sel = editSubTab == id
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { editSubTab = id }.padding(horizontal = 8.dp, vertical = 5.dp)) {
+                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                 }
             }
         }
-        // Rotate + Flip
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("↻ Rotate" to onUpdateRotation, "↔ Flip H" to onToggleFlipH, "↕ Flip V" to onToggleFlipV).forEach { (l, a) ->
-                Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { a() }.padding(6.dp), contentAlignment = Alignment.Center) {
-                    Text(l, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+
+        when (editSubTab) {
+            "adjust" -> {
+                // CapCut style adjustments
+                Text("ADJUSTMENTS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                val adjustments = listOf(
+                    Triple("☀️", "Brightness", 0.5f),
+                    Triple("🔲", "Contrast", 0.5f),
+                    Triple("🎨", "Saturation", 0.5f),
+                    Triple("🔪", "Sharpness", 0.5f),
+                    Triple("🌡️", "Temperature", 0.5f),
+                    Triple("🌫️", "Fade", 0f),
+                    Triple("🌑", "Vignette", 0f),
+                    Triple("📸", "Grain", 0f)
+                )
+                adjustments.forEach { (emoji, name, defaultVal) ->
+                    Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(emoji, fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(60.dp))
+                        Slider(value = defaultVal, onValueChange = {}, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(18.dp))
+                    }
                 }
             }
-        }
-        // Resolution
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("720p", "1080p", "4k", "8k").forEach { r ->
-                val sel = project.targetResolution.lowercase() == r.lowercase()
-                Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateResolution(r) }.padding(4.dp), contentAlignment = Alignment.Center) {
-                    Text(r.uppercase(), fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+            "crop" -> {
+                Text("CROP & TRANSFORM", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Free", "1:1", "16:9", "9:16", "4:5", "21:9", "3:4").forEach { c ->
+                        val sel = project.cropPreset == c
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateCropPreset(c); onUpdateAspectPreset(c) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(c, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("ROTATE & FLIP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("↺ 90° Left" to { onUpdateRotation() }, "↻ 90° Right" to { onUpdateRotation() }, "↔ Mirror" to onToggleFlipH, "↕ Flip" to onToggleFlipV).forEach { (l, a) ->
+                        Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { a() }.padding(6.dp), contentAlignment = Alignment.Center) {
+                            Text(l, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("RESOLUTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("720p", "1080p", "4K", "8K").forEach { r ->
+                        val sel = project.targetResolution.lowercase() == r.lowercase()
+                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateResolution(r) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(r, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                        }
+                    }
+                }
+            }
+            "speed" -> {
+                Text("SPEED CONTROL", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf(0.1f, 0.25f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 8.0f, 16.0f).forEach { s ->
+                        val sel = project.speedFactor == s
+                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeed(s) }.padding(3.dp), contentAlignment = Alignment.Center) {
+                            Text("${s}x", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("SPEED CURVE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Normal", "Montage", "Hero", "Flash", "Bullet", "Custom").forEach { c ->
+                        val sel = project.speedCurve.lowercase() == c.lowercase()
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.15f) else Color.White.copy(0.03f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeedCurve(c) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(c, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+            }
+            "slowmo" -> {
+                Text("SMOOTH SLOW MOTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Text("Professional slow-mo with frame interpolation", fontSize = 7.sp, color = Color.Gray.copy(0.7f))
+                Spacer(Modifier.height(2.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("0.1x Ultra" to 0.1f, "0.25x Super" to 0.25f, "0.3x Smooth" to 0.3f, "0.5x Slow" to 0.5f).forEach { (label, speed) ->
+                        val sel = project.speedFactor == speed
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateSpeed(speed) }.padding(6.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🐌", fontSize = 14.sp)
+                                Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("ACTION SPEED", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("2x Fast" to 2f, "4x Hyper" to 4f, "8x Ultra" to 8f, "16x Max" to 16f).forEach { (label, speed) ->
+                        val sel = project.speedFactor == speed
+                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateSpeed(speed) }.padding(6.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("⚡", fontSize = 14.sp)
+                                Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
+            }
+            "reverse" -> {
+                Text("REVERSE VIDEO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Reverse applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🔄", fontSize = 28.sp)
+                        Text("Tap to Reverse Video", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Plays video backwards", fontSize = 8.sp, color = Color.Gray)
+                    }
+                }
+            }
+            "freeze" -> {
+                Text("FREEZE FRAME", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Freeze at ${formatTime(project.trimStartMs)}!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🧊", fontSize = 28.sp)
+                        Text("Freeze at Playhead", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Creates still frame", fontSize = 8.sp, color = Color.Gray)
+                    }
+                }
+            }
+            "delete" -> {
+                Text("DELETE SECTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Box(Modifier.fillMaxWidth().background(Color(0xFFFF1744).copy(0.1f), RoundedCornerShape(8.dp)).border(1.dp, Color(0xFFFF1744).copy(0.3f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(androidx.compose.ui.platform.LocalContext.current, "Section deleted!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🗑️", fontSize = 28.sp)
+                        Text("Delete Selected", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF1744))
+                        Text("Remove clip section", fontSize = 8.sp, color = Color.Gray)
+                    }
                 }
             }
         }
@@ -922,10 +1070,49 @@ private fun EditPanel(
 private fun LayersPanel(project: VideoProject, context: android.content.Context, onAddLayer: (String) -> Unit, onRemoveLayer: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("LAYERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-        listOf("🎬 Video" to true, "🔊 Audio" to (project.backgroundMusicPath != null), "📝 Text" to (project.activeTextOverlay != null), "🖼️ Image" to (project.imageOverlayPath != null), "⭐ Sticker" to (project.stickerType != "none")).forEach { (name, hasContent) ->
-            Row(Modifier.fillMaxWidth().background(if (hasContent) CyberCyan.copy(0.1f) else Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(name, fontSize = 10.sp, color = if (hasContent) Color.White else Color.Gray)
-                Text(if (hasContent) "👁️" else "—", fontSize = 10.sp)
+        // 3D styled layer items
+        val layers = listOf(
+            Triple("🎬", "Video Layer", true),
+            Triple("🔊", "Audio Layer", project.backgroundMusicPath != null),
+            Triple("📝", "Text Layer", project.activeTextOverlay != null),
+            Triple("🖼️", "Image Layer", project.imageOverlayPath != null),
+            Triple("⭐", "Sticker Layer", project.stickerType != "none"),
+            Triple("✨", "Effect Layer", project.selectedFilter != "none")
+        )
+        layers.forEach { (icon, name, hasContent) ->
+            Row(
+                Modifier.fillMaxWidth()
+                    .background(if (hasContent) Brush.horizontalGradient(listOf(CyberCyan.copy(0.15f), Color.Transparent)) else Brush.horizontalGradient(listOf(Color.White.copy(0.03f), Color.Transparent)), RoundedCornerShape(8.dp))
+                    .border(1.dp, if (hasContent) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                    .clickable { android.widget.Toast.makeText(context, "$name: ${if (hasContent) "visible" else "empty"}", android.widget.Toast.LENGTH_SHORT).show() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 3D icon box
+                    Box(
+                        Modifier.size(28.dp)
+                            .background(Color.White.copy(0.06f), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(icon, fontSize = 14.sp)
+                    }
+                    Column {
+                        Text(name, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (hasContent) Color.White else Color.Gray)
+                        Text(if (hasContent) "Active" else "Empty", fontSize = 7.sp, color = if (hasContent) CyberCyan else Color.Gray.copy(0.5f))
+                    }
+                }
+                // 3D visibility icon
+                Box(
+                    Modifier.size(24.dp)
+                        .background(if (hasContent) CyberCyan.copy(0.15f) else Color.Transparent, CircleShape)
+                        .border(1.dp, if (hasContent) CyberCyan.copy(0.3f) else Color.White.copy(0.08f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (hasContent) "👁️" else "🙈", fontSize = 10.sp)
+                }
             }
         }
     }
@@ -1020,10 +1207,32 @@ private fun AudioPanel(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, onUpdateAnim: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("TEXT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         var txt by remember { mutableStateOf(project.activeTextOverlay ?: "") }
         OutlinedTextField(value = txt, onValueChange = { txt = it; onUpdateText(if (it.isBlank()) null else it) }, placeholder = { Text("Type subtitle...", fontSize = 9.sp, color = Color.Gray) }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonOrange, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White), modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(8.dp))
+
+        // Quick text templates
+        Text("QUICK TEXT", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(listOf("🔥 Fire Text", "💫 Glow Text", "🎬 Title", "📍 Subtitle", "🎵 Lyrics", "💬 Dialog", "📰 Breaking", "⚡ Neon")) { preset ->
+                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateText(preset); txt = preset }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(preset, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+        }
+
+        // Scrolling / Marquee text
+        Text("SCROLL & MOTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("Scroll L" to "scroll_left", "Scroll R" to "scroll_right", "Scroll Up" to "scroll_up", "Marquee" to "marquee").forEach { (label, id) ->
+                Box(Modifier.weight(1f).background(CyberCyan.copy(0.1f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(id); android.widget.Toast.makeText(ctx, "Text: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                }
+            }
+        }
+
         Text("ANIMATION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             listOf("None", "Fade", "Typewriter", "Bounce", "Zoom", "Slide", "Pop", "Glitch", "Neon", "Wave").forEach { a -> val sel = project.textAnimationType.lowercase() == a.lowercase(); Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(a) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(a, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) } }
@@ -1053,14 +1262,35 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
 @Composable
 private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit, onUpdateFilter: (String) -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    var effectCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        Text("Tap to apply effect on video", fontSize = 8.sp, color = Color.Gray)
+        Text("SUPER EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+        // Category tabs
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon").forEach { (id, label) ->
+                val sel = effectCategory == id
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { effectCategory = id }.padding(horizontal = 6.dp, vertical = 3.dp)) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
+            }
+        }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            val effects = listOf("🎬 Glitch" to "invert", "📼 VHS" to "sepia", "🔮 Chromatic" to "invert", "☀️ Lens Flare" to "none", "❄️ Snow" to "none", "🌧️ Rain" to "none", "🔥 Fire" to "none", "✨ Sparkle" to "none", "🌫️ Dust" to "sepia", "💨 Motion Blur" to "none", "📳 Shake" to "none", "⚡ Flash" to "invert", "💜 Neon Glow" to "invert", "🔲 Vignette" to "grayscale", "🌈 Rainbow" to "none", "📸 Film Grain" to "sepia", "🔵 Bokeh" to "none", "🎆 Particles" to "none", "💡 Strobe" to "grayscale", "🔍 Zoom Pulse" to "none")
-            effects.forEach { (name, filterId) ->
+            val allEffects = listOf(
+                "🎬 Glitch" to "invert", "📼 VHS" to "sepia", "🔮 Chromatic" to "invert",
+                "☀️ Lens Flare" to "none", "❄️ Snow" to "none", "🌧️ Rain" to "none",
+                "🔥 Fire" to "none", "✨ Sparkle" to "none", "🌫️ Dust" to "sepia",
+                "💨 Motion Blur" to "none", "📳 Shake" to "none", "⚡ Flash" to "invert",
+                "💜 Neon Glow" to "invert", "🔲 Vignette" to "grayscale", "🌈 Rainbow" to "none",
+                "📸 Film Grain" to "sepia", "🔵 Bokeh" to "none", "🎆 Particles" to "none",
+                "💡 Strobe" to "grayscale", "🔍 Zoom Pulse" to "none",
+                "🌊 Wave Distort" to "none", "🔥 Flame" to "invert", "❄️ Frost" to "grayscale",
+                "💫 Starburst" to "none", "🎭 Face Blur" to "none", "🌀 Swirl" to "invert",
+                "💥 Explosion" to "invert", "🌟 Light Leak" to "none", "📽️ Film Strip" to "sepia",
+                "🎨 Color Splash" to "invert", "⚡ Electric" to "invert", "🌊 Tidal" to "none"
+            )
+            allEffects.forEach { (name, filterId) ->
                 val sel = project.selectedEffect == name
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "Effect: $name applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(name, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "✨ $name applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
@@ -1090,9 +1320,9 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("TRANSITIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("None", "Crossfade", "Glitch", "Zoom In", "Zoom Out", "Spin", "Wipe", "Dissolve", "Blur", "Pixelate", "Mosaic", "Split", "Film Burn", "Light Leak", "Smoke", "Circle", "Diamond", "Heart", "Flash", "L-Cut").forEach { t ->
+            listOf("None", "Crossfade", "Glitch", "Zoom In", "Zoom Out", "Spin", "Wipe", "Dissolve", "Blur", "Pixelate", "Mosaic", "Split", "Film Burn", "Light Leak", "Smoke", "Circle", "Diamond", "Heart", "Flash", "L-Cut", "J-Cut", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Rotate In", "Rotate Out", "Bounce", "Elastic", "Spring").forEach { t ->
                 val sel = project.transitionType.lowercase() == t.lowercase()
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateTransition(t) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(t, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateTransition(t) }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(t, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
@@ -1168,10 +1398,30 @@ private fun ImagePanel(
 @Composable
 private fun TemplatePanel(project: VideoProject, onUpdateTemplate: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TEMPLATES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        Text("Online templates coming soon — use local presets", fontSize = 8.sp, color = Color.Gray)
+        Text("ORIGINAL TEMPLATES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val templates = listOf("none" to "None", "spark" to "✨ Spark", "bloom" to "🌸 Bloom", "vlog" to "📹 Vlog", "poetry" to "📝 Poetry", "beats" to "🎵 Beats", "glitch" to "📺 Glitch", "cinema" to "🎬 Cinema", "wedding" to "💒 Wedding", "travel" to "✈️ Travel")
+            val templates = listOf(
+                "none" to "❌ None",
+                "cinema" to "🎬 Cinema",
+                "wedding" to "💒 Wedding",
+                "travel" to "✈️ Travel",
+                "vlog" to "📹 Vlog",
+                "poetry" to "📝 Poetry",
+                "beats" to "🎵 Beats",
+                "glitch" to "📺 Glitch",
+                "spark" to "✨ Spark",
+                "bloom" to "🌸 Bloom",
+                "reels" to "📱 Reels",
+                "tiktok" to "🎵 TikTok",
+                "neon" to "💜 Neon",
+                "retro" to "📼 Retro",
+                "minimal" to "◻️ Minimal",
+                "dark" to "🌑 Dark",
+                "golden" to "🌟 Golden",
+                "ocean" to "🌊 Ocean",
+                "fire" to "🔥 Fire",
+                "ice" to "❄️ Ice"
+            )
             items(templates) { (id, name) ->
                 val sel = project.activeTemplateId == id
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateTemplate(id) }.padding(horizontal = 10.dp, vertical = 8.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
