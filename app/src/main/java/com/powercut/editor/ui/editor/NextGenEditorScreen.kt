@@ -464,118 +464,130 @@ private fun EditingCompletePage(
 
         Spacer(Modifier.height(8.dp))
 
-        // Video Preview (smaller)
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).weight(1f), contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier.fillMaxHeight().aspectRatio(aspect).clip(RoundedCornerShape(16.dp)).background(Color.Black)
-                    .border(2.dp, CyberCyan.copy(0.3f), RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                AndroidView(
-                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
-                    modifier = Modifier.fillMaxSize()
-                )
-                // Play overlay
+        // Scrollable middle content
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
+        ) {
+            // Video Preview (smaller)
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(200.dp), contentAlignment = Alignment.Center) {
                 Box(
-                    modifier = Modifier.size(56.dp).background(Color.White.copy(0.2f), CircleShape)
-                        .border(2.dp, Color.White.copy(0.4f), CircleShape).clickable { onPlayPause },
+                    modifier = Modifier.fillMaxHeight().aspectRatio(aspect).clip(RoundedCornerShape(16.dp)).background(Color.Black)
+                        .border(2.dp, CyberCyan.copy(0.3f), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(28.dp))
+                    AndroidView(
+                        factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    // Play overlay
+                    Box(
+                        modifier = Modifier.size(56.dp).background(Color.White.copy(0.2f), CircleShape)
+                            .border(2.dp, Color.White.copy(0.4f), CircleShape).clickable { onPlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(28.dp))
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Project summary
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(12.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    SummaryItem("⏱️", "Duration", formatTime(durationMs))
+                    SummaryItem("📐", "Aspect", project.aspectPreset)
+                    SummaryItem("🎬", "Res", project.targetResolution.uppercase())
+                    SummaryItem("⚡", "Speed", "${project.speedFactor}x")
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Export format options
+            var selectedFormat by remember { mutableStateOf("mp4_hd") }
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("EXPORT FORMAT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("mp4_hd" to "📹 MP4-HD", "mp4_4k" to "🎬 MP4 4K", "mp4_8k" to "💎 MP4 8K", "webm" to "🌐 WebM", "gif" to "🎞️ GIF").forEach { (id, label) ->
+                            val sel = selectedFormat == id
+                            Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedFormat = id }.padding(4.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text("UPSCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("none" to "Original", "2x" to "2x AI", "4x" to "4x Ultra").forEach { (id, label) ->
+                            Box(Modifier.weight(1f).background(NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Upscale: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+        } // end scrollable content
+
+        // ═══ STICKY IMPORT + EXPORT BUTTONS (always visible at bottom) ═══
+        Box(
+            modifier = Modifier.fillMaxWidth()
+                .background(Color(0xFF0B0D12))
+                .border(1.dp, Color.White.copy(0.05f))
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // IMPORT BUTTON
+                Box(
+                    modifier = Modifier.weight(1f).height(54.dp)
+                        .glassmorphic(shape = RoundedCornerShape(14.dp))
+                        .border(1.dp, CyberCyan.copy(0.4f), RoundedCornerShape(14.dp))
+                        .tactileClick(onClick = onImport)
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text("IMPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                            Text("Add more clips", fontSize = 9.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                // EXPORT BUTTON
+                Box(
+                    modifier = Modifier.weight(1f).height(54.dp)
+                        .neonGlow(AccentSecondary, RoundedCornerShape(14.dp), 1.5.dp)
+                        .background(premiumAccentGradient, RoundedCornerShape(14.dp))
+                        .tactileClick(onClick = onExport)
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("🎬", fontSize = 18.sp)
+                        Column {
+                            Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, letterSpacing = 0.5.sp)
+                            Text("Save video", fontSize = 9.sp, color = Color.White.copy(0.8f))
+                        }
+                    }
                 }
             }
         }
 
         Spacer(Modifier.height(8.dp))
-
-        // Project summary
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(12.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                SummaryItem("⏱️", "Duration", formatTime(durationMs))
-                SummaryItem("📐", "Aspect", project.aspectPreset)
-                SummaryItem("🎬", "Res", project.targetResolution.uppercase())
-                SummaryItem("⚡", "Speed", "${project.speedFactor}x")
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // Export format options
-        var selectedFormat by remember { mutableStateOf("mp4_hd") }
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("EXPORT FORMAT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("mp4_hd" to "📹 MP4-HD", "mp4_4k" to "🎬 MP4 4K", "mp4_8k" to "💎 MP4 8K", "webm" to "🌐 WebM", "gif" to "🎞️ GIF").forEach { (id, label) ->
-                        val sel = selectedFormat == id
-                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedFormat = id }.padding(4.dp), contentAlignment = Alignment.Center) {
-                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(2.dp))
-                Text("UPSCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("none" to "Original", "2x" to "2x AI", "4x" to "4x Ultra").forEach { (id, label) ->
-                        Box(Modifier.weight(1f).background(NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Upscale: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
-                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // ═══ IMPORT + EXPORT BUTTONS ═══
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // IMPORT BUTTON
-            Box(
-                modifier = Modifier.weight(1f).height(56.dp)
-                    .glassmorphic(shape = RoundedCornerShape(16.dp))
-                    .border(1.dp, CyberCyan.copy(0.4f), RoundedCornerShape(16.dp))
-                    .tactileClick(onClick = onImport)
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(22.dp))
-                    Column {
-                        Text("IMPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
-                        Text("Add more clips", fontSize = 9.sp, color = Color.Gray)
-                    }
-                }
-            }
-
-            // EXPORT BUTTON
-            Box(
-                modifier = Modifier.weight(1f).height(56.dp)
-                    .neonGlow(AccentSecondary, RoundedCornerShape(16.dp), 1.5.dp)
-                    .background(premiumAccentGradient, RoundedCornerShape(16.dp))
-                    .tactileClick(onClick = onExport)
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("🎬", fontSize = 20.sp)
-                    Column {
-                        Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, letterSpacing = 0.5.sp)
-                        Text("Save video", fontSize = 9.sp, color = Color.White.copy(0.8f))
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -1005,12 +1017,12 @@ private fun EditPanel(
             }
             "slowmo" -> {
                 Text("SMOOTH SLOW MOTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Text("Professional slow-mo with frame interpolation", fontSize = 7.sp, color = Color.Gray.copy(0.7f))
+                Text("Tap to apply · Tap again to remove", fontSize = 7.sp, color = Color.Gray.copy(0.7f))
                 Spacer(Modifier.height(2.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("0.1x Ultra" to 0.1f, "0.25x Super" to 0.25f, "0.3x Smooth" to 0.3f, "0.5x Slow" to 0.5f).forEach { (label, speed) ->
                         val sel = project.speedFactor == speed
-                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateSpeed(speed) }.padding(6.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateSpeed(if (sel) 1.0f else speed) }.padding(6.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("🐌", fontSize = 14.sp)
                                 Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White, textAlign = TextAlign.Center)
@@ -1023,7 +1035,7 @@ private fun EditPanel(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("2x Fast" to 2f, "4x Hyper" to 4f, "8x Ultra" to 8f, "16x Max" to 16f).forEach { (label, speed) ->
                         val sel = project.speedFactor == speed
-                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateSpeed(speed) }.padding(6.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateSpeed(if (sel) 1.0f else speed) }.padding(6.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("⚡", fontSize = 14.sp)
                                 Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White, textAlign = TextAlign.Center)
@@ -1033,22 +1045,24 @@ private fun EditPanel(
                 }
             }
             "reverse" -> {
+                var isReversed by remember { mutableStateOf(false) }
                 Text("REVERSE VIDEO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(ctx, "Reverse applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().background(if (isReversed) CyberCyan.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (isReversed) CyberCyan.copy(0.3f) else Color.Transparent, RoundedCornerShape(8.dp)).clickable { isReversed = !isReversed; android.widget.Toast.makeText(ctx, if (isReversed) "Reverse applied!" else "Reverse removed!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🔄", fontSize = 28.sp)
-                        Text("Tap to Reverse Video", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("Plays video backwards", fontSize = 8.sp, color = Color.Gray)
+                        Text(if (isReversed) "Tap to Remove Reverse" else "Tap to Reverse Video", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isReversed) CyberCyan else Color.White)
+                        Text(if (isReversed) "Reverse is active" else "Plays video backwards", fontSize = 8.sp, color = if (isReversed) CyberCyan else Color.Gray)
                     }
                 }
             }
             "freeze" -> {
+                var isFrozen by remember { mutableStateOf(false) }
                 Text("FREEZE FRAME", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(ctx, "Freeze at ${formatTime(project.trimStartMs)}!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().background(if (isFrozen) CyberCyan.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (isFrozen) CyberCyan.copy(0.3f) else Color.Transparent, RoundedCornerShape(8.dp)).clickable { isFrozen = !isFrozen; android.widget.Toast.makeText(ctx, if (isFrozen) "Freeze at ${formatTime(project.trimStartMs)}!" else "Freeze removed!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🧊", fontSize = 28.sp)
-                        Text("Freeze at Playhead", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("Creates still frame", fontSize = 8.sp, color = Color.Gray)
+                        Text(if (isFrozen) "Tap to Remove Freeze" else "Freeze at Playhead", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isFrozen) CyberCyan else Color.White)
+                        Text(if (isFrozen) "Freeze is active" else "Creates still frame", fontSize = 8.sp, color = if (isFrozen) CyberCyan else Color.Gray)
                     }
                 }
             }
@@ -1126,11 +1140,11 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
 private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, onUpdateSpeedCurve: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("SPEED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        // Super slow-mo to ultra fast
+        // Super slow-mo to ultra fast — toggle: tap to apply, tap again to remove
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             listOf(0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f).forEach { s ->
                 val sel = project.speedFactor == s
-                Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeed(s) }.padding(3.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeed(if (sel && s != 1.0f) 1.0f else s) }.padding(3.dp), contentAlignment = Alignment.Center) {
                     Text("${s}x", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                 }
             }
@@ -1140,7 +1154,7 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("Standard", "Montage", "Hero", "Flash", "Custom").forEach { c ->
                 val sel = project.speedCurve.lowercase() == c.lowercase()
-                Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.15f) else Color.White.copy(0.03f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeedCurve(c) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.15f) else Color.White.copy(0.03f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeedCurve(if (sel) "constant" else c) }.padding(4.dp), contentAlignment = Alignment.Center) {
                     Text(c, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                 }
             }
@@ -1252,8 +1266,7 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("none" to "Original", "grayscale" to "B&W", "sepia" to "Sepia", "invert" to "Invert", "warm" to "Warm", "cool" to "Cool", "vintage" to "Vintage", "dramatic" to "Drama").forEach { (id, name) ->
                 val sel = project.selectedFilter.lowercase() == id
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFilter(id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
-            }
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFilter(if (sel) "none" else id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
         }
     }
 }
@@ -1292,7 +1305,10 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
             )
             allEffects.forEach { (name, filterId) ->
                 val sel = project.selectedEffect == name
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "✨ $name applied!", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                    if (sel) { onUpdateEffect("none"); onUpdateFilter("none"); android.widget.Toast.makeText(ctx, "✨ Effect removed!", android.widget.Toast.LENGTH_SHORT).show() }
+                    else { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "✨ $name applied!", android.widget.Toast.LENGTH_SHORT).show() }
+                }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
@@ -1308,7 +1324,7 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("None" to "none", "🔥 Fire" to "fire", "⭐ Star" to "star", "❤️ Heart" to "heart", "⚡ Glow" to "glow", "💎 Diamond" to "diamond", "🎵 Music" to "music", "👑 Crown" to "crown", "💫 Sparkle" to "sparkle", "🎯 Target" to "target", "🏆 Trophy" to "trophy", "💀 Skull" to "skull").forEach { (name, id) ->
                 val sel = project.stickerType == id
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSticker(id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSticker(if (sel) "none" else id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
             }
         }
     }
@@ -1324,7 +1340,7 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             listOf("None", "Crossfade", "Glitch", "Zoom In", "Zoom Out", "Spin", "Wipe", "Dissolve", "Blur", "Pixelate", "Mosaic", "Split", "Film Burn", "Light Leak", "Smoke", "Circle", "Diamond", "Heart", "Flash", "L-Cut", "J-Cut", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Rotate In", "Rotate Out", "Bounce", "Elastic", "Spring").forEach { t ->
                 val sel = project.transitionType.lowercase() == t.lowercase()
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateTransition(t) }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(t, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateTransition(if (sel) "none" else t) }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(t, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
@@ -1357,7 +1373,7 @@ private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
             listOf("Circle Mask", "Heart Mask", "Star Mask", "Hexagon", "Diamond", "Triangle", "Vignette", "Film Burn", "Light Leak", "Lens Flare", "Smoke", "Water", "Fire", "Particles", "Bokeh", "Glitch 3D", "Chromatic", "Anamorphic", "Cinematic Bars", "Color Splash").forEach { m ->
                 val maskId = m.lowercase().replace(" ", "_")
                 val sel = project.active3DShapeMask == maskId
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdate3D(maskId) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(m, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdate3D(if (sel) "none" else maskId) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(m, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
@@ -1426,7 +1442,7 @@ private fun TemplatePanel(project: VideoProject, onUpdateTemplate: (String) -> U
             )
             items(templates) { (id, name) ->
                 val sel = project.activeTemplateId == id
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateTemplate(id) }.padding(horizontal = 10.dp, vertical = 8.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateTemplate(if (sel) "none" else id) }.padding(horizontal = 10.dp, vertical = 8.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
