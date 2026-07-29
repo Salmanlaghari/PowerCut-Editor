@@ -51,6 +51,9 @@ class MainActivity : ComponentActivity() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
         window.setBackgroundDrawableResource(android.R.color.black)
 
+        // Request storage permissions on startup
+        requestStoragePermissions()
+
         // Load AdMob ads
         loadAppOpenAd()
         loadInterstitialAd()
@@ -298,6 +301,49 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private fun requestStoragePermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+: Request granular media permissions
+            val permissions = mutableListOf<String>()
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+            }
+            if (permissions.isNotEmpty()) {
+                requestPermissions(permissions.toTypedArray(), 1001)
+            }
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            // Android 11-12: Request MANAGE_EXTERNAL_STORAGE for full access
+            if (!android.os.Environment.isExternalStorageManager()) {
+                try {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.data = android.net.Uri.parse("package:$packageName")
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+        } else {
+            // Android 10 and below: Request legacy storage permissions
+            val permissions = mutableListOf<String>()
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            if (permissions.isNotEmpty()) {
+                requestPermissions(permissions.toTypedArray(), 1002)
             }
         }
     }
