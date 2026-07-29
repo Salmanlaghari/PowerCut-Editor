@@ -334,7 +334,7 @@ fun ExportScreen(
                         Spacer(Modifier.height(16.dp))
                         Text(LanguageHelper.getString(R.string.export_failed, language), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
                         Spacer(Modifier.height(8.dp))
-                        Text(exportState.message, fontSize = 12.sp, color = Color.LightGray, textAlign = TextAlign.Center)
+                        Text("Video processing failed. Try lowering resolution or free up storage space.", fontSize = 12.sp, color = Color.LightGray, textAlign = TextAlign.Center)
                     }
                 }
 

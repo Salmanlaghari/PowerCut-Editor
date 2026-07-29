@@ -934,6 +934,27 @@ private fun EditPanel(
                         }
                     }
                 }
+
+                // Manual Crop Sliders
+                Spacer(Modifier.height(4.dp))
+                Text("MANUAL CROP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                var cropLeft by remember { mutableFloatStateOf(0f) }
+                var cropTop by remember { mutableFloatStateOf(0f) }
+                var cropRight by remember { mutableFloatStateOf(1f) }
+                var cropBottom by remember { mutableFloatStateOf(1f) }
+                listOf(
+                    Triple("⬅️ Left", cropLeft, { v: Float -> cropLeft = v }),
+                    Triple("⬆️ Top", cropTop, { v: Float -> cropTop = v }),
+                    Triple("➡️ Right", cropRight, { v: Float -> cropRight = v }),
+                    Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v })
+                ).forEach { (label, value, onChange) ->
+                    Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(55.dp))
+                        Slider(value = value, onValueChange = onChange, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(16.dp))
+                        Text("${(value * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
+                    }
+                }
+
                 Spacer(Modifier.height(4.dp))
                 Text("ROTATE & FLIP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -959,11 +980,27 @@ private fun EditPanel(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     listOf(0.1f, 0.25f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 8.0f, 16.0f).forEach { s ->
                         val sel = project.speedFactor == s
-                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeed(s) }.padding(3.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeed(if (sel && s != 1.0f) 1.0f else s) }.padding(3.dp), contentAlignment = Alignment.Center) {
                             Text("${s}x", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                         }
                     }
                 }
+                // Manual Speed Slider
+                Spacer(Modifier.height(4.dp))
+                Text("MANUAL SPEED: ${String.format("%.2f", project.speedFactor)}x", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Slider(
+                    value = project.speedFactor,
+                    onValueChange = { onUpdateSpeed(String.format("%.2f", it).toFloat()) },
+                    valueRange = 0.1f..16f,
+                    colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)),
+                    modifier = Modifier.fillMaxWidth().height(20.dp)
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0.1x", fontSize = 7.sp, color = Color.Gray)
+                    Text("1.0x", fontSize = 7.sp, color = CyberCyan)
+                    Text("16x", fontSize = 7.sp, color = Color.Gray)
+                }
+
                 Spacer(Modifier.height(4.dp))
                 Text("SPEED CURVE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1100,7 +1137,7 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
 private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, onUpdateSpeedCurve: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("SPEED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        // Super slow-mo to ultra fast — toggle: tap to apply, tap again to remove
+        // Preset buttons — toggle
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             listOf(0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f).forEach { s ->
                 val sel = project.speedFactor == s
@@ -1108,6 +1145,20 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
                     Text("${s}x", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                 }
             }
+        }
+        // Manual Speed Slider
+        Text("MANUAL: ${String.format("%.2f", project.speedFactor)}x", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        Slider(
+            value = project.speedFactor,
+            onValueChange = { onUpdateSpeed(String.format("%.2f", it).toFloat()) },
+            valueRange = 0.1f..16f,
+            colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)),
+            modifier = Modifier.fillMaxWidth().height(20.dp)
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("0.1x", fontSize = 7.sp, color = Color.Gray)
+            Text("1.0x", fontSize = 7.sp, color = CyberCyan)
+            Text("16x", fontSize = 7.sp, color = Color.Gray)
         }
         // Speed curves
         Text("SPEED CURVE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
@@ -1128,6 +1179,7 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
 private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onUpdateAspect: (String) -> Unit, onRotate: () -> Unit, onFlipH: () -> Unit, onFlipV: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("CROP & TRANSFORM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        // Preset crop buttons
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("Free", "1:1", "16:9", "9:16", "4:5", "21:9").forEach { c ->
                 val sel = project.cropPreset == c
@@ -1136,6 +1188,25 @@ private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onU
                 }
             }
         }
+        // Manual Crop Sliders
+        Text("MANUAL CROP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        var cropLeft by remember { mutableFloatStateOf(0f) }
+        var cropTop by remember { mutableFloatStateOf(0f) }
+        var cropRight by remember { mutableFloatStateOf(1f) }
+        var cropBottom by remember { mutableFloatStateOf(1f) }
+        listOf(
+            Triple("⬅️ Left", cropLeft, { v: Float -> cropLeft = v }),
+            Triple("⬆️ Top", cropTop, { v: Float -> cropTop = v }),
+            Triple("➡️ Right", cropRight, { v: Float -> cropRight = v }),
+            Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v })
+        ).forEach { (label, value, onChange) ->
+            Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(55.dp))
+                Slider(value = value, onValueChange = onChange, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(16.dp))
+                Text("${(value * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
+            }
+        }
+        // Rotate & Flip
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("↻ Rotate" to onRotate, "↔ Flip H" to onFlipH, "↕ Flip V" to onFlipV).forEach { (l, a) ->
                 Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { a() }.padding(6.dp), contentAlignment = Alignment.Center) {
