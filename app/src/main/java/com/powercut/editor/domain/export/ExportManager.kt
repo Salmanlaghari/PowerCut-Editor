@@ -45,12 +45,15 @@ class ExportManager @Inject constructor(
             if (!secureDir.exists()) {
                 secureDir.mkdirs()
             }
-            val availableSpace = secureDir.freeSpace
-            val minRequiredSpace = 100 * 1024 * 1024L // 100 MB minimum
+
+            // Check ACTUAL device storage, not cache dir
+            val storageDir = android.os.Environment.getExternalStorageDirectory()
+            val availableSpace = storageDir.freeSpace
+            val minRequiredSpace = 200 * 1024 * 1024L // 200 MB minimum
             if (availableSpace < minRequiredSpace) {
                 val availableMB = availableSpace / (1024 * 1024)
                 _exportState.value = Resource.Error(
-                    "Storage full! Only ${availableMB}MB available. Free up at least 100MB and try again.",
+                    "Storage full! Only ${availableMB}MB available. Free up at least 200MB and try again.",
                     Exception("Insufficient storage: ${availableMB}MB available")
                 )
                 return

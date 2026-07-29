@@ -51,18 +51,21 @@ class MainActivity : ComponentActivity() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
         window.setBackgroundDrawableResource(android.R.color.black)
 
-        // Request storage permissions on startup
-        requestStoragePermissions()
-
         // Load AdMob ads
         loadAppOpenAd()
         loadInterstitialAd()
         loadRewardedAd()
 
+        // Request permissions AFTER content is set (non-blocking)
         setContent {
             val language by viewModel.currentLanguage.collectAsState()
             val layoutDirection = LanguageHelper.getLayoutDirection(language)
             val isDarkTheme by viewModel.isDarkThemeEnabled.collectAsState()
+
+            // Request permissions after first composition
+            LaunchedEffect(Unit) {
+                requestStoragePermissions()
+            }
 
             // Enforce correct RTL/LTR direction dynamically for multi-lingual support
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -321,26 +324,16 @@ class MainActivity : ComponentActivity() {
             if (permissions.isNotEmpty()) {
                 requestPermissions(permissions.toTypedArray(), 1001)
             }
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            // Android 11-12: Request MANAGE_EXTERNAL_STORAGE for full access
-            if (!android.os.Environment.isExternalStorageManager()) {
-                try {
-                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = android.net.Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
-                }
-            }
         } else {
-            // Android 10 and below: Request legacy storage permissions
+            // Android 12 and below: Request legacy storage permissions
             val permissions = mutableListOf<String>()
             if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
             }
-            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
+                if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
             }
             if (permissions.isNotEmpty()) {
                 requestPermissions(permissions.toTypedArray(), 1002)
