@@ -432,11 +432,52 @@ fun DashboardView(
     language: String,
     onTemplateSelected: (Template) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             onVideoSelected(uri)
+        }
+    }
+
+    // Permission launcher for storage access
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            checkPermissionAndPick()
+        }
+    }
+
+    // Check and request permission before picking video
+    fun checkPermissionAndPick() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+: Check READ_MEDIA_VIDEO
+            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.READ_MEDIA_VIDEO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                checkPermissionAndPick()
+            } else {
+                permissionLauncher.launch(arrayOf(
+                    android.Manifest.permission.READ_MEDIA_VIDEO,
+                    android.Manifest.permission.READ_MEDIA_IMAGES
+                ))
+            }
+        } else {
+            // Android 12 and below: Check READ_EXTERNAL_STORAGE
+            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                checkPermissionAndPick()
+            } else {
+                permissionLauncher.launch(arrayOf(
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE
+                ))
+            }
         }
     }
 
@@ -461,7 +502,7 @@ fun DashboardView(
                         shape = RoundedCornerShape(24.dp)
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
-                    .tactileClick { pickerLauncher.launch("video/*") },
+                    .tactileClick { checkPermissionAndPick() },
                 contentAlignment = Alignment.Center
             ) {
                 Row(
