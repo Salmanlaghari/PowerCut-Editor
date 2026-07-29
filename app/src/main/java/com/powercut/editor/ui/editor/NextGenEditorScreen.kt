@@ -1267,6 +1267,7 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
             listOf("none" to "Original", "grayscale" to "B&W", "sepia" to "Sepia", "invert" to "Invert", "warm" to "Warm", "cool" to "Cool", "vintage" to "Vintage", "dramatic" to "Drama").forEach { (id, name) ->
                 val sel = project.selectedFilter.lowercase() == id
                 Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFilter(if (sel) "none" else id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
+            }
         }
     }
 }
