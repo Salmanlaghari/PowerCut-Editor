@@ -16,8 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.ui.theme.*
 
-private data class ImgParam(val key: String, val emoji: String, val label: String, val value: Float, val range: ClosedFloatingPointRange<Float>, val onUpdate: (Float) -> Unit)
-
 @Composable
 fun ImageEditorPanel(
     brightness: Float,
@@ -48,25 +46,8 @@ fun ImageEditorPanel(
 ) {
     var activeParam by remember { mutableStateOf("brightness") }
 
-    val params = listOf(
-        ImgParam("brightness", "☀️", "Brightness", brightness, -1f..1f, onUpdateBrightness),
-        ImgParam("contrast", "🔲", "Contrast", contrast, 0f..2f, onUpdateContrast),
-        ImgParam("saturation", "🎨", "Saturation", saturation, 0f..2f, onUpdateSaturation),
-        ImgParam("exposure", "💡", "Exposure", exposure, -1f..1f, onUpdateExposure),
-        ImgParam("highlights", "✨", "Highlights", highlights, -1f..1f, onUpdateHighlights),
-        ImgParam("shadows", "🌑", "Shadows", shadows, -1f..1f, onUpdateShadows),
-        ImgParam("temperature", "🌡️", "Temperature", temperature, -1f..1f, onUpdateTemperature),
-        ImgParam("blur", "🔵", "Blur", blur, 0f..25f, onUpdateBlur),
-        ImgParam("sharpen", "🔪", "Sharpen", sharpen, 0f..1f, onUpdateSharpen),
-        ImgParam("vignette", "⭕", "Vignette", vignette, 0f..1f, onUpdateVignette),
-        ImgParam("grain", "📺", "Grain", grain, 0f..1f, onUpdateGrain),
-        ImgParam("fade", "🌫️", "Fade", fade, 0f..1f, onUpdateFade),
-    )
-
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
+        modifier = Modifier.fillMaxSize().padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
@@ -76,8 +57,7 @@ fun ImageEditorPanel(
         ) {
             Text("IMAGE EDITOR", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                modifier = Modifier.clip(RoundedCornerShape(6.dp))
                     .background(Color.White.copy(alpha = 0.04f))
                     .clickable { onResetAll() }
                     .padding(horizontal = 8.dp, vertical = 3.dp)
@@ -86,91 +66,73 @@ fun ImageEditorPanel(
             }
         }
 
-        val rows = params.chunked(2)
-        rows.forEach { row ->
+        // Param buttons in rows of 3
+        val paramKeys = listOf("brightness", "contrast", "saturation", "exposure", "highlights", "shadows", "temperature", "blur", "sharpen", "vignette", "grain", "fade")
+        val paramEmojis = listOf("☀️", "🔲", "🎨", "💡", "✨", "🌑", "🌡️", "🔵", "🔪", "⭕", "📺", "🌫️")
+        val paramLabels = listOf("Bright", "Contrast", "Satur", "Expose", "High", "Shadow", "Temp", "Blur", "Sharp", "Vign", "Grain", "Fade")
+
+        val rows = paramKeys.indices.toList().chunked(3)
+        rows.forEach { rowIndices ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                row.forEach { param ->
-                    val isSel = activeParam == param.key
-                    val displayVal = if (param.key == "blur" || param.key == "grain" || param.key == "fade" || param.key == "vignette" || param.key == "sharpen") {
-                        "${(param.value * 100).toInt()}%"
-                    } else {
-                        String.format("%.1f", param.value)
-                    }
+                rowIndices.forEach { idx ->
+                    val key = paramKeys[idx]
+                    val isSel = activeParam == key
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                        modifier = Modifier.weight(1f).height(32.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(if (isSel) NeonOrange.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.03f))
-                            .border(1.dp, if (isSel) NeonOrange else Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
-                            .clickable { activeParam = param.key }
-                            .padding(horizontal = 6.dp),
+                            .border(1.dp, if (isSel) NeonOrange else Color.White.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
+                            .clickable { activeParam = key },
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("${param.emoji} ${param.label}", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
-                            Text(displayVal, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.Gray)
-                        }
+                        Text("${paramEmojis[idx]} ${paramLabels[idx]}", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
                     }
                 }
-                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                repeat(3 - rowIndices.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        val activeParamData = params.find { it.key == activeParam }
-        if (activeParamData != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.03f))
-                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
-                    .padding(10.dp)
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("${activeParamData.emoji} ${activeParamData.label}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(
-                            if (activeParamData.key == "blur" || activeParamData.key == "grain" || activeParamData.key == "fade" || activeParamData.key == "vignette" || activeParamData.key == "sharpen")
-                                "${(activeParamData.value * 100).toInt()}%"
-                            else
-                                String.format("%.2f", activeParamData.value),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CyberCyan
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Slider(
-                        value = activeParamData.value,
-                        onValueChange = activeParamData.onUpdate,
-                        valueRange = activeParamData.range,
-                        colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
-                        modifier = Modifier.height(24.dp)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.04f))
-                            .clickable { activeParamData.onUpdate((activeParamData.range.start + activeParamData.range.endInclusive) / 2f) }
-                            .padding(horizontal = 12.dp, vertical = 3.dp)
-                    ) {
-                        Text("RESET ${activeParamData.label.uppercase()}", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                    }
+        // Active slider
+        val (currentValue, currentRange, currentOnUpdate) = when (activeParam) {
+            "brightness" -> Triple(brightness, -1f..1f, onUpdateBrightness)
+            "contrast" -> Triple(contrast, 0f..2f, onUpdateContrast)
+            "saturation" -> Triple(saturation, 0f..2f, onUpdateSaturation)
+            "exposure" -> Triple(exposure, -1f..1f, onUpdateExposure)
+            "highlights" -> Triple(highlights, -1f..1f, onUpdateHighlights)
+            "shadows" -> Triple(shadows, -1f..1f, onUpdateShadows)
+            "temperature" -> Triple(temperature, -1f..1f, onUpdateTemperature)
+            "blur" -> Triple(blur, 0f..25f, onUpdateBlur)
+            "sharpen" -> Triple(sharpen, 0f..1f, onUpdateSharpen)
+            "vignette" -> Triple(vignette, 0f..1f, onUpdateVignette)
+            "grain" -> Triple(grain, 0f..1f, onUpdateGrain)
+            "fade" -> Triple(fade, 0f..1f, onUpdateFade)
+            else -> Triple(brightness, -1f..1f, onUpdateBrightness)
+        }
+
+        Box(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.03f))
+                .padding(8.dp)
+        ) {
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(activeParam.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(String.format("%.2f", currentValue), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
                 }
+                Slider(
+                    value = currentValue,
+                    onValueChange = currentOnUpdate,
+                    valueRange = currentRange,
+                    colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
+                    modifier = Modifier.height(24.dp)
+                )
             }
         }
     }
