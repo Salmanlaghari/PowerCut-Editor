@@ -454,7 +454,6 @@ private fun EditingCompletePage(
                     Text("Ready to export", fontSize = 10.sp, color = CyberCyan)
                 }
             }
-            // Back to Edit button
             Box(
                 modifier = Modifier.glassmorphic(shape = RoundedCornerShape(16.dp)).tactileClick(onClick = onBackToEdit).padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
@@ -462,41 +461,24 @@ private fun EditingCompletePage(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        // Scrollable middle content
+        // EVERYTHING in one scrollable column
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)
         ) {
-            // Video Preview (smaller)
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(200.dp), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier.fillMaxHeight().aspectRatio(aspect).clip(RoundedCornerShape(16.dp)).background(Color.Black)
-                        .border(2.dp, CyberCyan.copy(0.3f), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AndroidView(
-                        factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    // Play overlay
-                    Box(
-                        modifier = Modifier.size(56.dp).background(Color.White.copy(0.2f), CircleShape)
-                            .border(2.dp, Color.White.copy(0.4f), CircleShape).clickable { onPlayPause() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(28.dp))
-                    }
+            Spacer(Modifier.height(8.dp))
+
+            // Video Preview
+            Box(modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black).border(2.dp, CyberCyan.copy(0.3f), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                AndroidView(factory = { c -> PlayerView(c).apply { player = exoPlayer; useController = false } }, modifier = Modifier.fillMaxSize())
+                Box(modifier = Modifier.size(48.dp).background(Color.White.copy(0.2f), CircleShape).border(2.dp, Color.White.copy(0.4f), CircleShape).clickable { onPlayPause() }, contentAlignment = Alignment.Center) {
+                    Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // Project summary
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                    .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(12.dp)
-            ) {
+            // Summary
+            Box(modifier = Modifier.fillMaxWidth().glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                     SummaryItem("⏱️", "Duration", formatTime(durationMs))
                     SummaryItem("📐", "Aspect", project.aspectPreset)
@@ -505,14 +487,11 @@ private fun EditingCompletePage(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // Export format options
+            // Export format
             var selectedFormat by remember { mutableStateOf("mp4_hd") }
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                    .glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("EXPORT FORMAT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -535,52 +514,39 @@ private fun EditingCompletePage(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
-        } // end scrollable content
+            Spacer(Modifier.height(16.dp))
 
-        // ═══ STICKY IMPORT + EXPORT BUTTONS (always visible at bottom) ═══
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .background(Color(0xFF0B0D12))
-                .border(1.dp, Color.White.copy(0.05f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // IMPORT BUTTON
+            // ═══ IMPORT BUTTON ═══
             Box(
-                modifier = Modifier.weight(1f).height(56.dp)
+                modifier = Modifier.fillMaxWidth().height(56.dp)
                     .background(Color(0xFF1A1C24), RoundedCornerShape(16.dp))
-                    .border(1.5.dp, CyberCyan, RoundedCornerShape(16.dp))
-                    .clickable { onImport() }
-                    .padding(horizontal = 8.dp),
+                    .border(2.dp, CyberCyan, RoundedCornerShape(16.dp))
+                    .clickable { onImport() },
                 contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(22.dp))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("IMPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
-                        Text("Add clips", fontSize = 8.sp, color = Color.Gray)
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(24.dp))
+                    Text("IMPORT", fontWeight = FontWeight.ExtraBold, color = Color.White, fontSize = 15.sp)
                 }
             }
 
-            // EXPORT BUTTON
+            Spacer(Modifier.height(10.dp))
+
+            // ═══ EXPORT BUTTON ═══
             Box(
-                modifier = Modifier.weight(1f).height(56.dp)
+                modifier = Modifier.fillMaxWidth().height(56.dp)
                     .background(premiumAccentGradient, RoundedCornerShape(16.dp))
-                    .border(1.5.dp, AccentSecondary, RoundedCornerShape(16.dp))
-                    .clickable { onExport() }
-                    .padding(horizontal = 8.dp),
+                    .border(2.dp, AccentSecondary, RoundedCornerShape(16.dp))
+                    .clickable { onExport() },
                 contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("🎬", fontSize = 18.sp)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
-                        Text("Save video", fontSize = 8.sp, color = Color.White.copy(0.8f))
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("🎬", fontSize = 20.sp)
+                    Text("EXPORT", fontWeight = FontWeight.ExtraBold, color = Color.White, fontSize = 15.sp)
                 }
             }
+
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
