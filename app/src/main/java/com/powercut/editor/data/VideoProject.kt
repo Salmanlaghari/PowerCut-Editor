@@ -33,7 +33,16 @@ data class VideoProject(
     val activeTemplateId: String = "none", // 50+ templates
     val visualizerStyle: String = "none", // Audio visualizer neon wave styles
     val isBeatSyncEnabled: Boolean = false,
-    val active3DShapeMask: String = "none" // 50+ shape masks
+    val active3DShapeMask: String = "none", // 50+ shape masks
+
+    // NextGen Pro features
+    val imageOverlayPath: String? = null, // Image overlay on video
+    val imageOverlayOpacity: Float = 1.0f,
+    val imageOverlayScale: Float = 1.0f,
+    val imageOverlayX: Float = 0.5f, // 0-1 normalized
+    val imageOverlayY: Float = 0.5f,
+    val selectedEffect: String = "none", // Active visual effect
+    val activeLayers: List<String> = emptyList() // Multi-layer support
 ) {
     val isTrimmed: Boolean
         get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L

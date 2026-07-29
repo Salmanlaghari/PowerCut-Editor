@@ -216,6 +216,24 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onSaveDraft = {
                                             viewModel.saveDraft(this@MainActivity)
+                                        },
+                                        onUpdateImageOverlay = { path ->
+                                            viewModel.updateImageOverlay(path)
+                                        },
+                                        onUpdateImageOverlayOpacity = { opacity ->
+                                            viewModel.updateImageOverlayOpacity(opacity)
+                                        },
+                                        onUpdateImageOverlayScale = { scale ->
+                                            viewModel.updateImageOverlayScale(scale)
+                                        },
+                                        onUpdateSelectedEffect = { effect ->
+                                            viewModel.updateSelectedEffect(effect)
+                                        },
+                                        onAddLayer = { layerId ->
+                                            viewModel.addLayer(layerId)
+                                        },
+                                        onRemoveLayer = { layerId ->
+                                            viewModel.removeLayer(layerId)
                                         }
                                     )
                                 } ?: viewModel.resetToHome()

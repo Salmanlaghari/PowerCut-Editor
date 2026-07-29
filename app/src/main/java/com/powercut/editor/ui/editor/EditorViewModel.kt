@@ -164,6 +164,10 @@ class EditorViewModel @Inject constructor(
         json.put("visualizerStyle", project.visualizerStyle)
         json.put("isBeatSyncEnabled", project.isBeatSyncEnabled)
         json.put("active3DShapeMask", project.active3DShapeMask)
+        json.put("imageOverlayPath", project.imageOverlayPath ?: "")
+        json.put("imageOverlayOpacity", project.imageOverlayOpacity.toDouble())
+        json.put("imageOverlayScale", project.imageOverlayScale.toDouble())
+        json.put("selectedEffect", project.selectedEffect)
 
         val clipsArray = JSONArray()
         for (clip in clipsList) {
@@ -207,7 +211,11 @@ class EditorViewModel @Inject constructor(
             activeTemplateId = json.optString("activeTemplateId", "none"),
             visualizerStyle = json.optString("visualizerStyle", "none"),
             isBeatSyncEnabled = json.optBoolean("isBeatSyncEnabled", false),
-            active3DShapeMask = json.optString("active3DShapeMask", "none")
+            active3DShapeMask = json.optString("active3DShapeMask", "none"),
+            imageOverlayPath = json.optString("imageOverlayPath", "").let { if (it.isEmpty()) null else it },
+            imageOverlayOpacity = json.optDouble("imageOverlayOpacity", 1.0).toFloat(),
+            imageOverlayScale = json.optDouble("imageOverlayScale", 1.0).toFloat(),
+            selectedEffect = json.optString("selectedEffect", "none")
         )
 
         val clipsList = mutableListOf<Clip>()
@@ -449,6 +457,42 @@ class EditorViewModel @Inject constructor(
     fun update3DShapeMask(mask: String) {
         projectRepository.updateProject { project ->
             project.copy(active3DShapeMask = mask)
+        }
+    }
+
+    fun updateImageOverlay(path: String?) {
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayPath = path)
+        }
+    }
+
+    fun updateImageOverlayOpacity(opacity: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayOpacity = opacity)
+        }
+    }
+
+    fun updateImageOverlayScale(scale: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayScale = scale)
+        }
+    }
+
+    fun updateSelectedEffect(effect: String) {
+        projectRepository.updateProject { project ->
+            project.copy(selectedEffect = effect)
+        }
+    }
+
+    fun addLayer(layerId: String) {
+        projectRepository.updateProject { project ->
+            project.copy(activeLayers = project.activeLayers + layerId)
+        }
+    }
+
+    fun removeLayer(layerId: String) {
+        projectRepository.updateProject { project ->
+            project.copy(activeLayers = project.activeLayers - layerId)
         }
     }
 
