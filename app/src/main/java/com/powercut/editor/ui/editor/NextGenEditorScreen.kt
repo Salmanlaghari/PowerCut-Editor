@@ -539,55 +539,49 @@ private fun EditingCompletePage(
         } // end scrollable content
 
         // ═══ STICKY IMPORT + EXPORT BUTTONS (always visible at bottom) ═══
-        Box(
+        Row(
             modifier = Modifier.fillMaxWidth()
                 .background(Color(0xFF0B0D12))
                 .border(1.dp, Color.White.copy(0.05f))
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            // IMPORT BUTTON
+            Box(
+                modifier = Modifier.weight(1f).height(56.dp)
+                    .background(Color(0xFF1A1C24), RoundedCornerShape(16.dp))
+                    .border(1.5.dp, CyberCyan, RoundedCornerShape(16.dp))
+                    .clickable { onImport() }
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                // IMPORT BUTTON
-                Box(
-                    modifier = Modifier.weight(1f).height(54.dp)
-                        .glassmorphic(shape = RoundedCornerShape(14.dp))
-                        .border(1.dp, CyberCyan.copy(0.4f), RoundedCornerShape(14.dp))
-                        .tactileClick(onClick = onImport)
-                        .padding(horizontal = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(20.dp))
-                        Column {
-                            Text("IMPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
-                            Text("Add more clips", fontSize = 9.sp, color = Color.Gray)
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.Add, "Import", tint = CyberCyan, modifier = Modifier.size(22.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("IMPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                        Text("Add clips", fontSize = 8.sp, color = Color.Gray)
                     }
                 }
+            }
 
-                // EXPORT BUTTON
-                Box(
-                    modifier = Modifier.weight(1f).height(54.dp)
-                        .neonGlow(AccentSecondary, RoundedCornerShape(14.dp), 1.5.dp)
-                        .background(premiumAccentGradient, RoundedCornerShape(14.dp))
-                        .tactileClick(onClick = onExport)
-                        .padding(horizontal = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("🎬", fontSize = 18.sp)
-                        Column {
-                            Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, letterSpacing = 0.5.sp)
-                            Text("Save video", fontSize = 9.sp, color = Color.White.copy(0.8f))
-                        }
+            // EXPORT BUTTON
+            Box(
+                modifier = Modifier.weight(1f).height(56.dp)
+                    .background(premiumAccentGradient, RoundedCornerShape(16.dp))
+                    .border(1.5.dp, AccentSecondary, RoundedCornerShape(16.dp))
+                    .clickable { onExport() }
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("🎬", fontSize = 18.sp)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("EXPORT", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                        Text("Save video", fontSize = 8.sp, color = Color.White.copy(0.8f))
                     }
                 }
             }
         }
-
-        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -630,8 +624,8 @@ private fun EditorHeader(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(onClick = onUndo, modifier = Modifier.size(26.dp)) { Text("↶", color = Color.LightGray, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
             IconButton(onClick = onRedo, modifier = Modifier.size(26.dp)) { Text("↷", color = Color.LightGray, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-            Box(modifier = Modifier.neonGlow(CyberCyan, RoundedCornerShape(20.dp), 1.dp).background(Brush.horizontalGradient(listOf(CyberCyan, Color(0xFF7C5CFF))), RoundedCornerShape(20.dp)).tactileClick(onClick = onDone).padding(horizontal = 12.dp, vertical = 5.dp)) {
-                Text("DONE ✓", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 10.sp, letterSpacing = 0.5.sp)
+            Box(modifier = Modifier.neonGlow(CyberCyan, RoundedCornerShape(22.dp), 1.5.dp).background(Brush.horizontalGradient(listOf(CyberCyan, Color(0xFF7C5CFF))), RoundedCornerShape(22.dp)).tactileClick(onClick = onDone).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("DONE ✓", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp, letterSpacing = 0.5.sp)
             }
         }
     }
