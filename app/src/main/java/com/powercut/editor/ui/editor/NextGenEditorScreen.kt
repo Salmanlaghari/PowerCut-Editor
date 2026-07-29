@@ -936,7 +936,7 @@ private fun CapCutToolPanel(
     onToggleAutoReframe: () -> Unit = {}
 ) {
     Box(
-        modifier = Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 8.dp, vertical = 2.dp)
+        modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
             .background(Color(0xFF1A1C24).copy(0.85f), RoundedCornerShape(12.dp))
             .border(1.dp, Color.White.copy(0.04f), RoundedCornerShape(12.dp))
     ) {

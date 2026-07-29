@@ -85,8 +85,25 @@ fun HomeScreen(
         }
     }
 
+    // Smooth animated splash
+    var splashAlpha by remember { mutableFloatStateOf(0f) }
+    var splashScale by remember { mutableFloatStateOf(0.8f) }
+
     LaunchedEffect(Unit) {
-        delay(600)
+        // Fade in + scale up animation
+        kotlinx.coroutines.coroutineScope {
+            kotlinx.coroutines.launch {
+                kotlinx.coroutines.delay(100)
+                splashAlpha = 1f
+            }
+            kotlinx.coroutines.launch {
+                kotlinx.coroutines.delay(100)
+                splashScale = 1f
+            }
+        }
+        delay(1500)
+        splashAlpha = 0f
+        delay(300)
         isAppLoadingIntro = false
     }
 
@@ -97,7 +114,11 @@ fun HomeScreen(
                 .background(Brush.verticalGradient(colors = listOf(DarkBgStart, DarkBgEnd))),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .graphicsLayer(alpha = splashAlpha, scaleX = splashScale, scaleY = splashScale)
+            ) {
                 Box(
                     modifier = Modifier
                         .size(130.dp)

@@ -3,6 +3,7 @@
     <style name="Theme.PowerCutEditor" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">#000000</item>
         <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowBackground">#0B0F1A</item>
         <item name="android:windowLayoutInDisplayCutoutMode">never</item>
     </style>
 </resources>

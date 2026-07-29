@@ -34,6 +34,7 @@ fun PowerCutTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color(0xFF0B0F1A).toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }
