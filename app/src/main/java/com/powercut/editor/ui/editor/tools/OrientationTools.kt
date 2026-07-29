@@ -147,7 +147,7 @@ fun OrientationToolsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.AutoFixHigh, contentDescription = "Reframe", tint = CyberCyan, modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.AutoAwesome, contentDescription = "Reframe", tint = CyberCyan, modifier = Modifier.size(14.dp))
                 Column {
                     Text("AI AUTO REFRAME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text("Auto-track subject in frame", fontSize = 7.sp, color = Color.Gray)
