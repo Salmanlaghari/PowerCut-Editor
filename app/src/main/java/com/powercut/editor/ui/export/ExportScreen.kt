@@ -309,33 +309,56 @@ fun ExportScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // 7. MAIN EXPORT AND SAVE BUTTON (Large orange gradient with download icon)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp)
-                            .neonGlow(color = NeonOrange, shape = RoundedCornerShape(16.dp))
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(NeonOrange, Color(0xFFE64A19))
-                                ),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-                            .tactileClick {
-                                onStartExport(
-                                    resolutionsList[selectedResIndex],
-                                    fpsList[selectedFpsIndex],
-                                    isWatermarkRemoved,
-                                    isHardwareAccEnabled
-                                )
-                            },
-                        contentAlignment = Alignment.Center
+                    // 7. IMPORT + EXPORT BUTTONS
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                            Icon(imageVector = Icons.Default.Download, contentDescription = "Export icon", tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("EXPORT & SAVE", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 1.sp)
+                        // IMPORT BUTTON
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp)
+                                .glassmorphic(shape = RoundedCornerShape(16.dp))
+                                .border(1.5.dp, CyberCyan, RoundedCornerShape(16.dp))
+                                .tactileClick { onBackToEditor() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                Text("➕", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("IMPORT", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        // EXPORT BUTTON
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp)
+                                .neonGlow(color = NeonOrange, shape = RoundedCornerShape(16.dp))
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(NeonOrange, Color(0xFFE64A19))
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                                .tactileClick {
+                                    onStartExport(
+                                        resolutionsList[selectedResIndex],
+                                        fpsList[selectedFpsIndex],
+                                        isWatermarkRemoved,
+                                        isHardwareAccEnabled
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                Icon(imageVector = Icons.Default.Download, contentDescription = "Export", tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("EXPORT", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White, letterSpacing = 0.5.sp)
+                            }
                         }
                     }
                 }
@@ -406,21 +429,45 @@ fun ExportScreen(
 
                     Spacer(modifier = Modifier.height(36.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .background(NeonOrange, RoundedCornerShape(12.dp))
-                            .tactileClick(onClick = onDone),
-                        contentAlignment = Alignment.Center
+                    // IMPORT + EXPORT after success
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = LanguageHelper.getString(R.string.done, language).uppercase(),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 1.sp
-                        )
+                        // IMPORT BUTTON
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .glassmorphic(shape = RoundedCornerShape(14.dp))
+                                .border(1.5.dp, CyberCyan, RoundedCornerShape(14.dp))
+                                .tactileClick { onDone() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                Text("➕", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("IMPORT NEW", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        // DONE BUTTON
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .background(NeonOrange, RoundedCornerShape(14.dp))
+                                .tactileClick(onClick = onDone),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = LanguageHelper.getString(R.string.done, language).uppercase(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
                 }
 
@@ -454,21 +501,45 @@ fun ExportScreen(
 
                     Spacer(modifier = Modifier.height(36.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .background(Color.DarkGray, RoundedCornerShape(12.dp))
-                            .tactileClick(onClick = onBackToEditor),
-                        contentAlignment = Alignment.Center
+                    // IMPORT + RETRY after error
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = "BACK TO EDITOR",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 1.sp
-                        )
+                        // IMPORT BUTTON
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .glassmorphic(shape = RoundedCornerShape(14.dp))
+                                .border(1.5.dp, CyberCyan, RoundedCornerShape(14.dp))
+                                .tactileClick { onDone() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                Text("➕", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("IMPORT NEW", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        // BACK TO EDITOR
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .background(Color.DarkGray, RoundedCornerShape(14.dp))
+                                .tactileClick(onClick = onBackToEditor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "BACK TO EDIT",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
                 }
             }
