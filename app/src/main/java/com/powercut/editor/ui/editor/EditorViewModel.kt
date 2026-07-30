@@ -263,6 +263,16 @@ class EditorViewModel @Inject constructor(
         _isDarkThemeEnabled.value = !_isDarkThemeEnabled.value
     }
 
+    private val _isImporting = MutableStateFlow(false)
+    val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+
+    private val _importError = MutableStateFlow<String?>(null)
+    val importError: StateFlow<String?> = _importError.asStateFlow()
+
+    fun clearImportError() {
+        _importError.value = null
+    }
+
     fun selectVideo(
         context: Context,
         uri: Uri,
@@ -273,29 +283,44 @@ class EditorViewModel @Inject constructor(
         speed: Float = 1.0f
     ) {
         viewModelScope.launch {
-            val path = UriHelper.getPathFromUri(context, uri)
-            if (path != null) {
-                val file = File(path)
-                val durationMs = if (file.exists()) {
-                    15000L
-                } else {
-                    10000L
-                }
+            _isImporting.value = true
+            _importError.value = null
+            try {
+                val path = UriHelper.getPathFromUri(context, uri)
+                if (path != null) {
+                    val file = File(path)
+                    if (!file.exists() || file.length() == 0L) {
+                        _importError.value = "Failed to load video. File is empty or could not be read."
+                        _isImporting.value = false
+                        return@launch
+                    }
 
-                val project = VideoProject(
-                    videoPath = path,
-                    durationMs = durationMs,
-                    trimStartMs = 0L,
-                    trimEndMs = durationMs,
-                    targetResolution = _selectedResolution.value,
-                    activeTemplateId = templateId,
-                    selectedFilter = filter,
-                    transitionType = transition,
-                    autoCaptionsLanguage = captions,
-                    speedFactor = speed
-                )
-                projectRepository.setProject(project)
-                _currentScreen.value = "editor"
+                    // Read real video duration using MediaMetadataRetriever
+                    val realDurationMs = UriHelper.getVideoDurationMs(context, uri)
+                        ?: UriHelper.getVideoDurationMs(context, Uri.fromFile(file))
+                        ?: 10000L // fallback if retriever fails
+
+                    val project = VideoProject(
+                        videoPath = path,
+                        durationMs = realDurationMs,
+                        trimStartMs = 0L,
+                        trimEndMs = realDurationMs,
+                        targetResolution = _selectedResolution.value,
+                        activeTemplateId = templateId,
+                        selectedFilter = filter,
+                        transitionType = transition,
+                        autoCaptionsLanguage = captions,
+                        speedFactor = speed
+                    )
+                    projectRepository.setProject(project)
+                    _currentScreen.value = "editor"
+                } else {
+                    _importError.value = "Failed to load video. The file may be too large or storage is full. Try a shorter or smaller video."
+                }
+            } catch (e: Exception) {
+                _importError.value = "Failed to load video: ${e.message}"
+            } finally {
+                _isImporting.value = false
             }
         }
     }

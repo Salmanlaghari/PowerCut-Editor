@@ -7,9 +7,22 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -94,6 +107,54 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(exportState) {
                             if (exportState is com.powercut.editor.core.base.Resource.Success) {
                                 showInterstitialAd()
+                            }
+                        }
+
+                        // Import loading state
+                        val isImporting by viewModel.isImporting.collectAsState()
+                        val importError by viewModel.importError.collectAsState()
+
+                        // Show loading dialog during video import
+                        if (isImporting) {
+                            androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            Color(0xFF1A1A2E),
+                                            RoundedCornerShape(20.dp)
+                                        )
+                                        .padding(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = com.powercut.editor.ui.theme.NeonOrange,
+                                            strokeWidth = 3.dp
+                                        )
+                                        Text(
+                                            text = if (language == "ur") "ویڈیو لوڈ ہو رہی ہے..." else "Loading video...",
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = if (language == "ur") "براہ کرم انتظار کریں" else "Please wait — importing large video",
+                                            color = Color.Gray,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show error toast if import failed
+                        LaunchedEffect(importError) {
+                            importError?.let { error ->
+                                Toast.makeText(this@MainActivity, error, Toast.LENGTH_LONG).show()
+                                viewModel.clearImportError()
                             }
                         }
 
