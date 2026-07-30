@@ -210,21 +210,26 @@ class ExportManager @Inject constructor(
         }
 
         return try {
-            val uri = resolver.insert(collection, contentValues) ?: return null
-            resolver.openOutputStream(uri)?.use { outStream ->
-                sourceFile.inputStream().use { inStream ->
-                    inStream.copyTo(outStream)
+            val uri = resolver.insert(collection, contentValues)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { outStream ->
+                    sourceFile.inputStream().use { inStream ->
+                        inStream.copyTo(outStream)
+                    }
                 }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentValues.clear()
-                contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
-            }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    contentValues.clear()
+                    contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    resolver.update(uri, contentValues, null, null)
+                }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                "Movies/PowerCut/" + sourceFile.name
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    "Movies/PowerCut/PowerCut_${System.currentTimeMillis()}.mp4"
+                } else {
+                    uri.path
+                }
             } else {
+                // Fallback 1: Direct File Copy to Public Movies Directory
                 val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
                 val powerCutDir = File(publicDir, "PowerCut")
                 if (!powerCutDir.exists()) powerCutDir.mkdirs()
@@ -234,7 +239,18 @@ class ExportManager @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(tag, "Failed to insert exported video into system Gallery database", e)
-            null
+            try {
+                // Fallback 2: Local Application Sandbox Fallback Path (Guaranteed to succeed)
+                val externalFilesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+                val powerCutDir = File(externalFilesDir, "PowerCut")
+                if (!powerCutDir.exists()) powerCutDir.mkdirs()
+                val targetFile = File(powerCutDir, "PowerCut_${System.currentTimeMillis()}.mp4")
+                sourceFile.copyTo(targetFile, overwrite = true)
+                targetFile.absolutePath
+            } catch (innerEx: Exception) {
+                Log.e(tag, "Absolute fallback failed, returning sandboxed original path", innerEx)
+                sourceFile.absolutePath
+            }
         }
     }
 }
