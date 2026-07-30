@@ -52,7 +52,13 @@ class ExportManager @Inject constructor(
 
             // Check available space on the ACTUAL partition we're writing to
             val availableSpace = secureDir.freeSpace
-            val inputSize = File(project.videoPath).let { if (it.exists()) it.length() else 0L }
+            val inputSize = if (project.videoPath.startsWith("content://")) {
+                try {
+                    context.contentResolver.openAssetFileDescriptor(android.net.Uri.parse(project.videoPath), "r")?.use { it.length() } ?: 0L
+                } catch (e: Exception) { 0L }
+            } else {
+                File(project.videoPath).let { if (it.exists()) it.length() else 0L }
+            }
             // Need at least 3x input size for FFmpeg processing headroom, min 500MB
             val minRequiredSpace = maxOf(500L * 1024 * 1024, inputSize * 3)
             if (availableSpace < minRequiredSpace) {
@@ -69,8 +75,18 @@ class ExportManager @Inject constructor(
             val tempOutputFile = File(secureDir, tempFileName)
             val tempOutputPath = tempOutputFile.absolutePath
 
+            // Resolve video path: if it's a content:// URI, copy to temp file for FFmpeg
+            val videoPath = resolveVideoPath(context, project.videoPath, secureDir)
+            if (videoPath == null) {
+                _exportState.value = Resource.Error(
+                    "Could not access video file. Please re-import the video.",
+                    Exception("Failed to resolve video path")
+                )
+                return
+            }
+
             // Check if input is audio file
-            val isAudioInput = videoProcessor.isAudioFile(project.videoPath)
+            val isAudioInput = videoProcessor.isAudioFile(videoPath)
 
             val isInstantTrimPossible = !isAudioInput &&
                     !project.isMuted &&
@@ -97,7 +113,7 @@ class ExportManager @Inject constructor(
             val success = if (isInstantTrimPossible) {
                 Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")
                 videoProcessor.instantTrim(
-                    inputPath = project.videoPath,
+                    inputPath = videoPath,
                     outputPath = tempOutputPath,
                     startMs = project.trimStartMs,
                     endMs = project.trimEndMs
@@ -105,7 +121,7 @@ class ExportManager @Inject constructor(
             } else {
                 Log.d(tag, "Using transcode pipeline for upscale/filters/speed/audio")
                 videoProcessor.processAndExport(
-                    inputPath = project.videoPath,
+                    inputPath = videoPath,
                     outputPath = tempOutputPath,
                     startMs = project.trimStartMs,
                     endMs = project.trimEndMs,
@@ -153,7 +169,7 @@ class ExportManager @Inject constructor(
                 if (project.targetResolution != "1080p") {
                     Log.d(tag, "Retrying export with 1080p resolution...")
                     val retrySuccess = videoProcessor.processAndExport(
-                        inputPath = project.videoPath,
+                        inputPath = videoPath,
                         outputPath = tempOutputPath,
                         startMs = project.trimStartMs,
                         endMs = project.trimEndMs,
@@ -195,6 +211,44 @@ class ExportManager @Inject constructor(
         } catch (e: Exception) {
             Log.e(tag, "Export failed with exception", e)
             _exportState.value = Resource.Error(e.message ?: "An unknown error occurred during export", e)
+        }
+    }
+
+    /**
+     * Resolve video path for FFmpeg processing.
+     * - If it's a regular file path, return as-is
+     * - If it's a content:// URI, copy to temp file (FFmpeg needs file path)
+     */
+    private fun resolveVideoPath(context: Context, videoPath: String, tempDir: File): String? {
+        // Regular file path — return directly
+        if (!videoPath.startsWith("content://")) {
+            return if (File(videoPath).exists()) videoPath else null
+        }
+
+        // Content URI — copy to temp file for FFmpeg
+        return try {
+            val uri = android.net.Uri.parse(videoPath)
+            val tempFile = File(tempDir, "input_${System.currentTimeMillis()}.mp4")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                java.io.FileOutputStream(tempFile).use { output ->
+                    val buffer = ByteArray(1024 * 1024) // 1MB buffer
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                    }
+                    output.flush()
+                }
+            }
+            if (tempFile.exists() && tempFile.length() > 0) {
+                Log.d(tag, "Resolved content URI to temp file: ${tempFile.absolutePath} (${tempFile.length() / (1024*1024)} MB)")
+                tempFile.absolutePath
+            } else {
+                Log.e(tag, "Failed to copy content URI to temp file")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to resolve content URI: $videoPath", e)
+            null
         }
     }
 

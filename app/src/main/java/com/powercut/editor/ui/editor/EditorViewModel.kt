@@ -288,17 +288,21 @@ class EditorViewModel @Inject constructor(
             try {
                 val path = UriHelper.getPathFromUri(context, uri)
                 if (path != null) {
-                    val file = File(path)
-                    if (!file.exists() || file.length() == 0L) {
-                        _importError.value = "Failed to load video. File is empty or could not be read."
-                        _isImporting.value = false
-                        return@launch
+                    // For content:// URIs, skip file existence check (ExoPlayer handles them natively)
+                    val isContentUri = path.startsWith("content://")
+                    if (!isContentUri) {
+                        val file = File(path)
+                        if (!file.exists() || file.length() == 0L) {
+                            _importError.value = "Failed to load video. File is empty or could not be read."
+                            _isImporting.value = false
+                            return@launch
+                        }
                     }
 
                     // Read real video duration using MediaMetadataRetriever
-                    val realDurationMs = UriHelper.getVideoDurationMs(context, uri)
-                        ?: UriHelper.getVideoDurationMs(context, Uri.fromFile(file))
-                        ?: 10000L // fallback if retriever fails
+                    val realDurationMs = UriHelper.getVideoDurationMs(context, path)
+                        ?: UriHelper.getVideoDurationMs(context, uri.toString())
+                        ?: 10000L // fallback if retriever fails (ExoPlayer will update it later)
 
                     val project = VideoProject(
                         videoPath = path,
