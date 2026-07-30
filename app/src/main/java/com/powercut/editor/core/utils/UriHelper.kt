@@ -64,9 +64,12 @@ object UriHelper {
                 tempFile = File(cacheDir, "temp_video_${System.currentTimeMillis()}.mp4")
             }
 
+            // Capture as local val to avoid smart cast issues in lambdas
+            val targetFile = tempFile ?: return null
+
             // Copy with large 1MB buffer for fast throughput on big files
             contentResolver.openInputStream(uri)?.use { inputStream ->
-                FileOutputStream(tempFile).use { outputStream ->
+                FileOutputStream(targetFile).use { outputStream ->
                     val buffer = ByteArray(1024 * 1024) // 1MB buffer — much faster for large videos
                     var read: Int
                     var totalBytes = 0L
@@ -79,17 +82,17 @@ object UriHelper {
                 }
             } ?: run {
                 Log.e(TAG, "Failed to open input stream for uri: $uri")
-                tempFile?.delete()
+                targetFile.delete()
                 return null
             }
 
             // Validate the copied file
-            if (tempFile.exists() && tempFile.length() > 0) {
-                Log.d(TAG, "Video imported successfully: ${tempFile.absolutePath} (${tempFile.length() / (1024*1024)} MB)")
-                return tempFile.absolutePath
+            if (targetFile.exists() && targetFile.length() > 0) {
+                Log.d(TAG, "Video imported successfully: ${targetFile.absolutePath} (${targetFile.length() / (1024*1024)} MB)")
+                return targetFile.absolutePath
             } else {
                 Log.e(TAG, "Copied file is empty or missing")
-                tempFile?.delete()
+                targetFile.delete()
                 return null
             }
         } catch (e: OutOfMemoryError) {
