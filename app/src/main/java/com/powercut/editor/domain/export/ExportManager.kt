@@ -54,10 +54,12 @@ class ExportManager @Inject constructor(
             val availableSpace = secureDir.freeSpace
             val inputSize = if (project.videoPath.startsWith("content://")) {
                 try {
-                    context.contentResolver.openAssetFileDescriptor(android.net.Uri.parse(project.videoPath), "r")?.use { it.length() } ?: 0L
+                    val afd = context.contentResolver.openAssetFileDescriptor(android.net.Uri.parse(project.videoPath), "r")
+                    afd?.use { fd -> fd.length } ?: 0L
                 } catch (e: Exception) { 0L }
             } else {
-                File(project.videoPath).let { if (it.exists()) it.length() else 0L }
+                val f = java.io.File(project.videoPath)
+                if (f.exists()) f.length() else 0L
             }
             // Need at least 3x input size for FFmpeg processing headroom, min 500MB
             val minRequiredSpace = maxOf(500L * 1024 * 1024, inputSize * 3)
