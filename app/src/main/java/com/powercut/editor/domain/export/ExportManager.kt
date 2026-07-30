@@ -40,21 +40,27 @@ class ExportManager @Inject constructor(
     suspend fun exportProject(project: VideoProject) {
         _exportState.value = Resource.Loading
         try {
-            // Check available storage space before export
-            val secureDir = File(context.cacheDir, "PowerCutExports")
-            if (!secureDir.exists()) {
-                secureDir.mkdirs()
+            // Use external cache dir if available (more space), fallback to internal cache
+            val secureDir = context.externalCacheDir?.let { ext ->
+                val dir = File(ext, "PowerCutExports")
+                if (!dir.exists()) dir.mkdirs()
+                dir
+            } ?: File(context.cacheDir, "PowerCutExports").let { dir ->
+                if (!dir.exists()) dir.mkdirs()
+                dir
             }
 
-            // Check ACTUAL device storage, not cache dir
-            val storageDir = android.os.Environment.getExternalStorageDirectory()
-            val availableSpace = storageDir.freeSpace
-            val minRequiredSpace = 200 * 1024 * 1024L // 200 MB minimum
+            // Check available space on the ACTUAL partition we're writing to
+            val availableSpace = secureDir.freeSpace
+            val inputSize = File(project.videoPath).let { if (it.exists()) it.length() else 0L }
+            // Need at least 3x input size for FFmpeg processing headroom, min 500MB
+            val minRequiredSpace = maxOf(500L * 1024 * 1024, inputSize * 3)
             if (availableSpace < minRequiredSpace) {
                 val availableMB = availableSpace / (1024 * 1024)
+                val requiredMB = minRequiredSpace / (1024 * 1024)
                 _exportState.value = Resource.Error(
-                    "Storage full! Only ${availableMB}MB available. Free up at least 200MB and try again.",
-                    Exception("Insufficient storage: ${availableMB}MB available")
+                    "Storage full! Only ${availableMB}MB available, need ~${requiredMB}MB. Free up storage and try again.",
+                    Exception("Insufficient storage: ${availableMB}MB available, need ${requiredMB}MB")
                 )
                 return
             }
@@ -182,7 +188,7 @@ class ExportManager @Inject constructor(
                     }
                 }
                 _exportState.value = Resource.Error(
-                    "Export failed. Your video may be too large or device storage is full. Try: 1) Lower resolution 2) Free up storage 3) Use a shorter clip",
+                    "Export failed for this video. Try: 1) Free up storage space 2) Use a shorter clip 3) Lower resolution in settings",
                     Exception("Video processing failed")
                 )
             }
@@ -214,7 +220,13 @@ class ExportManager @Inject constructor(
             if (uri != null) {
                 resolver.openOutputStream(uri)?.use { outStream ->
                     sourceFile.inputStream().use { inStream ->
-                        inStream.copyTo(outStream)
+                        // Use 1MB buffer for fast copy of large video files
+                        val buffer = ByteArray(1024 * 1024)
+                        var read: Int
+                        while (inStream.read(buffer).also { read = it } != -1) {
+                            outStream.write(buffer, 0, read)
+                        }
+                        outStream.flush()
                     }
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
