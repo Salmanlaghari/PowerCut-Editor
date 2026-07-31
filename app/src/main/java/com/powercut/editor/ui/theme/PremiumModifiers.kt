@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -86,6 +87,96 @@ fun Modifier.glassmorphic(
                 )
             ),
             shape = shape
+        )
+}
+
+/**
+ * ★ 3D GLASS CARD — NextGen 2027 signature component.
+ *
+ * A true 3D glassmorphic card with:
+ *  - Perspective tilt on press (rotationX/Y) for a physical depth feel
+ *  - Multi-layer depth shadow (ambient + spot) with neon-tinted glow
+ *  - Frosted glass background with a diagonal light-refraction gradient border
+ *  - Spring-based scale + rotation for buttery 60fps animation
+ *
+ * This is the "3D Glass Card" the user asked for — used across templates,
+ * tools, and feature panels to deliver a world-class premium look.
+ */
+@Composable
+fun Modifier.glassCard3D(
+    shape: Shape = RoundedCornerShape(24.dp),
+    glowColor: Color = AccentPrimary,
+    backColor: Color = GlassBackground,
+    elevation: Dp = 8.dp
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // 3D perspective tilt — subtle rotation that gives real depth on press
+    val rotationX by animateFloatAsState(
+        targetValue = if (isPressed) 6f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
+        label = "glass3d_rotX"
+    )
+    val rotationY by animateFloatAsState(
+        targetValue = if (isPressed) -4f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
+        label = "glass3d_rotY"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 420f),
+        label = "glass3d_scale"
+    )
+    // Slight elevation lift when pressed for a "lift off the surface" feel
+    val shadowElevation by animateFloatAsState(
+        targetValue = if (isPressed) elevation.value * 1.8f else elevation.value,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "glass3d_elev"
+    )
+
+    return this
+        .graphicsLayer {
+            this.rotationX = rotationX
+            this.rotationY = rotationY
+            this.scaleX = scale
+            this.scaleY = scale
+            // Enable perspective for real 3D depth
+            this.cameraDistance = 12 * density
+        }
+        .shadow(
+            elevation = dp(shadowElevation),
+            shape = shape,
+            clip = false,
+            ambientColor = glowColor.copy(alpha = 0.35f),
+            spotColor = glowColor.copy(alpha = 0.45f)
+        )
+        .background(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    backColor,
+                    SurfaceVariant.copy(alpha = 0.65f)
+                )
+            ),
+            shape = shape
+        )
+        .border(
+            width = 1.dp,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.22f),  // top-left light refraction
+                    glowColor.copy(alpha = 0.12f),
+                    Color.White.copy(alpha = 0.04f)   // bottom-right
+                ),
+                start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                end = androidx.compose.ui.geometry.Offset(1000f, 1000f)
+            ),
+            shape = shape
+        )
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = {}
         )
 }
 
@@ -178,3 +269,55 @@ fun Modifier.shimmerOverlay(
         shape = shape
     )
 }
+
+/**
+ * Premium animated entrance — slides up + fades in with a spring finish.
+ * Used for screen content to deliver the smooth 60fps "app open" feel.
+ */
+@Composable
+fun Modifier.slideInUp(
+    visible: Boolean,
+    delayMs: Int = 0
+): Modifier {
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 400, delayMillis = delayMs),
+        label = "slide_alpha"
+    )
+    val translationY by animateFloatAsState(
+        targetValue = if (visible) 0f else 60f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 350f),
+        label = "slide_y"
+    )
+    return this.graphicsLayer {
+        this.alpha = alpha
+        this.translationY = translationY
+    }
+}
+
+/**
+ * Premium scale-in entrance with spring — for cards and panels.
+ */
+@Composable
+fun Modifier.scaleIn(
+    visible: Boolean,
+    delayMs: Int = 0
+): Modifier {
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 350, delayMillis = delayMs),
+        label = "scalein_alpha"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.85f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 380f),
+        label = "scalein_scale"
+    )
+    return this.graphicsLayer {
+        this.alpha = alpha
+        this.scaleX = scale
+        this.scaleY = scale
+    }
+}
+
+private fun dp(value: Float): Dp = Dp(value)

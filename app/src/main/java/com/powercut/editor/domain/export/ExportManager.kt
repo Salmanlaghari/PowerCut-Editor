@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.processing.VideoProcessor
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,7 +51,11 @@ class ExportManager @Inject constructor(
                 dir
             }
 
-            // Check available space on the ACTUAL partition we're writing to
+            // Check available space on the ACTUAL partition we're writing to.
+            // NOTE: We NO LONGER copy the input video to a temp file (that was the
+            // root cause of the "Space" issue with long videos). FFmpeg-Kit reads
+            // content:// URIs directly via the SAF protocol, so we only need space
+            // for the OUTPUT file — a fraction of the input size, not 3x.
             val availableSpace = secureDir.freeSpace
             val inputSize = if (project.videoPath.startsWith("content://")) {
                 try {
@@ -62,13 +66,16 @@ class ExportManager @Inject constructor(
                 val f = java.io.File(project.videoPath)
                 if (f.exists()) f.length() else 0L
             }
-            // Need at least 3x input size for FFmpeg processing headroom, min 500MB
-            val minRequiredSpace = maxOf(500L * 1024 * 1024, inputSize * 3)
+            // We only need headroom for the output (≈ input size at most, usually
+            // much less after compression). Use a modest fixed minimum plus a
+            // small fraction of input — NOT 3x input which blocked long videos.
+            val estimatedOutputSize = if (inputSize > 0) inputSize / 2 else 250L * 1024 * 1024
+            val minRequiredSpace = maxOf(150L * 1024 * 1024, estimatedOutputSize)
             if (availableSpace < minRequiredSpace) {
                 val availableMB = availableSpace / (1024 * 1024)
                 val requiredMB = minRequiredSpace / (1024 * 1024)
                 _exportState.value = Resource.Error(
-                    "Storage full! Only ${availableMB}MB available, need ~${requiredMB}MB. Free up storage and try again.",
+                    "Storage full! Only ${availableMB}MB available, need ~${requiredMB}MB for the export. Free up storage and try again.",
                     Exception("Insufficient storage: ${availableMB}MB available, need ${requiredMB}MB")
                 )
                 return
@@ -278,10 +285,18 @@ class ExportManager @Inject constructor(
 
     /**
      * Resolve video path for FFmpeg processing.
-     * - If it's a regular file path, return as-is
-     * - If it's a content:// URI, stream-copy to a temp file with a large buffer
-     *   (FFmpeg needs a file path). The copy uses an 8MB buffer and is resilient to
-     *   long/multi-GB videos — it never loads the whole file into memory.
+     * - If it's a regular file path, return as-is.
+     * - If it's a content:// URI, use FFmpeg-Kit's SAF (Storage Access Framework)
+     *   protocol — `getSafParameterForRead()` — which lets FFmpeg stream directly
+     *   from the content URI WITHOUT copying the whole file to a temp file.
+     *
+     *   This is the critical fix for the "Space" issue with long/multi-GB videos:
+     *   the previous implementation copied the entire video to a temp file, which
+     *   required enormous free space (and time). The SAF approach streams the
+     *   content directly, so no extra storage is needed for the input.
+     *
+     *   As a fallback (e.g. very old SAF incompatibility), it falls back to a
+     *   stream-copy, but this should rarely be hit.
      */
     private fun resolveVideoPath(context: Context, videoPath: String, tempDir: File): String? {
         // Regular file path — return directly
@@ -289,13 +304,42 @@ class ExportManager @Inject constructor(
             return if (File(videoPath).exists()) videoPath else null
         }
 
-        // Content URI — stream-copy to temp file for FFmpeg (never load into memory)
+        // Content URI — use FFmpeg-Kit SAF protocol to read directly (NO full copy!)
         return try {
             val uri = android.net.Uri.parse(videoPath)
+            val safPath = FFmpegKitConfig.getSafParameterForRead(context, uri)
+            if (safPath != null) {
+                Log.d(tag, "Using FFmpeg-Kit SAF protocol to stream content URI directly (no copy): $safPath")
+                safPath
+            } else {
+                // Fallback: stream-copy to temp file (rare path for incompatible SAF)
+                Log.w(tag, "SAF parameter unavailable, falling back to stream-copy")
+                streamCopyToTemp(context, uri, tempDir)
+            }
+        } catch (e: NoSuchMethodError) {
+            Log.w(tag, "getSafParameterForRead not available on this FFmpeg-Kit build, falling back to copy: ${e.message}")
+            streamCopyToTemp(context, android.net.Uri.parse(videoPath), tempDir)
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to resolve content URI via SAF: $videoPath — ${e.message}")
+            // Last-resort fallback to copy
+            try {
+                streamCopyToTemp(context, android.net.Uri.parse(videoPath), tempDir)
+            } catch (inner: Exception) {
+                Log.e(tag, "Copy fallback also failed: ${inner.message}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Fallback: stream-copy a content URI to a temp file using a large buffer.
+     * Never loads the whole file into memory; used only when SAF is unavailable.
+     */
+    private fun streamCopyToTemp(context: Context, uri: android.net.Uri, tempDir: File): String? {
+        return try {
             val tempFile = File(tempDir, "input_${System.currentTimeMillis()}.mp4")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 java.io.FileOutputStream(tempFile).use { output ->
-                    // 8MB buffer — optimal for large/long video streaming copy
                     val buffer = ByteArray(8 * 1024 * 1024)
                     var read: Int
                     while (input.read(buffer).also { read = it } != -1) {
@@ -308,11 +352,10 @@ class ExportManager @Inject constructor(
                 Log.d(tag, "Streamed content URI to temp file: ${tempFile.absolutePath} (${tempFile.length() / (1024 * 1024)} MB)")
                 tempFile.absolutePath
             } else {
-                Log.e(tag, "Failed to copy content URI to temp file (empty result)")
                 null
             }
         } catch (e: Exception) {
-            Log.e(tag, "Failed to resolve content URI: $videoPath — ${e.message}")
+            Log.e(tag, "streamCopyToTemp failed: ${e.message}")
             null
         }
     }

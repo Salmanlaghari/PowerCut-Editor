@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -27,9 +28,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -517,7 +520,9 @@ fun NextGenEditorScreen(
                 onUpdateOrientationMode = onUpdateOrientationMode,
                 onToggleVerticalSafeZone = onToggleVerticalSafeZone,
                 onToggleHorizontalLetterbox = onToggleHorizontalLetterbox,
-                onToggleAutoReframe = onToggleAutoReframe
+                onToggleAutoReframe = onToggleAutoReframe,
+                onAddLayer = onAddLayer,
+                onRemoveLayer = onRemoveLayer
             )
         }
 
@@ -769,14 +774,72 @@ private fun CapCutTimeline(
     onToggleImageLayer: () -> Unit,
     onToggleStickerLayer: () -> Unit
 ) {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(120.dp).background(Color(0xFF111318)).border(1.dp, Color.White.copy(0.04f))
+    // Real video duration for 1-second precision ruler
+    val durationMs = if (project.durationMs > 0) project.durationMs else
+        if (exoPlayer.duration > 0) exoPlayer.duration else 30000L
+    val durationSec = (durationMs / 1000.0).coerceAtLeast(1.0)
+    // Playhead position as a fraction [0..1]
+    val playheadFraction = (currentTime.toFloat() / durationMs).coerceIn(0f, 1f)
+
+    // Wrap the whole timeline in BoxWithConstraints so the moving playhead
+    // can use the EXACT measured width (perfect 1-second alignment).
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth().height(120.dp)
+            .background(Color(0xFF111318)).border(1.dp, Color.White.copy(0.04f))
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Time ruler
-            Row(modifier = Modifier.fillMaxWidth().height(16.dp).background(Color.Black.copy(0.3f)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf("0s", "5s", "10s", "15s", "20s", "25s", "30s").forEach { Text(it, fontSize = 7.sp, color = Color.Gray, fontWeight = FontWeight.Bold) }
-            }
+        val timelineWidthDp = maxWidth.value
+        val totalSeconds = kotlin.math.ceil(durationSec).toInt()
+        val labelInterval = when {
+            totalSeconds <= 15 -> 1
+            totalSeconds <= 60 -> 5
+            totalSeconds <= 300 -> 10
+            else -> 30
+        }
+        val currentSecond = (currentTime / 1000).toInt()
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ‚òÖ 1-SECOND PRECISION TIME RULER ‚Äî dynamic based on actual duration
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(16.dp)
+                        .background(Color.Black.copy(0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (sec in 0..totalSeconds) {
+                            val xFraction = if (totalSeconds > 0) sec.toFloat() / totalSeconds else 0f
+                            val xPos = xFraction * timelineWidthDp
+                            val isMajor = sec % labelInterval == 0
+                            Box(
+                                modifier = Modifier
+                                    .wrapContentSize(Alignment.TopStart)
+                                    .offset(x = xPos.dp)
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        Modifier
+                                            .width(if (isMajor) 1.5.dp else 1.dp)
+                                            .height(if (isMajor) 8.dp else 4.dp)
+                                            .background(
+                                                if (isMajor) Color.White.copy(0.6f)
+                                                else Color.White.copy(0.25f)
+                                            )
+                                    )
+                                    if (isMajor) {
+                                        Text(
+                                            "${sec}s",
+                                            fontSize = 6.sp,
+                                            color = if (sec == currentSecond) NeonOrange else Color.Gray,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
             // Tracks
             Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -836,9 +899,24 @@ private fun CapCutTimeline(
                 )
             }
         }
-        // Playhead
-        Box(modifier = Modifier.fillMaxHeight().width(2.dp).align(Alignment.Center).background(Brush.verticalGradient(listOf(NeonOrange, Color.Transparent)))) {
-            Box(modifier = Modifier.size(8.dp).background(NeonOrange, CircleShape).border(1.dp, Color.White, CircleShape).align(Alignment.TopCenter).neonGlow(NeonOrange, CircleShape, 1.dp))
+            // ‚òÖ MOVING PLAYHEAD ‚Äî tracks actual playback position (1-second precision)
+            // Uses the EXACT measured timelineWidthDp from BoxWithConstraints for perfect alignment.
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(2.dp)
+                    .offset(x = (playheadFraction * timelineWidthDp).dp)
+                    .background(Brush.verticalGradient(listOf(NeonOrange, Color.Transparent)))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(NeonOrange, CircleShape)
+                        .border(1.dp, Color.White, CircleShape)
+                        .align(Alignment.TopCenter)
+                        .neonGlow(NeonOrange, CircleShape, 1.dp)
+                )
+            }
         }
     }
 }
@@ -992,7 +1070,10 @@ private fun CapCutToolPanel(
     onUpdateOrientationMode: (String) -> Unit = {},
     onToggleVerticalSafeZone: () -> Unit = {},
     onToggleHorizontalLetterbox: () -> Unit = {},
-    onToggleAutoReframe: () -> Unit = {}
+    onToggleAutoReframe: () -> Unit = {},
+    // Layers
+    onAddLayer: (String) -> Unit = {},
+    onRemoveLayer: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1002,7 +1083,7 @@ private fun CapCutToolPanel(
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
             when (selectedTool) {
                 0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim)
-                1 -> LayersPanel(project, context, onAddLayer = {}, onRemoveLayer = {})
+                1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
                 4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker)
@@ -1295,23 +1376,71 @@ private fun EditPanel(
 // ‚îÄ‚îÄ‚îÄ 1. LAYERS PANEL ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
 @Composable
 private fun LayersPanel(project: VideoProject, context: android.content.Context, onAddLayer: (String) -> Unit, onRemoveLayer: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("LAYERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-        // 3D styled layer items
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("LAYERS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            Text("${project.activeLayers.size} active", fontSize = 8.sp, color = Color.Gray)
+        }
+
+        // Add Layer quick actions
+        Text("ADD LAYER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray.copy(0.8f))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(
+                "Ì†ΩÌ≥ù" to "text",
+                "Ì†ΩÌ∂ºÔ∏è" to "image",
+                "‚≠ê" to "sticker",
+                "‚ú®" to "effect"
+            ).forEach { (icon, layerId) ->
+                Box(
+                    Modifier.weight(1f)
+                        .background(Brush.horizontalGradient(listOf(CyberCyan.copy(0.18f), CyberCyan.copy(0.04f))), RoundedCornerShape(8.dp))
+                        .border(1.dp, CyberCyan.copy(0.25f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            onAddLayer(layerId)
+                            android.widget.Toast.makeText(context, "Added $layerId layer", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(icon, fontSize = 16.sp)
+                        Text(layerId.replaceFirstChar { it.uppercase() }, fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(2.dp))
+        Text("LAYER STACK", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray.copy(0.8f))
+
+        // 3D styled layer items ‚Äî real content detection + functional remove/visibility
         val layers = listOf(
-            Triple("üé¨", "Video Layer", true),
-            Triple("üîä", "Audio Layer", project.backgroundMusicPath != null),
-            Triple("üìù", "Text Layer", project.activeTextOverlay != null),
-            Triple("üñºÔ∏è", "Image Layer", project.imageOverlayPath != null),
-            Triple("‚≠ê", "Sticker Layer", project.stickerType != "none"),
-            Triple("‚ú®", "Effect Layer", project.selectedFilter != "none")
+            Triple("Ì†ºÌæ¨", "Video Layer", "video"),
+            Triple("Ì†ΩÌ¥ä", "Audio Layer", "audio"),
+            Triple("Ì†ΩÌ≥ù", "Text Layer", "text"),
+            Triple("Ì†ΩÌ∂ºÔ∏è", "Image Layer", "image"),
+            Triple("‚≠ê", "Sticker Layer", "sticker"),
+            Triple("‚ú®", "Effect Layer", "effect")
         )
-        layers.forEach { (icon, name, hasContent) ->
+        layers.forEach { (icon, name, layerId) ->
+            val hasContent = when (layerId) {
+                "video" -> true
+                "audio" -> project.backgroundMusicPath != null
+                "text" -> project.activeTextOverlay != null
+                "image" -> project.imageOverlayPath != null
+                "sticker" -> project.stickerType != "none"
+                "effect" -> project.selectedFilter != "none"
+                else -> false
+            }
+            val isActive = project.activeLayers.contains(layerId)
             Row(
                 Modifier.fillMaxWidth()
-                    .background(if (hasContent) Brush.horizontalGradient(listOf(CyberCyan.copy(0.15f), Color.Transparent)) else Brush.horizontalGradient(listOf(Color.White.copy(0.03f), Color.Transparent)), RoundedCornerShape(8.dp))
+                    .background(
+                        if (hasContent) Brush.horizontalGradient(listOf(CyberCyan.copy(0.15f), Color.Transparent))
+                        else Brush.horizontalGradient(listOf(Color.White.copy(0.03f), Color.Transparent)),
+                        RoundedCornerShape(8.dp)
+                    )
                     .border(1.dp, if (hasContent) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
-                    .clickable { android.widget.Toast.makeText(context, "$name: ${if (hasContent) "visible" else "empty"}", android.widget.Toast.LENGTH_SHORT).show() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -1328,17 +1457,47 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                     }
                     Column {
                         Text(name, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (hasContent) Color.White else Color.Gray)
-                        Text(if (hasContent) "Active" else "Empty", fontSize = 7.sp, color = if (hasContent) CyberCyan else Color.Gray.copy(0.5f))
+                        Text(
+                            if (hasContent) (if (isActive) "Active" else "Hidden") else "Empty",
+                            fontSize = 7.sp,
+                            color = if (hasContent) CyberCyan else Color.Gray.copy(0.5f)
+                        )
                     }
                 }
-                // 3D visibility icon
-                Box(
-                    Modifier.size(24.dp)
-                        .background(if (hasContent) CyberCyan.copy(0.15f) else Color.Transparent, CircleShape)
-                        .border(1.dp, if (hasContent) CyberCyan.copy(0.3f) else Color.White.copy(0.08f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(if (hasContent) "üëÅÔ∏è" else "üôà", fontSize = 10.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Visibility toggle (functional: add/remove from activeLayers)
+                    Box(
+                        Modifier.size(24.dp)
+                            .background(if (isActive) CyberCyan.copy(0.15f) else Color.Transparent, CircleShape)
+                            .border(1.dp, if (isActive) CyberCyan.copy(0.3f) else Color.White.copy(0.08f), CircleShape)
+                            .clickable {
+                                if (isActive) {
+                                    onRemoveLayer(layerId)
+                                    android.widget.Toast.makeText(context, "$name hidden", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onAddLayer(layerId)
+                                    android.widget.Toast.makeText(context, "$name shown", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (isActive) "Ì†ΩÌ±ÅÔ∏è" else "Ì†ΩÌπà", fontSize = 10.sp)
+                    }
+                    // Remove button (functional)
+                    if (hasContent) {
+                        Box(
+                            Modifier.size(24.dp)
+                                .background(Color(0xFFFF3D7F).copy(0.12f), CircleShape)
+                                .border(1.dp, Color(0xFFFF3D7F).copy(0.3f), CircleShape)
+                                .clickable {
+                                    onRemoveLayer(layerId)
+                                    android.widget.Toast.makeText(context, "$name removed", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("‚úï", fontSize = 9.sp, color = Color(0xFFFF3D7F), fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }

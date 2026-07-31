@@ -86,17 +86,34 @@ fun HomeScreen(
         }
     }
 
-    // Smooth animated splash
-    var splashAlpha by remember { mutableFloatStateOf(0f) }
-    var splashScale by remember { mutableFloatStateOf(0.8f) }
+    // â˜… Smooth 60fps animated splash (NextGen 2027) â€” spring-based for buttery open
+    var splashAlphaTarget by remember { mutableFloatStateOf(0f) }
+    var splashScaleTarget by remember { mutableFloatStateOf(0.82f) }
+    val splashAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = splashAlphaTarget,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "splashAlpha"
+    )
+    val splashScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = splashScaleTarget,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+        ),
+        label = "splashScale"
+    )
 
     LaunchedEffect(Unit) {
-        delay(100)
-        splashAlpha = 1f
-        splashScale = 1f
-        delay(1500)
-        splashAlpha = 0f
-        delay(300)
+        delay(120)
+        splashAlphaTarget = 1f
+        splashScaleTarget = 1f
+        delay(1400)
+        splashAlphaTarget = 0f
+        splashScaleTarget = 1.08f
+        delay(320)
         isAppLoadingIntro = false
     }
 
@@ -454,7 +471,6 @@ fun DashboardView(
     // Check and request permission before picking video
     fun checkPermissionAndPick() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+: Check READ_MEDIA_VIDEO
             val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
                 context, android.Manifest.permission.READ_MEDIA_VIDEO
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -467,7 +483,6 @@ fun DashboardView(
                 ))
             }
         } else {
-            // Android 12 and below: Check READ_EXTERNAL_STORAGE
             val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
                 context, android.Manifest.permission.READ_EXTERNAL_STORAGE
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -481,21 +496,60 @@ fun DashboardView(
         }
     }
 
-    // Active tool state to increase interactive capabilities
+    // â˜… NextGen 2027: staggered entrance animation state
     var selectedQuickTool by remember { mutableStateOf<String?>(null) }
+    // contentVisible triggers the staggered slide-in/scale-in animations for a
+    // smooth, premium app-open feel (60fps springs).
+    var contentVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(80)
+        contentVisible = true
+    }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
-        // LARGE NEW PROJECT BUTTON
+        // â˜… NextGen 2027 PRO badge row
         item {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .slideInUp(contentVisible, delayMs = 0),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "NEXTGEN PRO",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = AccentTertiary,
+                    letterSpacing = 3.sp
+                )
+                Box(
+                    modifier = Modifier
+                        .background(
+                            Brush.horizontalGradient(listOf(AccentPrimary, AccentSecondary)),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .border(1.dp, Color.White.copy(0.25f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    Text("2027", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color.White)
+                }
+            }
+        }
+
+        // â˜… LARGE NEW PROJECT BUTTON â€” 3D GLASS CARD with entrance animation
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(115.dp)
+                    .height(118.dp)
+                    .scaleIn(contentVisible, delayMs = 60)
                     .neonGlow(color = NeonOrange, shape = RoundedCornerShape(24.dp))
                     .background(
                         premiumAccentGradient,
@@ -544,18 +598,20 @@ fun DashboardView(
             }
         }
 
-        // QUICK TOOLS GRID (4 Columns, 4D Glass cards)
+        // â˜… QUICK TOOLS GRID â€” 3D GLASS CARDS with staggered entrance
         item {
             Spacer(modifier = Modifier.height(20.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .slideInUp(contentVisible, delayMs = 140),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val tools = listOf(
-                    Triple("ðŸŽµ", "MP3â†’Video", "convert_mp3"),
-                    Triple("ðŸ“¸", "Slideshow", "slideshow"),
-                    Triple("ðŸ—œï¸", "Compress", "compress"),
-                    Triple("ðŸŽ¬", "AI Edit", "aiedit")
+                    Triple("í ¼í¾µ", "MP3â†’Video", "convert_mp3"),
+                    Triple("í ½í³¸", "Slideshow", "slideshow"),
+                    Triple("í ½í·œï¸", "Compress", "compress"),
+                    Triple("í ¼í¾¬", "AI Edit", "aiedit")
                 )
                 tools.forEach { (emoji, label, id) ->
                     val isSelected = selectedQuickTool == id
@@ -563,12 +619,11 @@ fun DashboardView(
                         modifier = Modifier
                             .weight(1f)
                             .height(84.dp)
-                            .neonGlow(
-                                color = if (isSelected) CyberCyan else Color.Transparent,
+                            .glassCard3D(
                                 shape = RoundedCornerShape(14.dp),
-                                glowWidth = 1.dp
+                                glowColor = if (isSelected) CyberCyan else AccentPrimary,
+                                backColor = GlassBackground
                             )
-                            .glassmorphic(shape = RoundedCornerShape(14.dp))
                             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                             .tactileClick { selectedQuickTool = if (isSelected) null else id }
                             .padding(vertical = 12.dp),
@@ -592,14 +647,14 @@ fun DashboardView(
             }
         }
 
-        // Interactive quick tool configurations (increases total features)
+        // Interactive quick tool configurations
         if (selectedQuickTool != null) {
             item {
                 Spacer(modifier = Modifier.height(12.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glassmorphic(shape = RoundedCornerShape(14.dp))
+                        .glassCard3D(shape = RoundedCornerShape(14.dp), glowColor = AccentTertiary)
                         .padding(12.dp)
                 ) {
                     Column {
@@ -632,11 +687,13 @@ fun DashboardView(
             }
         }
 
-        // TRENDING TEMPLATES CAROUSEL
+        // â˜… TRENDING TEMPLATES CAROUSEL â€” with entrance animation
         item {
             Spacer(modifier = Modifier.height(24.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .slideInUp(contentVisible, delayMs = 220),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -673,7 +730,8 @@ fun DashboardView(
                 items(dashboardTemplates) { template ->
                     Box(
                         modifier = Modifier
-                            .size(110.dp, 160.dp)
+                            .size(118.dp, 168.dp)
+                            .scaleIn(contentVisible, delayMs = 300)
                             .clip(RoundedCornerShape(24.dp))
                             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
                             .tactileClick { onTemplateSelected(template) },
@@ -732,11 +790,13 @@ fun DashboardView(
             }
         }
 
-        // RECENT PROJECTS LIST
+        // â˜… RECENT PROJECTS LIST â€” 3D glass cards with entrance
         item {
             Spacer(modifier = Modifier.height(24.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .slideInUp(contentVisible, delayMs = 380),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -747,7 +807,7 @@ fun DashboardView(
                     color = Color.White
                 )
                 Text(
-                    text = "3 projects",
+                    text = "2 projects",
                     fontSize = 11.sp,
                     color = Color.Gray,
                     fontWeight = FontWeight.Medium
@@ -766,7 +826,8 @@ fun DashboardView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 10.dp)
-                    .glassmorphic(shape = RoundedCornerShape(14.dp))
+                    .slideInUp(contentVisible, delayMs = 440)
+                    .glassCard3D(shape = RoundedCornerShape(14.dp), glowColor = if (status == "Draft") AccentSecondary else AccentPrimary)
                     .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
                     .tactileClick { /* Open project */ }
                     .padding(12.dp)
