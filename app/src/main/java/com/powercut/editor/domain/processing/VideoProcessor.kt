@@ -628,7 +628,7 @@ class VideoProcessor @Inject constructor(
             "glitch_in" -> "$base:x='(w-text_w)/2+5*sin(t*30)':y='h-100+3*cos(t*30)':alpha='min(1\\\\,t*2)'"
             "neon_pulse" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0x7C5CFF@'0.7+0.3*sin(t*6)'"
             "pop" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42*(1+0.3*exp(-t*4))'"
-            "flip" -> "$base:x=(w-text_w)/2:y=h-100:alpha='min(1\\\\,t*2)'",  // flip-in via alpha
+            "flip" -> "$base:x=(w-text_w)/2:y=h-100:alpha='min(1\\\\,t*2)'"  // flip-in via alpha
             "elastic" -> "$base:x=(w-text_w)/2:y='h-100+30*exp(-t*2)*sin(t*10)'"
             "spring" -> "$base:x=(w-text_w)/2:y='h-100+20*exp(-t*3)*cos(t*8)'"
             "rubber" -> "$base:x=(w-text_w)/2:y='h-100+15*exp(-t*2)*sin(t*6)'"

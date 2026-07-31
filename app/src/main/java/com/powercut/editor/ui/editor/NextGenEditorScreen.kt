@@ -271,15 +271,15 @@ fun NextGenEditorScreen(
                 0.9f,0f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,1.1f,0f,0f, 0f,0f,0f,1f,0f)))
             "vintage" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
                 0.5f,0.65f,0.15f,0f,0f, 0.45f,0.6f,0.12f,0f,0f, 0.35f,0.55f,0.1f,0f,0f, 0f,0f,0f,1f,0f)))
-            "dramatic" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(1.3f) })
-            "vivid" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(1.6f) })
-            "noir" -> { val m = ColorMatrix().apply { setToSaturation(0f) }; m.setSaturation(0f); ColorFilter.colorMatrix(m) }
+            "dramatic" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.3f) })
+            "vivid" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.6f) })
+            "noir" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
             "bloom" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
                 1.05f,0.05f,0.05f,0f,10f, 0.05f,1.05f,0.05f,0f,10f, 0.05f,0.05f,1.05f,0f,10f, 0f,0f,0f,1f,0f)))
             "tealorange", "teal_orange" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
                 1.12f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.08f,0f,0f, 0f,0f,0f,1f,0f)))
-            "pastel" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(0.7f) })
-            "fade" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(0.6f) })
+            "pastel" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.7f) })
+            "fade" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.6f) })
             "cyberpunk" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
                 1.2f,0f,0.1f,0f,0f, 0f,0.8f,0f,0f,0f, 0.1f,0f,1.25f,0f,0f, 0f,0f,0f,1f,0f)))
             "sunset" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(

@@ -67,17 +67,17 @@ sealed class AIFilter(
             is Grayscale -> GPUImageGrayscaleFilter()
             is Invert -> GPUImageColorInvertFilter()
             is Warm -> GPUImageFilterGroup(listOf(
-                GPUImageWhiteBalanceFilter(6500).apply { setTemperature(5400f) },
+                GPUImageWhiteBalanceFilter(6500f, 0f).apply { setTemperature(5400f) },
                 GPUImageSaturationFilter(1.25f),
                 GPUImageBrightnessFilter(0.05f)
             ))
             is Cool -> GPUImageFilterGroup(listOf(
-                GPUImageWhiteBalanceFilter(6500).apply { setTemperature(9000f) },
+                GPUImageWhiteBalanceFilter(6500f, 0f).apply { setTemperature(9000f) },
                 GPUImageSaturationFilter(1.1f),
                 GPUImageContrastFilter(1.05f)
             ))
             is Vintage -> GPUImageFilterGroup(listOf(
-                GPUImageSepiaToneFilter().apply { setIntensity(0.4f) },
+                GPUImageSepiaToneFilter(0.4f),
                 GPUImageVignetteFilter(),
                 GPUImageBrightnessFilter(0.03f),
                 GPUImageContrastFilter(0.95f)
@@ -125,13 +125,13 @@ sealed class AIFilter(
                 GPUImageColorInvertFilter().apply {} // subtle handled by group balance
             ))
             is Sunset -> GPUImageFilterGroup(listOf(
-                GPUImageWhiteBalanceFilter(6500).apply { setTemperature(5000f) },
+                GPUImageWhiteBalanceFilter(6500f, 0f).apply { setTemperature(5000f) },
                 GPUImageSaturationFilter(1.3f),
                 GPUImageBrightnessFilter(0.06f),
                 GPUImageContrastFilter(1.05f)
             ))
             is Arctic -> GPUImageFilterGroup(listOf(
-                GPUImageWhiteBalanceFilter(6500).apply { setTemperature(9500f) },
+                GPUImageWhiteBalanceFilter(6500f, 0f).apply { setTemperature(9500f) },
                 GPUImageSaturationFilter(0.95f),
                 GPUImageContrastFilter(1.1f),
                 GPUImageBrightnessFilter(0.03f)
@@ -151,7 +151,7 @@ sealed class AIFilter(
                 GPUImageContrastFilter(1.15f)
             ))
             is Golden -> GPUImageFilterGroup(listOf(
-                GPUImageWhiteBalanceFilter(6500).apply { setTemperature(4800f) },
+                GPUImageWhiteBalanceFilter(6500f, 0f).apply { setTemperature(4800f) },
                 GPUImageSaturationFilter(1.2f),
                 GPUImageBrightnessFilter(0.07f),
                 GPUImageGammaFilter(1.1f)
