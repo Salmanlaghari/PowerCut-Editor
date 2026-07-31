@@ -768,6 +768,56 @@ class EditorViewModel @Inject constructor(
         projectRepository.updateProject { it.copy(autoReframeEnabled = !it.autoReframeEnabled) }
     }
 
+    // ===== NEW v4.0 CapCut-sync Pro Features =====
+
+    fun updateBlendMode(mode: String) {
+        projectRepository.updateProject { it.copy(blendMode = mode) }
+    }
+
+    fun toggleReverse() {
+        projectRepository.updateProject { it.copy(isReverseEnabled = !it.isReverseEnabled) }
+    }
+
+    fun updateFreezeFrame(ms: Long) {
+        projectRepository.updateProject { it.copy(freezeFrameMs = ms) }
+    }
+
+    fun updateColorLift(value: Float) {
+        projectRepository.updateProject { it.copy(colorLift = value) }
+    }
+
+    fun updateColorGamma(value: Float) {
+        projectRepository.updateProject { it.copy(colorGamma = value) }
+    }
+
+    fun updateColorGain(value: Float) {
+        projectRepository.updateProject { it.copy(colorGain = value) }
+    }
+
+    fun updateAudioEffect(effect: String) {
+        projectRepository.updateProject { it.copy(audioEffect = effect) }
+    }
+
+    fun updateVoiceChangerPitch(pitch: Float) {
+        projectRepository.updateProject { it.copy(voiceChangerPitch = pitch) }
+    }
+
+    fun toggleAudioDucking() {
+        projectRepository.updateProject { it.copy(isAudioDuckingEnabled = !it.isAudioDuckingEnabled) }
+    }
+
+    fun updateBorderStyle(style: String) {
+        projectRepository.updateProject { it.copy(borderStyle = style) }
+    }
+
+    fun updateWatermark(path: String?) {
+        projectRepository.updateProject { it.copy(watermarkPath = path) }
+    }
+
+    fun updateVignetteStyle(style: String) {
+        projectRepository.updateProject { it.copy(vignetteStyle = style) }
+    }
+
     fun navigateToExport() {
         _currentScreen.value = "export"
     }
