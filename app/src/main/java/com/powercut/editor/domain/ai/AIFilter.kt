@@ -15,7 +15,6 @@ import jp.co.cyberagent.android.gpuimage.filter.GPUImageWhiteBalanceFilter
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageToneCurveFilter
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageExposureFilter
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageGammaFilter
-import jp.co.cyberagent.android.gpuimage.filter.GPUImageHighlightsAndShadowsFilter
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageFilterGroup
 
 /**

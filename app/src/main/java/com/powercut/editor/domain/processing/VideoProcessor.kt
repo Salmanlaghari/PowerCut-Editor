@@ -614,7 +614,7 @@ class VideoProcessor @Inject constructor(
         val base = "drawtext=text='$safeText':fontsize=42:fontcolor=white:box=1:boxcolor=black@0.5"
         return when (anim) {
             "none", "fade_in", "fade" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(lt(t,1)\\\\,t\\\\,1)'"
-            "fade_out" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(gt(t,${duration - 1})\\\\,${duration - t}\\\\,1)'"
+            "fade_out" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(gt(t,${duration - 1})\\\\,${duration}-t\\\\,1)'"
             "typewriter" -> "$base:x=(w-text_w)/2:y=h-100:alpha='1':text='$safeText%{eif\\\\:trunc(t*8)\\\\:d}'"
             "bounce" -> "$base:x=(w-text_w)/2:y='h-100+20*abs(sin(t*4))'"
             "slide_left" -> "$base:x='w-text_w-(w-text_w)*min(1\\\\,t/0.5)':y=h-100"

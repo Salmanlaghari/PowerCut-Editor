@@ -231,7 +231,6 @@ fun NextGenEditorScreen(
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(buildUponParameters()
                 .setForceHighestSupportedBitrate(true)
-                .setForceHighestSupportedSampleRate(true)
                 .build())
         }
         ExoPlayer.Builder(context, renderers)
