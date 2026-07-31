@@ -182,7 +182,19 @@ fun NextGenEditorScreen(
     onUpdateOrientationMode: (String) -> Unit = {},
     onToggleVerticalSafeZone: () -> Unit = {},
     onToggleHorizontalLetterbox: () -> Unit = {},
-    onToggleAutoReframe: () -> Unit = {}
+    onToggleAutoReframe: () -> Unit = {},
+    // NEW v4.0 CapCut-sync Pro callbacks
+    onUpdateBlendMode: (String) -> Unit = {},
+    onToggleReverse: () -> Unit = {},
+    onUpdateFreezeFrame: (Long) -> Unit = {},
+    onUpdateColorLift: (Float) -> Unit = {},
+    onUpdateColorGamma: (Float) -> Unit = {},
+    onUpdateColorGain: (Float) -> Unit = {},
+    onUpdateAudioEffect: (String) -> Unit = {},
+    onUpdateVoiceChangerPitch: (Float) -> Unit = {},
+    onToggleAudioDucking: () -> Unit = {},
+    onUpdateBorderStyle: (String) -> Unit = {},
+    onUpdateVignetteStyle: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -522,7 +534,18 @@ fun NextGenEditorScreen(
                 onToggleHorizontalLetterbox = onToggleHorizontalLetterbox,
                 onToggleAutoReframe = onToggleAutoReframe,
                 onAddLayer = onAddLayer,
-                onRemoveLayer = onRemoveLayer
+                onRemoveLayer = onRemoveLayer,
+                onUpdateBlendMode = onUpdateBlendMode,
+                onToggleReverse = onToggleReverse,
+                onUpdateFreezeFrame = onUpdateFreezeFrame,
+                onUpdateColorLift = onUpdateColorLift,
+                onUpdateColorGamma = onUpdateColorGamma,
+                onUpdateColorGain = onUpdateColorGain,
+                onUpdateAudioEffect = onUpdateAudioEffect,
+                onUpdateVoiceChangerPitch = onUpdateVoiceChangerPitch,
+                onToggleAudioDucking = onToggleAudioDucking,
+                onUpdateBorderStyle = onUpdateBorderStyle,
+                onUpdateVignetteStyle = onUpdateVignetteStyle
             )
         }
 
@@ -1687,7 +1710,6 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
 // ─── 6. FILTERS PANEL ──────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
 private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit) {
     var filterCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1753,6 +1775,8 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
 }
 
 
+private data class EffectItem(val name: String, val effectId: String, val filterId: String, val category: String)
+
 // ─── 7. EFFECTS PANEL ──────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1772,68 +1796,68 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             // (displayName, effectId, filterId, category)
             val allEffects = listOf(
-                Triple("Glitch", "glitch", "invert", "vfx"),
-                Triple("VHS", "vhs", "sepia", "retro"),
-                Triple("Chromatic", "chromatic", "invert", "vfx"),
-                Triple("Lens Flare", "lens_flare", "none", "vfx"),
-                Triple("Snow", "snow", "none", "vfx"),
-                Triple("Rain", "rain", "none", "vfx"),
-                Triple("Fire", "fire", "none", "vfx"),
-                Triple("Sparkle", "sparkle", "none", "vfx"),
-                Triple("Dust", "dust", "sepia", "vfx"),
-                Triple("Motion Blur", "motion_blur", "none", "motion"),
-                Triple("Shake", "shake", "none", "motion"),
-                Triple("Flash", "flash", "invert", "motion"),
-                Triple("Neon Glow", "neon_glow", "invert", "neon"),
-                Triple("Vignette", "vignette", "grayscale", "color"),
-                Triple("Rainbow", "rainbow", "none", "color"),
-                Triple("Film Grain", "film_grain", "sepia", "retro"),
-                Triple("Bokeh", "bokeh", "none", "vfx"),
-                Triple("Particles", "particles", "none", "vfx"),
-                Triple("Strobe", "strobe", "grayscale", "motion"),
-                Triple("Zoom Pulse", "zoom_pulse", "none", "motion"),
-                Triple("Wave Distort", "wave_distort", "none", "motion"),
-                Triple("Flame", "flame", "invert", "vfx"),
-                Triple("Frost", "frost", "grayscale", "vfx"),
-                Triple("Starburst", "starburst", "none", "vfx"),
-                Triple("Face Blur", "face_blur", "none", "vfx"),
-                Triple("Swirl", "swirl", "invert", "vfx"),
-                Triple("Explosion", "explosion", "invert", "vfx"),
-                Triple("Light Leak", "light_leak", "none", "vfx"),
-                Triple("Film Strip", "film_strip", "sepia", "retro"),
-                Triple("Color Splash", "color_splash", "invert", "color"),
-                Triple("Electric", "electric", "invert", "vfx"),
-                Triple("Tidal", "tidal", "none", "motion"),
-                Triple("RGB Split", "rgb_glitch", "invert", "vfx"),
-                Triple("Scanline", "scanline", "none", "retro"),
-                Triple("CRT", "crt", "none", "retro"),
-                Triple("8bit", "8bit", "none", "retro"),
-                Triple("Old Film", "old_film", "sepia", "retro"),
-                Triple("Bloom", "bloom", "none", "color"),
-                Triple("HDR", "hdr", "none", "color"),
-                Triple("Vaporwave", "vaporwave", "none", "neon"),
-                Triple("Aesthetic", "aesthetic", "none", "color"),
-                Triple("LoFi", "lofi", "sepia", "retro"),
-                Triple("Dream", "dream", "none", "color"),
-                Triple("Night Vision", "night_vision", "invert", "vfx"),
-                Triple("Thermal", "thermal", "invert", "vfx"),
-                Triple("Pencil", "pencil", "grayscale", "color"),
-                Triple("Sketch", "sketch", "grayscale", "color"),
-                Triple("Cartoon", "cartoon", "none", "color"),
-                Triple("Watercolor", "watercolor", "none", "color"),
-                Triple("Oil Paint", "oil_paint", "none", "color"),
-                Triple("Pixel", "pixel", "none", "vfx"),
-                Triple("Mosaic", "mosaic", "none", "vfx"),
-                Triple("Emboss", "emboss", "none", "color"),
-                Triple("Sharpen", "sharpen_strong", "none", "color"),
-                Triple("Tilt Shift", "tilt_shift", "none", "color"),
-                Triple("Kaleidoscope", "kaleidoscope", "invert", "vfx"),
-                Triple("RGB Glitch", "rgb_split", "invert", "vfx"),
-                Triple("Disco", "disco", "rainbow", "neon"),
-                Triple("Concert", "concert", "none", "neon"),
-                Triple("Party", "party", "rainbow", "neon")
+                EffectItem("Glitch", "glitch", "invert", "vfx"),
+                EffectItem("VHS", "vhs", "sepia", "retro"),
+                EffectItem("Chromatic", "chromatic", "invert", "vfx"),
+                EffectItem("Lens Flare", "lens_flare", "none", "vfx"),
+                EffectItem("Snow", "snow", "none", "vfx"),
+                EffectItem("Rain", "rain", "none", "vfx"),
+                EffectItem("Fire", "fire", "none", "vfx"),
+                EffectItem("Sparkle", "sparkle", "none", "vfx"),
+                EffectItem("Dust", "dust", "sepia", "vfx"),
+                EffectItem("Motion Blur", "motion_blur", "none", "motion"),
+                EffectItem("Shake", "shake", "none", "motion"),
+                EffectItem("Flash", "flash", "invert", "motion"),
+                EffectItem("Neon Glow", "neon_glow", "invert", "neon"),
+                EffectItem("Vignette", "vignette", "grayscale", "color"),
+                EffectItem("Rainbow", "rainbow", "none", "color"),
+                EffectItem("Film Grain", "film_grain", "sepia", "retro"),
+                EffectItem("Bokeh", "bokeh", "none", "vfx"),
+                EffectItem("Particles", "particles", "none", "vfx"),
+                EffectItem("Strobe", "strobe", "grayscale", "motion"),
+                EffectItem("Zoom Pulse", "zoom_pulse", "none", "motion"),
+                EffectItem("Wave Distort", "wave_distort", "none", "motion"),
+                EffectItem("Flame", "flame", "invert", "vfx"),
+                EffectItem("Frost", "frost", "grayscale", "vfx"),
+                EffectItem("Starburst", "starburst", "none", "vfx"),
+                EffectItem("Face Blur", "face_blur", "none", "vfx"),
+                EffectItem("Swirl", "swirl", "invert", "vfx"),
+                EffectItem("Explosion", "explosion", "invert", "vfx"),
+                EffectItem("Light Leak", "light_leak", "none", "vfx"),
+                EffectItem("Film Strip", "film_strip", "sepia", "retro"),
+                EffectItem("Color Splash", "color_splash", "invert", "color"),
+                EffectItem("Electric", "electric", "invert", "vfx"),
+                EffectItem("Tidal", "tidal", "none", "motion"),
+                EffectItem("RGB Split", "rgb_glitch", "invert", "vfx"),
+                EffectItem("Scanline", "scanline", "none", "retro"),
+                EffectItem("CRT", "crt", "none", "retro"),
+                EffectItem("8bit", "8bit", "none", "retro"),
+                EffectItem("Old Film", "old_film", "sepia", "retro"),
+                EffectItem("Bloom", "bloom", "none", "color"),
+                EffectItem("HDR", "hdr", "none", "color"),
+                EffectItem("Vaporwave", "vaporwave", "none", "neon"),
+                EffectItem("Aesthetic", "aesthetic", "none", "color"),
+                EffectItem("LoFi", "lofi", "sepia", "retro"),
+                EffectItem("Dream", "dream", "none", "color"),
+                EffectItem("Night Vision", "night_vision", "invert", "vfx"),
+                EffectItem("Thermal", "thermal", "invert", "vfx"),
+                EffectItem("Pencil", "pencil", "grayscale", "color"),
+                EffectItem("Sketch", "sketch", "grayscale", "color"),
+                EffectItem("Cartoon", "cartoon", "none", "color"),
+                EffectItem("Watercolor", "watercolor", "none", "color"),
+                EffectItem("Oil Paint", "oil_paint", "none", "color"),
+                EffectItem("Pixel", "pixel", "none", "vfx"),
+                EffectItem("Mosaic", "mosaic", "none", "vfx"),
+                EffectItem("Emboss", "emboss", "none", "color"),
+                EffectItem("Sharpen", "sharpen_strong", "none", "color"),
+                EffectItem("Tilt Shift", "tilt_shift", "none", "color"),
+                EffectItem("Kaleidoscope", "kaleidoscope", "invert", "vfx"),
+                EffectItem("RGB Glitch", "rgb_split", "invert", "vfx"),
+                EffectItem("Disco", "disco", "rainbow", "neon"),
+                EffectItem("Concert", "concert", "none", "neon"),
+                EffectItem("Party", "party", "rainbow", "neon")
             )
-            allEffects.filter { effectCategory == "all" || it.third == effectCategory || it.fourth == effectCategory }.forEach { (name, effectId, filterId, category) ->
+            allEffects.filter { effectCategory == "all" || it.category == effectCategory }.forEach { (name, effectId, filterId, category) ->
                 val sel = project.selectedEffect == effectId
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
                     if (sel) { onUpdateEffect("none"); onUpdateFilter("none"); android.widget.Toast.makeText(ctx, "Effect removed!", android.widget.Toast.LENGTH_SHORT).show() }
@@ -1871,8 +1895,6 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
 
 
 // ─── 9. TRANSITIONS PANEL ──────────────────────────────────────
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String) -> Unit) {

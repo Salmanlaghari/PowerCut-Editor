@@ -401,7 +401,7 @@ class VideoProcessor @Inject constructor(
         // Border / frame style
         val borderFilter = borderStyleChain(borderStyle, tw, th)
         if (borderFilter.isNotEmpty()) {
-            vfFilters.addAll(borderFilter)
+            vfFilters.add(borderFilter)
         }
 
         // Transitions
