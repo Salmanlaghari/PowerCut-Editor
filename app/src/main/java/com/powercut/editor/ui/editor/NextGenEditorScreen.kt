@@ -1845,8 +1845,6 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
 }
 
 
-    }
-}
 
 
 // ─── 8. STICKERS PANEL ─────────────────────────────────────────
