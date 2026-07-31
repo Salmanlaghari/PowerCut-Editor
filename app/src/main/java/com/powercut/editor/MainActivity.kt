@@ -8,17 +8,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -112,16 +115,29 @@ class MainActivity : ComponentActivity() {
 
                         // Import loading state
                         val isImporting by viewModel.isImporting.collectAsState()
+                        val importProgress by viewModel.importProgress.collectAsState()
                         val importError by viewModel.importError.collectAsState()
 
-                        // Show loading dialog during video import
+                        // Show premium loading dialog during video import
                         if (isImporting) {
                             androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            Color(0xFF1A1A2E),
-                                            RoundedCornerShape(20.dp)
+                                            Brush.verticalGradient(
+                                                listOf(Color(0xFF0B0F1A), Color(0xFF161B26))
+                                            ),
+                                            RoundedCornerShape(24.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    com.powercut.editor.ui.theme.NeonOrange.copy(0.5f),
+                                                    com.powercut.editor.ui.theme.CyberCyan.copy(0.5f)
+                                                )
+                                            ),
+                                            RoundedCornerShape(24.dp)
                                         )
                                         .padding(32.dp),
                                     contentAlignment = Alignment.Center
@@ -131,19 +147,29 @@ class MainActivity : ComponentActivity() {
                                         verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         CircularProgressIndicator(
+                                            progress = { importProgress / 100f },
                                             color = com.powercut.editor.ui.theme.NeonOrange,
-                                            strokeWidth = 3.dp
+                                            strokeWidth = 4.dp,
+                                            modifier = Modifier.size(56.dp)
                                         )
                                         Text(
-                                            text = if (language == "ur") "ویڈیو لوڈ ہو رہی ہے..." else "Loading video...",
+                                            text = if (language == "ur") "ویڈیو لوڈ ہو رہی ہے..." else "Importing video…",
                                             color = Color.White,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                         Text(
-                                            text = if (language == "ur") "براہ کرم انتظار کریں" else "Please wait — importing large video",
+                                            text = if (language == "ur") "براہ کرم انتظار کریں — بڑی ویڈیوز پر تھوڑا وقت لگتا ہے"
+                                            else "Please wait — large videos take a moment",
                                             color = Color.Gray,
-                                            fontSize = 11.sp
+                                            fontSize = 11.sp,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        Text(
+                                            text = "$importProgress%",
+                                            color = com.powercut.editor.ui.theme.CyberCyan,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
