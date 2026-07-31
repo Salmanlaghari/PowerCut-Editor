@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import javax.inject.Inject
@@ -78,7 +79,10 @@ class ExportManager @Inject constructor(
             val tempOutputPath = tempOutputFile.absolutePath
 
             // Resolve video path: if it's a content:// URI, copy to temp file for FFmpeg
-            val videoPath = resolveVideoPath(context, project.videoPath, secureDir)
+            // (run on IO — the copy of long/multi-GB videos must never block the caller)
+            val videoPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                resolveVideoPath(context, project.videoPath, secureDir)
+            }
             if (videoPath == null) {
                 _exportState.value = Resource.Error(
                     "Could not access video file. Please re-import the video.",
@@ -110,7 +114,13 @@ class ExportManager @Inject constructor(
                     project.activeTemplateId == "none" &&
                     project.visualizerStyle == "none" &&
                     !project.isBeatSyncEnabled &&
-                    project.active3DShapeMask == "none"
+                    project.active3DShapeMask == "none" &&
+                    project.selectedEffect == "none" &&
+                    project.imageOverlayPath == null &&
+                    !project.isGreenScreenActive &&
+                    !project.isEraserActive &&
+                    !project.isImageEditorActive &&
+                    project.orientationMode == "free"
 
             val success = if (isInstantTrimPossible) {
                 Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")
@@ -149,7 +159,32 @@ class ExportManager @Inject constructor(
                     activeTemplateId = project.activeTemplateId,
                     visualizerStyle = project.visualizerStyle,
                     isBeatSyncEnabled = project.isBeatSyncEnabled,
-                    active3DShapeMask = project.active3DShapeMask
+                    active3DShapeMask = project.active3DShapeMask,
+                    selectedEffect = project.selectedEffect,
+                    imageOverlayPath = project.imageOverlayPath,
+                    imageOverlayOpacity = project.imageOverlayOpacity,
+                    imageOverlayScale = project.imageOverlayScale,
+                    imageOverlayX = project.imageOverlayX,
+                    imageOverlayY = project.imageOverlayY,
+                    greenScreenEnabled = project.greenScreenEnabled,
+                    greenScreenColor = project.greenScreenColor,
+                    greenScreenThreshold = project.greenScreenThreshold,
+                    greenScreenBackgroundPath = project.greenScreenBackgroundPath,
+                    imageEditorBrightness = project.imageEditorBrightness,
+                    imageEditorContrast = project.imageEditorContrast,
+                    imageEditorSaturation = project.imageEditorSaturation,
+                    imageEditorBlur = project.imageEditorBlur,
+                    imageEditorSharpen = project.imageEditorSharpen,
+                    imageEditorTemperature = project.imageEditorTemperature,
+                    imageEditorVignette = project.imageEditorVignette,
+                    imageEditorGrain = project.imageEditorGrain,
+                    imageEditorFade = project.imageEditorFade,
+                    imageEditorHighlights = project.imageEditorHighlights,
+                    imageEditorShadows = project.imageEditorShadows,
+                    imageEditorExposure = project.imageEditorExposure,
+                    orientationMode = project.orientationMode,
+                    verticalSafeZone = project.verticalSafeZone,
+                    horizontalLetterbox = project.horizontalLetterbox
                 )
             }
 
@@ -197,7 +232,32 @@ class ExportManager @Inject constructor(
                         activeTemplateId = project.activeTemplateId,
                         visualizerStyle = project.visualizerStyle,
                         isBeatSyncEnabled = project.isBeatSyncEnabled,
-                        active3DShapeMask = project.active3DShapeMask
+                        active3DShapeMask = project.active3DShapeMask,
+                        selectedEffect = project.selectedEffect,
+                        imageOverlayPath = project.imageOverlayPath,
+                        imageOverlayOpacity = project.imageOverlayOpacity,
+                        imageOverlayScale = project.imageOverlayScale,
+                        imageOverlayX = project.imageOverlayX,
+                        imageOverlayY = project.imageOverlayY,
+                        greenScreenEnabled = project.greenScreenEnabled,
+                        greenScreenColor = project.greenScreenColor,
+                        greenScreenThreshold = project.greenScreenThreshold,
+                        greenScreenBackgroundPath = project.greenScreenBackgroundPath,
+                        imageEditorBrightness = project.imageEditorBrightness,
+                        imageEditorContrast = project.imageEditorContrast,
+                        imageEditorSaturation = project.imageEditorSaturation,
+                        imageEditorBlur = project.imageEditorBlur,
+                        imageEditorSharpen = project.imageEditorSharpen,
+                        imageEditorTemperature = project.imageEditorTemperature,
+                        imageEditorVignette = project.imageEditorVignette,
+                        imageEditorGrain = project.imageEditorGrain,
+                        imageEditorFade = project.imageEditorFade,
+                        imageEditorHighlights = project.imageEditorHighlights,
+                        imageEditorShadows = project.imageEditorShadows,
+                        imageEditorExposure = project.imageEditorExposure,
+                        orientationMode = project.orientationMode,
+                        verticalSafeZone = project.verticalSafeZone,
+                        horizontalLetterbox = project.horizontalLetterbox
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                         val galleryPath = saveToPublicGallery(context, tempOutputFile)
@@ -219,7 +279,9 @@ class ExportManager @Inject constructor(
     /**
      * Resolve video path for FFmpeg processing.
      * - If it's a regular file path, return as-is
-     * - If it's a content:// URI, copy to temp file (FFmpeg needs file path)
+     * - If it's a content:// URI, stream-copy to a temp file with a large buffer
+     *   (FFmpeg needs a file path). The copy uses an 8MB buffer and is resilient to
+     *   long/multi-GB videos — it never loads the whole file into memory.
      */
     private fun resolveVideoPath(context: Context, videoPath: String, tempDir: File): String? {
         // Regular file path — return directly
@@ -227,13 +289,14 @@ class ExportManager @Inject constructor(
             return if (File(videoPath).exists()) videoPath else null
         }
 
-        // Content URI — copy to temp file for FFmpeg
+        // Content URI — stream-copy to temp file for FFmpeg (never load into memory)
         return try {
             val uri = android.net.Uri.parse(videoPath)
             val tempFile = File(tempDir, "input_${System.currentTimeMillis()}.mp4")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 java.io.FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(1024 * 1024) // 1MB buffer
+                    // 8MB buffer — optimal for large/long video streaming copy
+                    val buffer = ByteArray(8 * 1024 * 1024)
                     var read: Int
                     while (input.read(buffer).also { read = it } != -1) {
                         output.write(buffer, 0, read)
@@ -242,14 +305,14 @@ class ExportManager @Inject constructor(
                 }
             }
             if (tempFile.exists() && tempFile.length() > 0) {
-                Log.d(tag, "Resolved content URI to temp file: ${tempFile.absolutePath} (${tempFile.length() / (1024*1024)} MB)")
+                Log.d(tag, "Streamed content URI to temp file: ${tempFile.absolutePath} (${tempFile.length() / (1024 * 1024)} MB)")
                 tempFile.absolutePath
             } else {
-                Log.e(tag, "Failed to copy content URI to temp file")
+                Log.e(tag, "Failed to copy content URI to temp file (empty result)")
                 null
             }
         } catch (e: Exception) {
-            Log.e(tag, "Failed to resolve content URI: $videoPath", e)
+            Log.e(tag, "Failed to resolve content URI: $videoPath — ${e.message}")
             null
         }
     }

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -167,7 +168,39 @@ class EditorViewModel @Inject constructor(
         json.put("imageOverlayPath", project.imageOverlayPath ?: "")
         json.put("imageOverlayOpacity", project.imageOverlayOpacity.toDouble())
         json.put("imageOverlayScale", project.imageOverlayScale.toDouble())
+        json.put("imageOverlayX", project.imageOverlayX.toDouble())
+        json.put("imageOverlayY", project.imageOverlayY.toDouble())
         json.put("selectedEffect", project.selectedEffect)
+        json.put("activeLayers", JSONArray(project.activeLayers))
+        // Green Screen
+        json.put("greenScreenEnabled", project.greenScreenEnabled)
+        json.put("greenScreenColor", project.greenScreenColor)
+        json.put("greenScreenThreshold", project.greenScreenThreshold.toDouble())
+        json.put("greenScreenBackgroundPath", project.greenScreenBackgroundPath ?: "")
+        json.put("greenScreenAutoBgIndex", project.greenScreenAutoBgIndex)
+        // Eraser
+        json.put("eraserMode", project.eraserMode)
+        json.put("eraserBrushSize", project.eraserBrushSize.toDouble())
+        json.put("eraserTolerance", project.eraserTolerance.toDouble())
+        json.put("eraserSoftEdge", project.eraserSoftEdge)
+        // Image Editor
+        json.put("imgBrightness", project.imageEditorBrightness.toDouble())
+        json.put("imgContrast", project.imageEditorContrast.toDouble())
+        json.put("imgSaturation", project.imageEditorSaturation.toDouble())
+        json.put("imgBlur", project.imageEditorBlur.toDouble())
+        json.put("imgSharpen", project.imageEditorSharpen.toDouble())
+        json.put("imgTemperature", project.imageEditorTemperature.toDouble())
+        json.put("imgVignette", project.imageEditorVignette.toDouble())
+        json.put("imgGrain", project.imageEditorGrain.toDouble())
+        json.put("imgFade", project.imageEditorFade.toDouble())
+        json.put("imgHighlights", project.imageEditorHighlights.toDouble())
+        json.put("imgShadows", project.imageEditorShadows.toDouble())
+        json.put("imgExposure", project.imageEditorExposure.toDouble())
+        // Orientation
+        json.put("orientationMode", project.orientationMode)
+        json.put("verticalSafeZone", project.verticalSafeZone)
+        json.put("horizontalLetterbox", project.horizontalLetterbox)
+        json.put("autoReframeEnabled", project.autoReframeEnabled)
 
         val clipsArray = JSONArray()
         for (clip in clipsList) {
@@ -215,7 +248,41 @@ class EditorViewModel @Inject constructor(
             imageOverlayPath = json.optString("imageOverlayPath", "").let { if (it.isEmpty()) null else it },
             imageOverlayOpacity = json.optDouble("imageOverlayOpacity", 1.0).toFloat(),
             imageOverlayScale = json.optDouble("imageOverlayScale", 1.0).toFloat(),
-            selectedEffect = json.optString("selectedEffect", "none")
+            imageOverlayX = json.optDouble("imageOverlayX", 0.5).toFloat(),
+            imageOverlayY = json.optDouble("imageOverlayY", 0.5).toFloat(),
+            selectedEffect = json.optString("selectedEffect", "none"),
+            activeLayers = json.optJSONArray("activeLayers")?.let { arr ->
+                (0 until arr.length()).map { arr.getString(it) }
+            } ?: emptyList(),
+            // Green Screen
+            greenScreenEnabled = json.optBoolean("greenScreenEnabled", false),
+            greenScreenColor = json.optString("greenScreenColor", "green"),
+            greenScreenThreshold = json.optDouble("greenScreenThreshold", 0.4).toFloat(),
+            greenScreenBackgroundPath = json.optString("greenScreenBackgroundPath", "").let { if (it.isEmpty()) null else it },
+            greenScreenAutoBgIndex = json.optInt("greenScreenAutoBgIndex", -1),
+            // Eraser
+            eraserMode = json.optString("eraserMode", "none"),
+            eraserBrushSize = json.optDouble("eraserBrushSize", 30.0).toFloat(),
+            eraserTolerance = json.optDouble("eraserTolerance", 0.5).toFloat(),
+            eraserSoftEdge = json.optBoolean("eraserSoftEdge", true),
+            // Image Editor
+            imageEditorBrightness = json.optDouble("imgBrightness", 0.0).toFloat(),
+            imageEditorContrast = json.optDouble("imgContrast", 1.0).toFloat(),
+            imageEditorSaturation = json.optDouble("imgSaturation", 1.0).toFloat(),
+            imageEditorBlur = json.optDouble("imgBlur", 0.0).toFloat(),
+            imageEditorSharpen = json.optDouble("imgSharpen", 0.0).toFloat(),
+            imageEditorTemperature = json.optDouble("imgTemperature", 0.0).toFloat(),
+            imageEditorVignette = json.optDouble("imgVignette", 0.0).toFloat(),
+            imageEditorGrain = json.optDouble("imgGrain", 0.0).toFloat(),
+            imageEditorFade = json.optDouble("imgFade", 0.0).toFloat(),
+            imageEditorHighlights = json.optDouble("imgHighlights", 0.0).toFloat(),
+            imageEditorShadows = json.optDouble("imgShadows", 0.0).toFloat(),
+            imageEditorExposure = json.optDouble("imgExposure", 0.0).toFloat(),
+            // Orientation
+            orientationMode = json.optString("orientationMode", "free"),
+            verticalSafeZone = json.optBoolean("verticalSafeZone", false),
+            horizontalLetterbox = json.optBoolean("horizontalLetterbox", false),
+            autoReframeEnabled = json.optBoolean("autoReframeEnabled", false)
         )
 
         val clipsList = mutableListOf<Clip>()
@@ -266,6 +333,9 @@ class EditorViewModel @Inject constructor(
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
 
+    private val _importProgress = MutableStateFlow(0)
+    val importProgress: StateFlow<Int> = _importProgress.asStateFlow()
+
     private val _importError = MutableStateFlow<String?>(null)
     val importError: StateFlow<String?> = _importError.asStateFlow()
 
@@ -273,6 +343,19 @@ class EditorViewModel @Inject constructor(
         _importError.value = null
     }
 
+    /**
+     * Import a video for editing — Premium 2027 robust long-video import.
+     *
+     * This was the source of the "long video import failed" bug. The fix:
+     *  - All heavy work (path resolution + metadata) runs on Dispatchers.IO so the
+     *    UI never blocks and the import can't be killed by an ANR on huge files.
+     *  - Persistable URI permission is taken immediately so access survives.
+     *  - content:// URIs are NEVER rejected for missing file existence — ExoPlayer
+     *    reads them natively.
+     *  - Duration is read with bounded fallbacks; a metadata failure no longer
+     *    blocks the import (ExoPlayer corrects it once playback starts).
+     *  - Progress stages are reported to the UI for a premium loading experience.
+     */
     fun selectVideo(
         context: Context,
         uri: Uri,
@@ -284,31 +367,48 @@ class EditorViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _isImporting.value = true
+            _importProgress.value = 10
             _importError.value = null
             try {
-                val path = UriHelper.getPathFromUri(context, uri)
+                // Persist read permission FIRST so long-video access survives
+                UriHelper.takePersistablePermission(context, uri)
+                _importProgress.value = 25
+
+                // Resolve path on a background thread (heavy for large videos)
+                val path = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    UriHelper.getPathFromUri(context, uri)
+                }
+                _importProgress.value = 50
+
                 if (path != null) {
-                    // For content:// URIs, skip file existence check (ExoPlayer handles them natively)
                     val isContentUri = path.startsWith("content://")
+                    // Only validate file existence for real file paths — content URIs
+                    // are always streamable and must NEVER be rejected here.
                     if (!isContentUri) {
                         val file = File(path)
                         if (!file.exists() || file.length() == 0L) {
                             _importError.value = "Failed to load video. File is empty or could not be read."
                             _isImporting.value = false
+                            _importProgress.value = 0
                             return@launch
                         }
                     }
 
-                    // Read real video duration using MediaMetadataRetriever
-                    val realDurationMs = UriHelper.getVideoDurationMs(context, path)
-                        ?: UriHelper.getVideoDurationMs(context, uri.toString())
-                        ?: 10000L // fallback if retriever fails (ExoPlayer will update it later)
+                    _importProgress.value = 70
+                    // Read real video duration on a background thread with fallbacks.
+                    // A null duration is NOT fatal — ExoPlayer reports it on playback.
+                    val realDurationMs = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        UriHelper.getVideoDurationMs(context, path)
+                            ?: UriHelper.getVideoDurationMs(context, uri.toString())
+                            ?: 0L
+                    }
+                    _importProgress.value = 90
 
                     val project = VideoProject(
                         videoPath = path,
                         durationMs = realDurationMs,
                         trimStartMs = 0L,
-                        trimEndMs = realDurationMs,
+                        trimEndMs = if (realDurationMs > 0L) realDurationMs else 0L,
                         targetResolution = _selectedResolution.value,
                         activeTemplateId = templateId,
                         selectedFilter = filter,
@@ -317,23 +417,31 @@ class EditorViewModel @Inject constructor(
                         speedFactor = speed
                     )
                     projectRepository.setProject(project)
+                    _importProgress.value = 100
                     _currentScreen.value = "editor"
                 } else {
-                    _importError.value = "Failed to load video. The file may be too large or storage is full. Try a shorter or smaller video."
+                    _importError.value = "Could not access this video. Please try selecting it again from your gallery."
                 }
             } catch (e: Exception) {
                 _importError.value = "Failed to load video: ${e.message}"
             } finally {
                 _isImporting.value = false
+                _importProgress.value = 0
             }
         }
     }
 
     fun setVideoDuration(durationMs: Long) {
+        if (durationMs <= 0L) return
         projectRepository.updateProject { project ->
+            // If the end trim was never set (long-video import where metadata
+            // failed), or it was a stale placeholder, snap it to the real duration.
+            val shouldResetEnd = project.trimEndMs == 0L ||
+                    project.trimEndMs == 15000L ||
+                    project.trimEndMs == project.durationMs
             project.copy(
                 durationMs = durationMs,
-                trimEndMs = if (project.trimEndMs == 15000L || project.trimEndMs == 0L) durationMs else project.trimEndMs
+                trimEndMs = if (shouldResetEnd || project.trimEndMs > durationMs) durationMs else project.trimEndMs
             )
         }
     }

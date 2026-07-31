@@ -4,7 +4,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -77,6 +81,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
@@ -211,7 +218,27 @@ fun NextGenEditorScreen(
     }
 
     // ─── ExoPlayer ────────────────────────────────────────────
-    val exoPlayer = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
+    val exoPlayer = remember {
+        // Smooth 60fps: tuned load control + extension renderers + force highest quality
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(800, 8000, 200, 800)
+            .setTargetBufferBytes(DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+        val renderers = DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(buildUponParameters()
+                .setForceHighestSupportedBitrate(true)
+                .setForceHighestSupportedSampleRate(true)
+                .build())
+        }
+        ExoPlayer.Builder(context, renderers)
+            .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
+            .build().apply { repeatMode = Player.REPEAT_MODE_ONE }
+    }
     LaunchedEffect(project.videoPath) {
         val uri = if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
             Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
@@ -224,7 +251,7 @@ fun NextGenEditorScreen(
         })
     }
     LaunchedEffect(isPlaying) {
-        if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(100) } }
+        if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(33) } }
         else { exoPlayer.pause(); kotlinx.coroutines.delay(3000); if (!isPlaying) onSaveDraft() }
     }
     LaunchedEffect(project.isMuted, project.videoVolume) { exoPlayer.volume = if (project.isMuted) 0f else project.videoVolume }
@@ -233,10 +260,40 @@ fun NextGenEditorScreen(
 
     // ─── Filter Matrix ────────────────────────────────────────
     val colorFilter = remember(project.selectedFilter) {
-        when (project.selectedFilter.lowercase()) {
-            "grayscale" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+        val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
+        when (f) {
+            "grayscale", "mono" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
             "sepia" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(0.393f,0.769f,0.189f,0f,0f,0.349f,0.686f,0.168f,0f,0f,0.272f,0.534f,0.131f,0f,0f,0f,0f,0f,1f,0f)))
             "invert" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(-1f,0f,0f,0f,255f,0f,-1f,0f,0f,255f,0f,0f,-1f,0f,255f,0f,0f,0f,1f,0f)))
+            "warm" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.1f,0f,0f,0f,0f, 0f,1.02f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f)))
+            "cool" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                0.9f,0f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,1.1f,0f,0f, 0f,0f,0f,1f,0f)))
+            "vintage" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                0.5f,0.65f,0.15f,0f,0f, 0.45f,0.6f,0.12f,0f,0f, 0.35f,0.55f,0.1f,0f,0f, 0f,0f,0f,1f,0f)))
+            "dramatic" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(1.3f) })
+            "vivid" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(1.6f) })
+            "noir" -> { val m = ColorMatrix().apply { setToSaturation(0f) }; m.setSaturation(0f); ColorFilter.colorMatrix(m) }
+            "bloom" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.05f,0.05f,0.05f,0f,10f, 0.05f,1.05f,0.05f,0f,10f, 0.05f,0.05f,1.05f,0f,10f, 0f,0f,0f,1f,0f)))
+            "tealorange", "teal_orange" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.12f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.08f,0f,0f, 0f,0f,0f,1f,0f)))
+            "pastel" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(0.7f) })
+            "fade" -> ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(0.6f) })
+            "cyberpunk" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.2f,0f,0.1f,0f,0f, 0f,0.8f,0f,0f,0f, 0.1f,0f,1.25f,0f,0f, 0f,0f,0f,1f,0f)))
+            "sunset" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.15f,0.05f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,0.95f,0f,0f, 0f,0f,0f,1f,0f)))
+            "arctic" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                0.85f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.12f,0f,0f, 0f,0f,0f,1f,0f)))
+            "forest" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                0.9f,0f,0f,0f,0f, 0f,1.1f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f)))
+            "rose" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.1f,0f,0.05f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.05f,0f,0f, 0f,0f,0f,1f,0f)))
+            "golden" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.12f,0.05f,0f,0f,5f, 0f,1.03f,0f,0f,0f, 0f,0f,0.85f,0f,0f, 0f,0f,0f,1f,0f)))
+            "mist" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+                1.05f,0.03f,0.03f,0f,15f, 0.03f,1.05f,0.03f,0f,15f, 0.03f,0.03f,1.05f,0f,15f, 0f,0f,0f,1f,0f)))
             else -> null
         }
     }
@@ -390,7 +447,10 @@ fun NextGenEditorScreen(
         )
 
         // ─── 5. TOOL PANEL (expandable) ───────────────────────
-        AnimatedVisibility(visible = selectedTool >= 0 && isPanelExpanded, enter = expandVertically(), exit = shrinkVertically()) {
+        AnimatedVisibility(visible = selectedTool >= 0 && isPanelExpanded,
+            enter = expandVertically(animationSpec = spring(dampingRatio = 0.8f, stiffness = 350f)) + fadeIn(tween(200)),
+            exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.8f, stiffness = 350f)) + fadeOut(tween(150))
+        ) {
             CapCutToolPanel(
                 selectedTool = selectedTool,
                 project = project,
