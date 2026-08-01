@@ -107,9 +107,17 @@ class ExportManager @Inject constructor(
             } else {
                 maxOf(safetyFloor, estimatedOutputSize)
             }
-            if (availableSpace < minRequiredSpace) {
+            // v4.3: Hard 15 GB floor for very long (≥30 min) videos to prevent
+            // mid-export disk-full crashes. 60-min 1080p can need ~12 GB peak.
+            val hardFloor15GB = 15L * 1024 * 1024 * 1024
+            val effectiveMinRequired = if (isLongVideo && inputSize > 3L * 1024 * 1024 * 1024) {
+                maxOf(minRequiredSpace, hardFloor15GB)
+            } else {
+                minRequiredSpace
+            }
+            if (availableSpace < effectiveMinRequired) {
                 val availableGB = availableSpace / (1024.0 * 1024 * 1024)
-                val requiredGB = minRequiredSpace / (1024.0 * 1024 * 1024)
+                val requiredGB = effectiveMinRequired / (1024.0 * 1024 * 1024)
                 val msg = if (isLongVideo) {
                     "Not enough storage for this long video. Free ${String.format("%.1f", requiredGB - availableGB)} GB " +
                     "(you have ${String.format("%.1f", availableGB)} GB, need ${String.format("%.1f", requiredGB)} GB). " +
@@ -269,7 +277,8 @@ class ExportManager @Inject constructor(
                     isAudioDuckingEnabled = project.isAudioDuckingEnabled,
                     borderStyle = project.borderStyle,
                     watermarkPath = project.watermarkPath,
-                    vignetteStyle = project.vignetteStyle
+                    vignetteStyle = project.vignetteStyle,
+                    onProgress = { pct -> updateProgress(pct) }
                 )
             }
 
@@ -357,7 +366,8 @@ class ExportManager @Inject constructor(
                         isAudioDuckingEnabled = project.isAudioDuckingEnabled,
                         borderStyle = project.borderStyle,
                         watermarkPath = project.watermarkPath,
-                        vignetteStyle = project.vignetteStyle
+                        vignetteStyle = project.vignetteStyle,
+                        onProgress = { pct -> updateProgress(pct) }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                         val galleryPath = saveToPublicGallery(context, tempOutputFile)
@@ -375,6 +385,14 @@ class ExportManager @Inject constructor(
             Log.e(tag, "Export failed with exception", e)
             _exportState.value = Resource.Error(e.message ?: "An unknown error occurred during export", e)
         } finally {
+            // v4.3: Clean up any temp overlay files created during export
+            // (content:// URIs that were stream-copied to cache for FFmpeg)
+            try {
+                videoProcessor.cleanupOverlayTempFiles()
+            } catch (e: Exception) {
+                Log.w(tag, "Could not clean up overlay temp files: ${e.message}")
+            }
+
             // Always clean up the temp input copy to reclaim space (v4.1)
             tempInputFile?.let { f ->
                 try {
