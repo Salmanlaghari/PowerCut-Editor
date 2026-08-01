@@ -1590,44 +1590,44 @@ class VideoProcessor @Inject constructor(
             "fire" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=red@0.3:t=fill," +
                        "drawbox=x=$bx+10:y=$by+15:w=${sz-20}:h=${sz-25}:color=orange@0.8:t=fill"
             // Star — yellow 4-point cross shape
-            "star" -> "drawbox=x=$bx+${sz//4}:y=$by:w=${sz//2}:h=$sz:color=yellow@0.9:t=fill," +
-                       "drawbox=x=$bx:y=$by+${sz//4}:w=$sz:h=${sz//2}:color=yellow@0.9:t=fill"
+            "star" -> "drawbox=x=$bx+${sz/4}:y=$by:w=${sz/2}:h=$sz:color=yellow@0.9:t=fill," +
+                       "drawbox=x=$bx:y=$by+${sz/4}:w=$sz:h=${sz/2}:color=yellow@0.9:t=fill"
             // Heart — two red boxes forming a heart-like cluster
-            "heart" -> "drawbox=x=$bx+5:y=$by+10:w=${sz//2-5}:h=${sz//2-5}:color=red@0.85:t=fill," +
-                        "drawbox=x=$bx+${sz//2}:y=$by+10:w=${sz//2-5}:h=${sz//2-5}:color=red@0.85:t=fill," +
-                        "drawbox=x=$bx+10:y=$by+${sz//2}:w=${sz-20}:h=${sz//2-10}:color=red@0.85:t=fill"
+            "heart" -> "drawbox=x=$bx+5:y=$by+10:w=${sz/2-5}:h=${sz/2-5}:color=red@0.85:t=fill," +
+                        "drawbox=x=$bx+${sz/2}:y=$by+10:w=${sz/2-5}:h=${sz/2-5}:color=red@0.85:t=fill," +
+                        "drawbox=x=$bx+10:y=$by+${sz/2}:w=${sz-20}:h=${sz/2-10}:color=red@0.85:t=fill"
             // Glow / Bolt — yellow lightning bolt shape
-            "glow", "bolt" -> "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//3}:h=$sz:color=yellow@0.9:t=fill," +
-                       "drawbox=x=$bx+10:y=$by+${sz//3}:w=${sz-20}:h=${sz//3}:color=yellow@0.7:t=fill"
+            "glow", "bolt" -> "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/3}:h=$sz:color=yellow@0.9:t=fill," +
+                       "drawbox=x=$bx+10:y=$by+${sz/3}:w=${sz-20}:h=${sz/3}:color=yellow@0.7:t=fill"
             // Diamond — cyan filled diamond (rotated square approximation)
-            "diamond" -> "drawbox=x=$bx+${sz//4}:y=$by+${sz//4}:w=${sz//2}:h=${sz//2}:color=cyan@0.8:t=fill," +
+            "diamond" -> "drawbox=x=$bx+${sz/4}:y=$by+${sz/4}:w=${sz/2}:h=${sz/2}:color=cyan@0.8:t=fill," +
                           "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=cyan@0.3:t=fill"
             // Music — purple note shape (two boxes + bar)
             "music" -> "drawbox=x=$bx+5:y=$by+${sz-15}:w=20:h=15:color=purple@0.9:t=fill," +
                         "drawbox=x=$bx+${sz-25}:y=$by+${sz-20}:w=20:h=20:color=purple@0.9:t=fill," +
                         "drawbox=x=$bx+22:y=$by:w=8:h=$sz:color=purple@0.9:t=fill"
             // Crown — gold horizontal bar with three spikes
-            "crown" -> "drawbox=x=$bx:y=$by+${sz//2}:w=$sz:h=${sz//2}:color=gold@0.9:t=fill," +
-                        "drawbox=x=$bx:y=$by:w=${sz//4}:h=${sz//2}:color=gold@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//4}:h=${sz//2}:color=gold@0.9:t=fill," +
-                        "drawbox=x=$bx+${2*sz//3}:y=$by:w=${sz//4}:h=${sz//2}:color=gold@0.9:t=fill"
+            "crown" -> "drawbox=x=$bx:y=$by+${sz/2}:w=$sz:h=${sz/2}:color=gold@0.9:t=fill," +
+                        "drawbox=x=$bx:y=$by:w=${sz/4}:h=${sz/2}:color=gold@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/4}:h=${sz/2}:color=gold@0.9:t=fill," +
+                        "drawbox=x=$bx+${2*sz/3}:y=$by:w=${sz/4}:h=${sz/2}:color=gold@0.9:t=fill"
             // Sparkle — white 4-point small cross
-            "sparkle" -> "drawbox=x=$bx+${sz//3}:y=$by+${sz//4}:w=${sz//3}:h=${sz//2}:color=white@0.9:t=fill," +
-                          "drawbox=x=$bx+${sz//4}:y=$by+${sz//3}:w=${sz//2}:h=${sz//3}:color=white@0.9:t=fill"
+            "sparkle" -> "drawbox=x=$bx+${sz/3}:y=$by+${sz/4}:w=${sz/3}:h=${sz/2}:color=white@0.9:t=fill," +
+                          "drawbox=x=$bx+${sz/4}:y=$by+${sz/3}:w=${sz/2}:h=${sz/3}:color=white@0.9:t=fill"
             // Target — concentric circles approximated with boxes
             "target" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=red@0.5:t=fill," +
                          "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=white@0.8:t=fill," +
                          "drawbox=x=$bx+20:y=$by+20:w=${sz-40}:h=${sz-40}:color=red@0.9:t=fill"
             // Trophy — gold cup shape
-            "trophy" -> "drawbox=x=$bx+10:y=$by:w=${sz-20}:h=${sz//2}:color=gold@0.9:t=fill," +
-                         "drawbox=x=$bx+${sz//3}:y=$by+${sz//2}:w=${sz//3}:h=${sz//2}:color=gold@0.9:t=fill"
+            "trophy" -> "drawbox=x=$bx+10:y=$by:w=${sz-20}:h=${sz/2}:color=gold@0.9:t=fill," +
+                         "drawbox=x=$bx+${sz/3}:y=$by+${sz/2}:w=${sz/3}:h=${sz/2}:color=gold@0.9:t=fill"
             // Skull — white rounded block with black eye holes
-            "skull" -> "drawbox=x=$bx+5:y=$by:w=${sz-10}:h=${sz//2+10}:color=white@0.9:t=fill," +
+            "skull" -> "drawbox=x=$bx+5:y=$by:w=${sz-10}:h=${sz/2+10}:color=white@0.9:t=fill," +
                         "drawbox=x=$bx+10:y=$by+15:w=12:h=12:color=black@0.9:t=fill," +
                         "drawbox=x=$bx+${sz-22}:y=$by+15:w=12:h=12:color=black@0.9:t=fill"
             // Rocket — white body with red tip
-            "rocket" -> "drawbox=x=$bx+${sz//3}:y=$by+10:w=${sz//3}:h=${sz-10}:color=white@0.9:t=fill," +
-                         "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//3}:h=15:color=red@0.9:t=fill," +
+            "rocket" -> "drawbox=x=$bx+${sz/3}:y=$by+10:w=${sz/3}:h=${sz-10}:color=white@0.9:t=fill," +
+                         "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/3}:h=15:color=red@0.9:t=fill," +
                          "drawbox=x=$bx+5:y=$by+${sz-15}:w=10:h=10:color=orange@0.9:t=fill," +
                          "drawbox=x=$bx+${sz-15}:y=$by+${sz-15}:w=10:h=10:color=orange@0.9:t=fill"
             // 100 — green filled block (number badge style)
@@ -1635,11 +1635,11 @@ class VideoProcessor @Inject constructor(
                       "drawbox=x=$bx+5:y=$by+5:w=${sz-10}:h=${sz-10}:color=white@0.3:t=fill"
             // Thumbs up — blue filled block
             "thumbs_up" -> "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=blue@0.8:t=fill," +
-                            "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//3}:h=20:color=blue@0.9:t=fill"
+                            "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/3}:h=20:color=blue@0.9:t=fill"
             // Party — magenta confetti blocks
             "party" -> "drawbox=x=$bx:y=$by:w=15:h=15:color=magenta@0.9:t=fill," +
                         "drawbox=x=$bx+${sz-15}:y=$by:w=15:h=15:color=cyan@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz//2-7}:y=$by+${sz//2-7}:w=15:h=15:color=yellow@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz/2-7}:y=$by+${sz/2-7}:w=15:h=15:color=yellow@0.9:t=fill," +
                         "drawbox=x=$bx:y=$by+${sz-15}:w=15:h=15:color=lime@0.9:t=fill," +
                         "drawbox=x=$bx+${sz-15}:y=$by+${sz-15}:w=15:h=15:color=orange@0.9:t=fill"
             else -> ""
