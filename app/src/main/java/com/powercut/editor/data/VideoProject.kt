@@ -75,7 +75,21 @@ data class VideoProject(
     val orientationMode: String = "free",
     val verticalSafeZone: Boolean = false,
     val horizontalLetterbox: Boolean = false,
-    val autoReframeEnabled: Boolean = false
+    val autoReframeEnabled: Boolean = false,
+
+    // ── NEW v4.0 CapCut-sync Pro features ──
+    val blendMode: String = "none",
+    val isReverseEnabled: Boolean = false,
+    val freezeFrameMs: Long = 0L,
+    val colorLift: Float = 0f,
+    val colorGamma: Float = 0f,
+    val colorGain: Float = 0f,
+    val audioEffect: String = "none",
+    val voiceChangerPitch: Float = 0f,
+    val isAudioDuckingEnabled: Boolean = false,
+    val borderStyle: String = "none",
+    val watermarkPath: String? = null,
+    val vignetteStyle: String = "none"
 ) {
     val isTrimmed: Boolean
         get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L
@@ -103,4 +117,34 @@ data class VideoProject(
 
     val isHorizontalMode: Boolean
         get() = orientationMode == "horizontal" || aspectPreset == "16:9"
+
+    val isBlendModeActive: Boolean
+        get() = blendMode != "none"
+
+    val isReversed: Boolean
+        get() = isReverseEnabled
+
+    val hasFreezeFrame: Boolean
+        get() = freezeFrameMs > 0L
+
+    val isColorCurvesActive: Boolean
+        get() = colorLift != 0f || colorGamma != 0f || colorGain != 0f
+
+    val isAudioEffectActive: Boolean
+        get() = audioEffect != "none"
+
+    val isVoiceChanged: Boolean
+        get() = voiceChangerPitch != 0f
+
+    val isAudioDuckingActive: Boolean
+        get() = isAudioDuckingEnabled
+
+    val isBorderStyleActive: Boolean
+        get() = borderStyle != "none"
+
+    val hasWatermark: Boolean
+        get() = !watermarkPath.isNullOrBlank()
+
+    val isVignetteStyleActive: Boolean
+        get() = vignetteStyle != "none"
 }

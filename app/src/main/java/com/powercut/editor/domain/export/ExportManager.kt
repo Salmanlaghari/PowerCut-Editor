@@ -191,7 +191,19 @@ class ExportManager @Inject constructor(
                     imageEditorExposure = project.imageEditorExposure,
                     orientationMode = project.orientationMode,
                     verticalSafeZone = project.verticalSafeZone,
-                    horizontalLetterbox = project.horizontalLetterbox
+                    horizontalLetterbox = project.horizontalLetterbox,
+                    blendMode = project.blendMode,
+                    isReverseEnabled = project.isReverseEnabled,
+                    freezeFrameMs = project.freezeFrameMs,
+                    colorLift = project.colorLift,
+                    colorGamma = project.colorGamma,
+                    colorGain = project.colorGain,
+                    audioEffect = project.audioEffect,
+                    voiceChangerPitch = project.voiceChangerPitch,
+                    isAudioDuckingEnabled = project.isAudioDuckingEnabled,
+                    borderStyle = project.borderStyle,
+                    watermarkPath = project.watermarkPath,
+                    vignetteStyle = project.vignetteStyle
                 )
             }
 
@@ -264,7 +276,19 @@ class ExportManager @Inject constructor(
                         imageEditorExposure = project.imageEditorExposure,
                         orientationMode = project.orientationMode,
                         verticalSafeZone = project.verticalSafeZone,
-                        horizontalLetterbox = project.horizontalLetterbox
+                        horizontalLetterbox = project.horizontalLetterbox,
+                        blendMode = project.blendMode,
+                        isReverseEnabled = project.isReverseEnabled,
+                        freezeFrameMs = project.freezeFrameMs,
+                        colorLift = project.colorLift,
+                        colorGamma = project.colorGamma,
+                        colorGain = project.colorGain,
+                        audioEffect = project.audioEffect,
+                        voiceChangerPitch = project.voiceChangerPitch,
+                        isAudioDuckingEnabled = project.isAudioDuckingEnabled,
+                        borderStyle = project.borderStyle,
+                        watermarkPath = project.watermarkPath,
+                        vignetteStyle = project.vignetteStyle
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                         val galleryPath = saveToPublicGallery(context, tempOutputFile)
@@ -273,7 +297,7 @@ class ExportManager @Inject constructor(
                     }
                 }
                 _exportState.value = Resource.Error(
-                    "Export failed for this video. Try: 1) Free up storage space 2) Use a shorter clip 3) Lower resolution in settings",
+                    "Export failed. We auto-retried with safe settings but the video could not be encoded. Try: 1) Use a shorter clip (under 5 min) 2) Lower resolution in settings 3) Disable heavy effects/filters 4) Free up storage space",
                     Exception("Video processing failed")
                 )
             }

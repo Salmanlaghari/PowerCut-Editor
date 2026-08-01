@@ -182,7 +182,19 @@ fun NextGenEditorScreen(
     onUpdateOrientationMode: (String) -> Unit = {},
     onToggleVerticalSafeZone: () -> Unit = {},
     onToggleHorizontalLetterbox: () -> Unit = {},
-    onToggleAutoReframe: () -> Unit = {}
+    onToggleAutoReframe: () -> Unit = {},
+    // NEW v4.0 CapCut-sync Pro callbacks
+    onUpdateBlendMode: (String) -> Unit = {},
+    onToggleReverse: () -> Unit = {},
+    onUpdateFreezeFrame: (Long) -> Unit = {},
+    onUpdateColorLift: (Float) -> Unit = {},
+    onUpdateColorGamma: (Float) -> Unit = {},
+    onUpdateColorGain: (Float) -> Unit = {},
+    onUpdateAudioEffect: (String) -> Unit = {},
+    onUpdateVoiceChangerPitch: (Float) -> Unit = {},
+    onToggleAudioDucking: () -> Unit = {},
+    onUpdateBorderStyle: (String) -> Unit = {},
+    onUpdateVignetteStyle: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -522,7 +534,18 @@ fun NextGenEditorScreen(
                 onToggleHorizontalLetterbox = onToggleHorizontalLetterbox,
                 onToggleAutoReframe = onToggleAutoReframe,
                 onAddLayer = onAddLayer,
-                onRemoveLayer = onRemoveLayer
+                onRemoveLayer = onRemoveLayer,
+                onUpdateBlendMode = onUpdateBlendMode,
+                onToggleReverse = onToggleReverse,
+                onUpdateFreezeFrame = onUpdateFreezeFrame,
+                onUpdateColorLift = onUpdateColorLift,
+                onUpdateColorGamma = onUpdateColorGamma,
+                onUpdateColorGain = onUpdateColorGain,
+                onUpdateAudioEffect = onUpdateAudioEffect,
+                onUpdateVoiceChangerPitch = onUpdateVoiceChangerPitch,
+                onToggleAudioDucking = onToggleAudioDucking,
+                onUpdateBorderStyle = onUpdateBorderStyle,
+                onUpdateVignetteStyle = onUpdateVignetteStyle
             )
         }
 
@@ -964,7 +987,10 @@ private fun CapCutToolBar(
         "🔊" to "Audio", "🔤" to "Text", "🎨" to "Filters", "✨" to "Effects",
         "😄" to "Stickers", "🔀" to "Trans", "🎭" to "Anim", "🎬" to "3D",
         "🖼️" to "Image", "📋" to "Template",
-        "🎬" to "Chroma", "🧹" to "Erase", "🖌️" to "ImgEdit", "📐" to "Orient"
+        "🎬" to "Chroma", "🧹" to "Erase", "🖌️" to "ImgEdit", "📐" to "Orient",
+        "🌈" to "Blend", "↺️" to "Reverse", "💉" to "ColorFX",
+        "🎧" to "AudioFX", "🎤" to "Voice", "🎉" to "Borders",
+        "✨" to "Vignette", "❄️" to "Freeze"
     )
     Row(
         modifier = Modifier.fillMaxWidth().height(62.dp)
@@ -1073,7 +1099,19 @@ private fun CapCutToolPanel(
     onToggleAutoReframe: () -> Unit = {},
     // Layers
     onAddLayer: (String) -> Unit = {},
-    onRemoveLayer: (String) -> Unit = {}
+    onRemoveLayer: (String) -> Unit = {},
+    // NEW v4.0 CapCut-sync Pro
+    onUpdateBlendMode: (String) -> Unit = {},
+    onToggleReverse: () -> Unit = {},
+    onUpdateFreezeFrame: (Long) -> Unit = {},
+    onUpdateColorLift: (Float) -> Unit = {},
+    onUpdateColorGamma: (Float) -> Unit = {},
+    onUpdateColorGain: (Float) -> Unit = {},
+    onUpdateAudioEffect: (String) -> Unit = {},
+    onUpdateVoiceChangerPitch: (Float) -> Unit = {},
+    onToggleAudioDucking: () -> Unit = {},
+    onUpdateBorderStyle: (String) -> Unit = {},
+    onUpdateVignetteStyle: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1158,6 +1196,14 @@ private fun CapCutToolPanel(
                     onToggleLetterbox = onToggleHorizontalLetterbox,
                     onToggleAutoReframe = onToggleAutoReframe
                 )
+                18 -> BlendModePanel(project, onUpdateBlendMode)
+                19 -> ReversePanel(project, onToggleReverse, onUpdateFreezeFrame)
+                20 -> ColorCurvesPanel(project, onUpdateColorLift, onUpdateColorGamma, onUpdateColorGain)
+                21 -> AudioEffectsPanel(project, onUpdateAudioEffect, onToggleAudioDucking)
+                22 -> VoiceChangerPanel(project, onUpdateVoiceChangerPitch)
+                23 -> BorderStylesPanel(project, onUpdateBorderStyle)
+                24 -> VignetteStylesPanel(project, onUpdateVignetteStyle)
+                25 -> FreezeFramePanel(project, onUpdateFreezeFrame)
             }
         }
         // Collapse handle
@@ -1665,17 +1711,71 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit) {
+    var filterCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("FILTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("none" to "Original", "grayscale" to "B&W", "sepia" to "Sepia", "invert" to "Invert", "warm" to "Warm", "cool" to "Cool", "vintage" to "Vintage", "dramatic" to "Drama").forEach { (id, name) ->
+        Text("CINEMATIC FILTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        // Category tabs
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("all" to "All", "basic" to "Basic", "cinema" to "Cinema", "film" to "Film", "vintage" to "Vintage", "mood" to "Mood", "neon" to "Neon").forEach { (id, label) ->
+                val sel = filterCategory == id
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { filterCategory = id }.padding(horizontal = 6.dp, vertical = 3.dp)) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
+            }
+        }
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            // (id, displayName, category)
+            val allFilters = listOf(
+                Triple("none", "Original", "basic"),
+                Triple("grayscale", "B&W", "basic"), Triple("sepia", "Sepia", "basic"),
+                Triple("invert", "Invert", "basic"), Triple("warm", "Warm", "basic"),
+                Triple("cool", "Cool", "basic"), Triple("vintage", "Vintage", "vintage"),
+                Triple("dramatic", "Drama", "basic"), Triple("negative", "Negative", "basic"),
+                Triple("noir", "Noir", "cinema"), Triple("cinematic", "Cinematic", "cinema"),
+                Triple("teal", "Teal", "cinema"), Triple("orange", "Orange", "cinema"),
+                Triple("lomo", "Lomo", "vintage"), Triple("polaroid", "Polaroid", "vintage"),
+                Triple("holga", "Holga", "vintage"), Triple("diana", "Diana", "vintage"),
+                Triple("film", "Film", "film"), Triple("super8", "Super8", "film"),
+                Triple("vhs_tape", "VHS", "vintage"), Triple("kodak", "Kodak", "film"),
+                Triple("fuji", "Fuji", "film"), Triple("agfa", "Agfa", "film"),
+                Triple("ilford", "Ilford", "film"), Triple("portra", "Portra", "film"),
+                Triple("velvia", "Velvia", "film"), Triple("provia", "Provia", "film"),
+                Triple("astia", "Astia", "film"), Triple("monochrome", "Mono", "basic"),
+                Triple("high_contrast", "Hi Contrast", "basic"), Triple("low_contrast", "Lo Contrast", "basic"),
+                Triple("high_saturation", "Hi Saturation", "basic"), Triple("low_saturation", "Lo Saturation", "basic"),
+                Triple("bright", "Bright", "basic"), Triple("dark", "Dark", "basic"),
+                Triple("soft", "Soft", "mood"), Triple("sharp", "Sharp", "mood"),
+                Triple("dreamy", "Dreamy", "mood"), Triple("glow", "Glow", "mood"),
+                Triple("haze", "Haze", "mood"), Triple("matte", "Matte", "mood"),
+                Triple("litho", "Litho", "vintage"), Triple("sepia_warm", "Sepia Warm", "vintage"),
+                Triple("sepia_cool", "Sepia Cool", "vintage"), Triple("red_boost", "Red+", "mood"),
+                Triple("blue_boost", "Blue+", "mood"), Triple("green_boost", "Green+", "mood"),
+                Triple("purple_haze", "Purple Haze", "neon"), Triple("pink_dream", "Pink Dream", "neon"),
+                Triple("amber", "Amber", "mood"), Triple("emerald", "Emerald", "mood"),
+                Triple("sapphire", "Sapphire", "mood"), Triple("ruby", "Ruby", "mood"),
+                Triple("bronze", "Bronze", "mood"), Triple("platinum", "Platinum", "mood"),
+                Triple("neon_city", "Neon City", "neon"), Triple("retro_wave", "Retro Wave", "neon"),
+                Triple("synthwave", "Synthwave", "neon"), Triple("analog", "Analog", "vintage"),
+                Triple("tokyo", "Tokyo", "cinema"), Triple("nyc", "NYC", "cinema"),
+                Triple("paris", "Paris", "cinema"), Triple("miami", "Miami", "neon"),
+                Triple("desert", "Desert", "mood"), Triple("ocean", "Ocean", "mood"),
+                Triple("autumn", "Autumn", "mood"), Triple("winter", "Winter", "mood"),
+                Triple("spring", "Spring", "mood"), Triple("summer", "Summer", "mood")
+            )
+            allFilters.filter { filterCategory == "all" || it.third == filterCategory }.forEach { (id, name, cat) ->
                 val sel = project.selectedFilter.lowercase() == id
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFilter(if (sel) "none" else id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .clickable { onUpdateFilter(if (sel) "none" else id) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
             }
         }
     }
 }
 
+
+private data class EffectItem(val name: String, val effectId: String, val filterId: String, val category: String)
 
 // ─── 7. EFFECTS PANEL ──────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
@@ -1685,7 +1785,6 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
     var effectCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("SUPER EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        // Category tabs
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon").forEach { (id, label) ->
                 val sel = effectCategory == id
@@ -1695,29 +1794,81 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
             }
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            // (displayName, effectId, filterId, category)
             val allEffects = listOf(
-                "🎬 Glitch" to "invert", "📼 VHS" to "sepia", "🔮 Chromatic" to "invert",
-                "☀️ Lens Flare" to "none", "❄️ Snow" to "none", "🌧️ Rain" to "none",
-                "🔥 Fire" to "none", "✨ Sparkle" to "none", "🌫️ Dust" to "sepia",
-                "💨 Motion Blur" to "none", "📳 Shake" to "none", "⚡ Flash" to "invert",
-                "💜 Neon Glow" to "invert", "🔲 Vignette" to "grayscale", "🌈 Rainbow" to "none",
-                "📸 Film Grain" to "sepia", "🔵 Bokeh" to "none", "🎆 Particles" to "none",
-                "💡 Strobe" to "grayscale", "🔍 Zoom Pulse" to "none",
-                "🌊 Wave Distort" to "none", "🔥 Flame" to "invert", "❄️ Frost" to "grayscale",
-                "💫 Starburst" to "none", "🎭 Face Blur" to "none", "🌀 Swirl" to "invert",
-                "💥 Explosion" to "invert", "🌟 Light Leak" to "none", "📽️ Film Strip" to "sepia",
-                "🎨 Color Splash" to "invert", "⚡ Electric" to "invert", "🌊 Tidal" to "none"
+                EffectItem("Glitch", "glitch", "invert", "vfx"),
+                EffectItem("VHS", "vhs", "sepia", "retro"),
+                EffectItem("Chromatic", "chromatic", "invert", "vfx"),
+                EffectItem("Lens Flare", "lens_flare", "none", "vfx"),
+                EffectItem("Snow", "snow", "none", "vfx"),
+                EffectItem("Rain", "rain", "none", "vfx"),
+                EffectItem("Fire", "fire", "none", "vfx"),
+                EffectItem("Sparkle", "sparkle", "none", "vfx"),
+                EffectItem("Dust", "dust", "sepia", "vfx"),
+                EffectItem("Motion Blur", "motion_blur", "none", "motion"),
+                EffectItem("Shake", "shake", "none", "motion"),
+                EffectItem("Flash", "flash", "invert", "motion"),
+                EffectItem("Neon Glow", "neon_glow", "invert", "neon"),
+                EffectItem("Vignette", "vignette", "grayscale", "color"),
+                EffectItem("Rainbow", "rainbow", "none", "color"),
+                EffectItem("Film Grain", "film_grain", "sepia", "retro"),
+                EffectItem("Bokeh", "bokeh", "none", "vfx"),
+                EffectItem("Particles", "particles", "none", "vfx"),
+                EffectItem("Strobe", "strobe", "grayscale", "motion"),
+                EffectItem("Zoom Pulse", "zoom_pulse", "none", "motion"),
+                EffectItem("Wave Distort", "wave_distort", "none", "motion"),
+                EffectItem("Flame", "flame", "invert", "vfx"),
+                EffectItem("Frost", "frost", "grayscale", "vfx"),
+                EffectItem("Starburst", "starburst", "none", "vfx"),
+                EffectItem("Face Blur", "face_blur", "none", "vfx"),
+                EffectItem("Swirl", "swirl", "invert", "vfx"),
+                EffectItem("Explosion", "explosion", "invert", "vfx"),
+                EffectItem("Light Leak", "light_leak", "none", "vfx"),
+                EffectItem("Film Strip", "film_strip", "sepia", "retro"),
+                EffectItem("Color Splash", "color_splash", "invert", "color"),
+                EffectItem("Electric", "electric", "invert", "vfx"),
+                EffectItem("Tidal", "tidal", "none", "motion"),
+                EffectItem("RGB Split", "rgb_glitch", "invert", "vfx"),
+                EffectItem("Scanline", "scanline", "none", "retro"),
+                EffectItem("CRT", "crt", "none", "retro"),
+                EffectItem("8bit", "8bit", "none", "retro"),
+                EffectItem("Old Film", "old_film", "sepia", "retro"),
+                EffectItem("Bloom", "bloom", "none", "color"),
+                EffectItem("HDR", "hdr", "none", "color"),
+                EffectItem("Vaporwave", "vaporwave", "none", "neon"),
+                EffectItem("Aesthetic", "aesthetic", "none", "color"),
+                EffectItem("LoFi", "lofi", "sepia", "retro"),
+                EffectItem("Dream", "dream", "none", "color"),
+                EffectItem("Night Vision", "night_vision", "invert", "vfx"),
+                EffectItem("Thermal", "thermal", "invert", "vfx"),
+                EffectItem("Pencil", "pencil", "grayscale", "color"),
+                EffectItem("Sketch", "sketch", "grayscale", "color"),
+                EffectItem("Cartoon", "cartoon", "none", "color"),
+                EffectItem("Watercolor", "watercolor", "none", "color"),
+                EffectItem("Oil Paint", "oil_paint", "none", "color"),
+                EffectItem("Pixel", "pixel", "none", "vfx"),
+                EffectItem("Mosaic", "mosaic", "none", "vfx"),
+                EffectItem("Emboss", "emboss", "none", "color"),
+                EffectItem("Sharpen", "sharpen_strong", "none", "color"),
+                EffectItem("Tilt Shift", "tilt_shift", "none", "color"),
+                EffectItem("Kaleidoscope", "kaleidoscope", "invert", "vfx"),
+                EffectItem("RGB Glitch", "rgb_split", "invert", "vfx"),
+                EffectItem("Disco", "disco", "rainbow", "neon"),
+                EffectItem("Concert", "concert", "none", "neon"),
+                EffectItem("Party", "party", "rainbow", "neon")
             )
-            allEffects.forEach { (name, filterId) ->
-                val sel = project.selectedEffect == name
+            allEffects.filter { effectCategory == "all" || it.category == effectCategory }.forEach { (name, effectId, filterId, category) ->
+                val sel = project.selectedEffect == effectId
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
-                    if (sel) { onUpdateEffect("none"); onUpdateFilter("none"); android.widget.Toast.makeText(ctx, "✨ Effect removed!", android.widget.Toast.LENGTH_SHORT).show() }
-                    else { onUpdateEffect(name); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "✨ $name applied!", android.widget.Toast.LENGTH_SHORT).show() }
+                    if (sel) { onUpdateEffect("none"); onUpdateFilter("none"); android.widget.Toast.makeText(ctx, "Effect removed!", android.widget.Toast.LENGTH_SHORT).show() }
+                    else { onUpdateEffect(effectId); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "$name applied!", android.widget.Toast.LENGTH_SHORT).show() }
                 }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
             }
         }
     }
 }
+
+
 
 
 // ─── 8. STICKERS PANEL ─────────────────────────────────────────
@@ -1727,7 +1878,14 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("STICKERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("None" to "none", "🔥 Fire" to "fire", "⭐ Star" to "star", "❤️ Heart" to "heart", "⚡ Glow" to "glow", "💎 Diamond" to "diamond", "🎵 Music" to "music", "👑 Crown" to "crown", "💫 Sparkle" to "sparkle", "🎯 Target" to "target", "🏆 Trophy" to "trophy", "💀 Skull" to "skull").forEach { (name, id) ->
+            listOf(
+                "None" to "none", "🔥 Fire" to "fire", "⭐ Star" to "star",
+                "❤️ Heart" to "heart", "⚡ Glow" to "glow", "💎 Diamond" to "diamond",
+                "🎵 Music" to "music", "👑 Crown" to "crown", "💫 Sparkle" to "sparkle",
+                "🎯 Target" to "target", "🏆 Trophy" to "trophy", "💀 Skull" to "skull",
+                "🚀 Rocket" to "rocket", "⚡ Bolt" to "bolt", "💯 100" to "100",
+                "👍 Like" to "thumbs_up", "🎉 Party" to "party"
+            ).forEach { (name, id) ->
                 val sel = project.stickerType == id
                 Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSticker(if (sel) "none" else id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
             }
@@ -1743,9 +1901,29 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("TRANSITIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("None", "Crossfade", "Glitch", "Zoom In", "Zoom Out", "Spin", "Wipe", "Dissolve", "Blur", "Pixelate", "Mosaic", "Split", "Film Burn", "Light Leak", "Smoke", "Circle", "Diamond", "Heart", "Flash", "L-Cut", "J-Cut", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Rotate In", "Rotate Out", "Bounce", "Elastic", "Spring").forEach { t ->
+            listOf(
+                "None", "fade", "fade_out", "fade_in_out", "crossfade", "dissolve",
+                "glitch", "zoom_in", "zoom_out", "zoom_burst", "spin", "wipe",
+                "blur", "blur_in", "blur_out", "pixelate", "pixel_in", "mosaic",
+                "split", "film_burn", "light_leak", "smoke", "circle", "diamond",
+                "heart", "flash", "white_flash", "black_fade", "white_fade",
+                "slide_left", "slide_right", "slide_up", "slide_down",
+                "rotate_in", "rotate_out", "bounce", "elastic", "spring",
+                "typewriter", "wave", "shake", "shake_in", "shake_burst",
+                "iris_in", "iris_out", "star_wipe", "clock_wipe", "spiral",
+                "glitch_in", "tv_static", "channel_change", "vhs_transition",
+                "rgb_glitch", "color_flash", "flip_h", "flip_v", "rotate_3d",
+                "swing", "push_left", "push_right", "push_up", "push_down",
+                "curtain", "blinds", "checkerboard", "diagonal", "triangle",
+                "hexagon", "star", "cross", "ripple", "shatter"
+            ).forEach { t ->
+                val display = t.replace("_", " ").replaceFirstChar { it.uppercase() }
                 val sel = project.transitionType.lowercase() == t.lowercase()
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateTransition(if (sel) "none" else t) }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(t, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .clickable { onUpdateTransition(if (sel) "none" else t) }
+                    .padding(horizontal = 5.dp, vertical = 3.dp)) {
+                    Text(display, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
             }
         }
     }
@@ -1757,11 +1935,24 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
 @Composable
 private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("ANIMATIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        Text("TEXT ANIMATIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("Fade In", "Fade Out", "Typewriter", "Bounce", "Slide Left", "Slide Right", "Slide Up", "Slide Down", "Zoom In", "Zoom Out", "Rotate", "Wave", "Glitch In", "Neon Pulse", "Pop", "Flip", "Elastic", "Spring", "Rubber", "Swing").forEach { a ->
+            listOf(
+                "none", "fade", "fade_out", "fade_in_out", "typewriter", "typewriter_fast",
+                "bounce", "slide_left", "slide_right", "slide_up", "slide_down",
+                "slide_in_3d", "zoom_in", "zoom_out", "rotate", "wave", "glitch_in",
+                "neon_pulse", "neon_flicker", "pop", "flip", "elastic", "spring",
+                "rubber", "swing", "shake", "blink", "pulse", "color_cycle",
+                "explode_in", "implode", "marquee", "scroll_up", "scroll_down",
+                "glow", "rainbow", "frozen", "fire", "metallic", "gold"
+            ).forEach { a ->
+                val display = a.replace("_", " ").replaceFirstChar { it.uppercase() }
                 val sel = project.textAnimationType.lowercase() == a.lowercase()
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(a) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(a, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .clickable { onUpdateAnim(if (sel) "none" else a) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(display, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
             }
         }
     }
@@ -1773,12 +1964,22 @@ private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Uni
 @Composable
 private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("3D CINEMATIC", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+        Text("3D CINEMATIC MASKS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("Circle Mask", "Heart Mask", "Star Mask", "Hexagon", "Diamond", "Triangle", "Vignette", "Film Burn", "Light Leak", "Lens Flare", "Smoke", "Water", "Fire", "Particles", "Bokeh", "Glitch 3D", "Chromatic", "Anamorphic", "Cinematic Bars", "Color Splash").forEach { m ->
-                val maskId = m.lowercase().replace(" ", "_")
-                val sel = project.active3DShapeMask == maskId
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdate3D(if (sel) "none" else maskId) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(m, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+            listOf(
+                "circle", "heart", "star", "hexagon", "diamond", "triangle",
+                "vignette", "film_burn", "light_leak", "lens_flare", "smoke",
+                "water", "fire", "particles", "bokeh", "glitch_3d",
+                "chromatic", "anamorphic", "cinematic_bars", "color_splash",
+                "oval", "square", "arch", "frame", "spotlight"
+            ).forEach { m ->
+                val display = m.replace("_", " ").replaceFirstChar { it.uppercase() }
+                val sel = project.active3DShapeMask == m
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .clickable { onUpdate3D(if (sel) "none" else m) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(display, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
             }
         }
     }
@@ -1848,6 +2049,265 @@ private fun TemplatePanel(project: VideoProject, onUpdateTemplate: (String) -> U
             items(templates) { (id, name) ->
                 val sel = project.activeTemplateId == id
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateTemplate(if (sel) "none" else id) }.padding(horizontal = 10.dp, vertical = 8.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+            }
+        }
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  NEW v4.0 CapCut-sync Pro PANELS (all functional, wired to ViewModel)
+// ═══════════════════════════════════════════════════════════════
+
+// 18. BLEND MODES PANEL — 16+ blend modes
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BlendModePanel(
+    project: VideoProject,
+    onUpdateBlendMode: (String) -> Unit
+) {
+    val modes = listOf(
+        "none", "multiply", "screen", "overlay", "darken", "lighten",
+        "color_dodge", "color_burn", "hard_light", "soft_light",
+        "difference", "exclusion", "hue", "saturation", "color",
+        "luminosity", "addition", "phoenix", "reflect", "glow", "negation"
+    )
+    val labels = mapOf(
+        "none" to "None", "multiply" to "Multiply", "screen" to "Screen",
+        "overlay" to "Overlay", "darken" to "Darken", "lighten" to "Lighten",
+        "color_dodge" to "Dodge", "color_burn" to "Burn", "hard_light" to "Hard Light",
+        "soft_light" to "Soft Light", "difference" to "Difference", "exclusion" to "Exclusion",
+        "hue" to "Hue", "saturation" to "Saturation", "color" to "Color",
+        "luminosity" to "Luminosity", "addition" to "Addition", "phoenix" to "Phoenix",
+        "reflect" to "Reflect", "glow" to "Glow", "negation" to "Negation"
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        modes.forEach { mode ->
+            val sel = project.blendMode == mode
+            Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                .clickable { onUpdateBlendMode(if (sel) "none" else mode) }
+                .padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(labels[mode] ?: mode, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+            }
+        }
+    }
+}
+
+// 19. REVERSE + FREEZE PANEL
+@Composable
+private fun ReversePanel(
+    project: VideoProject,
+    onToggleReverse: () -> Unit,
+    onUpdateFreezeFrame: (Long) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Reverse toggle
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(10.dp)).padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Reverse Video", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Box(Modifier.background(if (project.isReverseEnabled) NeonOrange else Color.White.copy(0.1f), RoundedCornerShape(20.dp))
+                .clickable { onToggleReverse() }.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(if (project.isReverseEnabled) "ON" else "OFF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (project.isReverseEnabled) Color.Black else Color.White)
+            }
+        }
+        // Freeze frame
+        Text("Freeze Frame Duration", fontSize = 10.sp, color = Color.Gray)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0L, 500L, 1000L, 2000L, 3000L, 5000L).forEach { ms ->
+                val sel = project.freezeFrameMs == ms
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                    .clickable { onUpdateFreezeFrame(ms) }.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text(if (ms == 0L) "None" else "${ms/1000.0}s", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
+            }
+        }
+    }
+}
+
+// 20. COLOR CURVES PANEL (Lift / Gamma / Gain)
+@Composable
+private fun ColorCurvesPanel(
+    project: VideoProject,
+    onUpdateColorLift: (Float) -> Unit,
+    onUpdateColorGamma: (Float) -> Unit,
+    onUpdateColorGain: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ColorSliderRow("Lift (Shadows)", project.colorLift, -0.5f, 0.5f, onUpdateColorLift)
+        ColorSliderRow("Gamma (Midtones)", project.colorGamma, -0.5f, 0.5f, onUpdateColorGamma)
+        ColorSliderRow("Gain (Highlights)", project.colorGain, -0.5f, 0.5f, onUpdateColorGain)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable {
+                onUpdateColorLift(0f); onUpdateColorGamma(0f); onUpdateColorGain(0f)
+            }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text("Reset All", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorSliderRow(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
+    Column {
+        Text("$label: ${"%.2f".format(value)}", fontSize = 9.sp, color = Color.Gray)
+        Slider(
+            value = value, onValueChange = onChange,
+            valueRange = min..max,
+            colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange),
+            modifier = Modifier.fillMaxWidth().height(36.dp)
+        )
+    }
+}
+
+// 21. AUDIO EFFECTS PANEL — 25 audio effects + ducking toggle
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AudioEffectsPanel(
+    project: VideoProject,
+    onUpdateAudioEffect: (String) -> Unit,
+    onToggleAudioDucking: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Audio ducking toggle
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(10.dp)).padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Auto Audio Ducking", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Box(Modifier.background(if (project.isAudioDuckingEnabled) NeonOrange else Color.White.copy(0.1f), RoundedCornerShape(20.dp))
+                .clickable { onToggleAudioDucking() }.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(if (project.isAudioDuckingEnabled) "ON" else "OFF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (project.isAudioDuckingEnabled) Color.Black else Color.White)
+            }
+        }
+        Text("Audio Effects", fontSize = 10.sp, color = Color.Gray)
+        val effects = listOf(
+            "none", "echo", "reverb", "bass_boost", "treble_boost", "bass_reduce",
+            "treble_reduce", "robot", "phone", "hall", "stadium", "room", "cave",
+            "underwater", "vintage_radio", "megaphone", "chipmunk", "deep", "alien",
+            "chorus", "flanger", "phaser", "distortion", "karaoke", "vocal_remove"
+        )
+        val labels = mapOf(
+            "none" to "None", "echo" to "Echo", "reverb" to "Reverb", "bass_boost" to "Bass+",
+            "treble_boost" to "Treble+", "bass_reduce" to "Bass-", "treble_reduce" to "Treble-",
+            "robot" to "Robot", "phone" to "Phone", "hall" to "Hall", "stadium" to "Stadium",
+            "room" to "Room", "cave" to "Cave", "underwater" to "Underwater",
+            "vintage_radio" to "Radio", "megaphone" to "Megaphone", "chipmunk" to "Chipmunk",
+            "deep" to "Deep", "alien" to "Alien", "chorus" to "Chorus", "flanger" to "Flanger",
+            "phaser" to "Phaser", "distortion" to "Distortion", "karaoke" to "Karaoke",
+            "vocal_remove" to "Vocal Remove"
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            effects.forEach { eff ->
+                val sel = project.audioEffect == eff
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                    .clickable { onUpdateAudioEffect(if (sel) "none" else eff) }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(labels[eff] ?: eff, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
+            }
+        }
+    }
+}
+
+// 22. VOICE CHANGER PANEL
+@Composable
+private fun VoiceChangerPanel(
+    project: VideoProject,
+    onUpdateVoiceChangerPitch: (Float) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Voice Changer Pitch", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Pitch: ${"%.1f".format(project.voiceChangerPitch)} semitones", fontSize = 9.sp, color = Color.Gray)
+        Slider(
+            value = project.voiceChangerPitch, onValueChange = onUpdateVoiceChangerPitch,
+            valueRange = -12f..12f,
+            colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange),
+            modifier = Modifier.fillMaxWidth().height(36.dp)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(-12f to "Deep", -6f to "Low", 0f to "Normal", 6f to "High", 12f to "Chipmunk").forEach { (pitch, label) ->
+                val sel = project.voiceChangerPitch == pitch
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                    .clickable { onUpdateVoiceChangerPitch(pitch) }.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
+            }
+        }
+    }
+}
+
+// 23. BORDER STYLES PANEL — 13 border/frame styles
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BorderStylesPanel(
+    project: VideoProject,
+    onUpdateBorderStyle: (String) -> Unit
+) {
+    val styles = listOf(
+        "none", "white", "black", "rounded", "shadow", "neon",
+        "gradient", "film", "polaroid", "vintage", "modern",
+        "minimal", "glow"
+    )
+    val labels = mapOf(
+        "none" to "None", "white" to "White", "black" to "Black", "rounded" to "Rounded",
+        "shadow" to "Shadow", "neon" to "Neon", "gradient" to "Gradient", "film" to "Film",
+        "polaroid" to "Polaroid", "vintage" to "Vintage", "modern" to "Modern",
+        "minimal" to "Minimal", "glow" to "Glow"
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        styles.forEach { style ->
+            val sel = project.borderStyle == style
+            Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                .clickable { onUpdateBorderStyle(if (sel) "none" else style) }
+                .padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(labels[style] ?: style, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+            }
+        }
+    }
+}
+
+// 24. VIGNETTE STYLES PANEL — 8 vignette styles
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VignetteStylesPanel(
+    project: VideoProject,
+    onUpdateVignetteStyle: (String) -> Unit
+) {
+    val styles = listOf("none", "classic", "soft", "strong", "reverse", "colored", "blur", "spotlight")
+    val labels = mapOf(
+        "none" to "None", "classic" to "Classic", "soft" to "Soft", "strong" to "Strong",
+        "reverse" to "Reverse", "colored" to "Colored", "blur" to "Blur", "spotlight" to "Spotlight"
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        styles.forEach { style ->
+            val sel = project.vignetteStyle == style
+            Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                .clickable { onUpdateVignetteStyle(if (sel) "none" else style) }
+                .padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(labels[style] ?: style, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+            }
+        }
+    }
+}
+
+// 25. FREEZE FRAME PANEL (standalone tool)
+@Composable
+private fun FreezeFramePanel(
+    project: VideoProject,
+    onUpdateFreezeFrame: (Long) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Freeze Frame — Pause video at a moment", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Current: ${if (project.freezeFrameMs > 0) "${project.freezeFrameMs/1000.0}s" else "Off"}", fontSize = 9.sp, color = Color.Gray)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0L, 250L, 500L, 750L, 1000L, 1500L, 2000L, 3000L, 5000L).forEach { ms ->
+                val sel = project.freezeFrameMs == ms
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                    .clickable { onUpdateFreezeFrame(ms) }.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text(if (ms == 0L) "None" else "${ms/1000.0}s", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                }
             }
         }
     }

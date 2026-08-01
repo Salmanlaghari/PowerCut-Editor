@@ -360,7 +360,19 @@ class MainActivity : ComponentActivity() {
                                         onUpdateOrientationMode = { viewModel.updateOrientationMode(it) },
                                         onToggleVerticalSafeZone = { viewModel.toggleVerticalSafeZone() },
                                         onToggleHorizontalLetterbox = { viewModel.toggleHorizontalLetterbox() },
-                                        onToggleAutoReframe = { viewModel.toggleAutoReframe() }
+                                        onToggleAutoReframe = { viewModel.toggleAutoReframe() },
+                                        // NEW v4.0 CapCut-sync Pro callbacks
+                                        onUpdateBlendMode = { viewModel.updateBlendMode(it) },
+                                        onToggleReverse = { viewModel.toggleReverse() },
+                                        onUpdateFreezeFrame = { viewModel.updateFreezeFrame(it) },
+                                        onUpdateColorLift = { viewModel.updateColorLift(it) },
+                                        onUpdateColorGamma = { viewModel.updateColorGamma(it) },
+                                        onUpdateColorGain = { viewModel.updateColorGain(it) },
+                                        onUpdateAudioEffect = { viewModel.updateAudioEffect(it) },
+                                        onUpdateVoiceChangerPitch = { viewModel.updateVoiceChangerPitch(it) },
+                                        onToggleAudioDucking = { viewModel.toggleAudioDucking() },
+                                        onUpdateBorderStyle = { viewModel.updateBorderStyle(it) },
+                                        onUpdateVignetteStyle = { viewModel.updateVignetteStyle(it) }
                                     )
                                 } ?: viewModel.resetToHome()
                             }
