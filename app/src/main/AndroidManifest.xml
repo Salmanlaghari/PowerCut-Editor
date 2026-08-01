@@ -21,9 +21,11 @@
          the persistent "Exporting…" notification that keeps the app alive. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <!-- Android 14 (API 34) requires a typed foreground-service permission.
-         media-processing is the correct type for video encoding jobs. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <!-- Android 14 (API 34) requires a typed foreground-service permission
+         matching the service type. We use dataSync (background data
+         processing) which is the correct type for long video transcode
+         jobs at compileSdk 34. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Keeps the CPU running while the screen is off so FFmpeg does not
          stall. Acquired for the whole duration of the export. -->
@@ -73,14 +75,16 @@
         <!-- EXPORT FOREGROUND SERVICE (v4.2)                             -->
         <!-- Runs the FFmpeg encode job in the background so that the     -->
         <!-- export survives app minimisation, screen-off, and Doze.      -->
-        <!-- foregroundServiceType="mediaProcessing" is required on      -->
-        <!-- Android 14+ and is harmless on earlier versions.            -->
+        <!-- We use foregroundServiceType="dataSync" (background data     -->
+        <!-- processing) which is valid from API 29 and is the correct    -->
+        <!-- type for long video transcode jobs at compileSdk 34. The     -->
+        <!-- newer "mediaProcessing" type requires compileSdk 35 / AGP    -->
+        <!-- 8.3+, which this project does not target yet.                -->
         <!-- ============================================================ -->
         <service
             android:name="com.powercut.editor.domain.export.ExportForegroundService"
             android:exported="false"
-            android:foregroundServiceType="mediaProcessing"
-            tools:targetApi="34" />
+            android:foregroundServiceType="dataSync" />
 
     </application>
 

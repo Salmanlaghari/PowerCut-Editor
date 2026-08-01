@@ -129,12 +129,16 @@ class ExportForegroundService : Service() {
 
         // Promote to foreground IMMEDIATELY (must happen within 5s on Android 12+).
         val notification = buildNotification("Preparing export…", 0)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+ requires the typed foreground service type.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+: declare the foreground service type as dataSync
+            // (background data processing). This is the correct type for long
+            // video transcode jobs at compileSdk 34. The newer "mediaProcessing"
+            // type requires compileSdk 35 / AGP 8.3+ which this project does
+            // not target yet. dataSync is valid from API 29 onward.
             startForeground(
                 NOTIF_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
         } else {
             startForeground(NOTIF_ID, notification)

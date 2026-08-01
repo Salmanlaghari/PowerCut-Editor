@@ -135,8 +135,8 @@ Added 6 permissions and the foreground-service component:
 ```xml
 <!-- Core foreground-service permission (Android 9+) -->
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<!-- Android 14+ typed foreground service -->
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+<!-- Android 14+ typed foreground service (dataSync = background data processing) -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 <!-- Keeps CPU alive when screen is off -->
 <uses-permission android:name="android.permission.WAKE_LOCK" />
 <!-- Keeps Wi-Fi active for network assets during long encode -->
@@ -150,11 +150,10 @@ Added 6 permissions and the foreground-service component:
 <service
     android:name="com.powercut.editor.domain.export.ExportForegroundService"
     android:exported="false"
-    android:foregroundServiceType="mediaProcessing"
-    tools:targetApi="34" />
+    android:foregroundServiceType="dataSync" />
 ```
 
-`foregroundServiceType="mediaProcessing"` is **required** on Android 14+ for video-encoding services and is harmless on earlier versions.
+`foregroundServiceType="dataSync"` (background data processing) is the correct type for long video transcode jobs at `compileSdk = 34`. It is valid from API 29 onward. (The newer `mediaProcessing` type requires `compileSdk = 35` / AGP 8.3+, which the project does not target yet.)
 
 ### 3.2 Foreground Service + Wake Lock (full working code)
 
