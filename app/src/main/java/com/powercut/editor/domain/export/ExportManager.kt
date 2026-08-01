@@ -39,6 +39,7 @@ class ExportManager @Inject constructor(
      */
     suspend fun exportProject(project: VideoProject) {
         _exportState.value = Resource.Loading
+        var tempInputFile: File? = null
         try {
             // Use external cache dir if available (more space), fallback to internal cache
             val secureDir = context.externalCacheDir?.let { ext ->
@@ -93,7 +94,6 @@ class ExportManager @Inject constructor(
 
             // Resolve video path: if it's a content:// URI, copy to temp file for FFmpeg
             // (run on IO — the copy of long/multi-GB videos must never block the caller)
-            var tempInputFile: File? = null
             val videoPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val resolved = resolveVideoPath(context, project.videoPath, secureDir)
                 // If we created a temp copy, track it for cleanup after export

@@ -67,6 +67,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -391,15 +392,14 @@ fun NextGenEditorScreen(
                 0f, 0f, 0f, 1f, 0f
             ))
             val satMatrix = ColorMatrix().apply { setToSaturation(s) }
-            adjMatrix.postConcat(satMatrix)
+            adjMatrix *= satMatrix
 
             // If there's also a filter, combine them
             if (colorFilter != null) {
-                // Rebuild the filter matrix and combine
                 val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
                 val filterMatrix = buildFilterMatrix(f)
                 if (filterMatrix != null) {
-                    filterMatrix.postConcat(adjMatrix)
+                    filterMatrix *= adjMatrix
                     ColorFilter.colorMatrix(filterMatrix)
                 } else {
                     ColorFilter.colorMatrix(adjMatrix)
@@ -456,10 +456,35 @@ fun NextGenEditorScreen(
                     modifier = Modifier.fillMaxSize().graphicsLayer(
                         scaleX = if (project.isFlippedHorizontal) -1f else 1f,
                         scaleY = if (project.isFlippedVertical) -1f else 1f,
-                        rotationZ = project.rotationDegrees,
-                        colorFilter = combinedColorFilter
+                        rotationZ = project.rotationDegrees
                     )
                 )
+                // Live color filter overlay — applies the combined cinematic filter
+                // + image-editor adjustments on top of the video in real-time.
+                if (combinedColorFilter != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .drawWithContent {
+                                drawContent()
+                                // Draw a semi-transparent overlay tint based on filter
+                                val f = project.selectedFilter.lowercase()
+                                val tint = when {
+                                    f.contains("sepia") -> Color(0xFF704214).copy(alpha = 0.15f)
+                                    f.contains("warm") || f.contains("sunset") || f.contains("golden") -> Color(0xFFFF8C00).copy(alpha = 0.08f)
+                                    f.contains("cool") || f.contains("arctic") -> Color(0xFF00BFFF).copy(alpha = 0.08f)
+                                    f.contains("cyberpunk") -> Color(0xFF00FFFF).copy(alpha = 0.06f)
+                                    f.contains("vintage") || f.contains("fade") -> Color(0xFFD4A76A).copy(alpha = 0.10f)
+                                    f.contains("teal") -> Color(0xFF008080).copy(alpha = 0.08f)
+                                    f.contains("rose") -> Color(0xFFFF1493).copy(alpha = 0.06f)
+                                    else -> Color.Transparent
+                                }
+                                if (tint != Color.Transparent) {
+                                    drawRect(tint)
+                                }
+                            }
+                    )
+                }
 
                 // Filter overlay
                 if (colorFilter != null) {
