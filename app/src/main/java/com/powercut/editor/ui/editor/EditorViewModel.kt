@@ -8,8 +8,10 @@ import com.powercut.editor.core.base.Resource
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.ProjectRepository
 import com.powercut.editor.data.VideoProject
+import com.powercut.editor.domain.export.ExportForegroundService
 import com.powercut.editor.domain.export.ExportManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +38,7 @@ data class DraftItem(
 
 @HiltViewModel
 class EditorViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val projectRepository: ProjectRepository,
     private val exportManager: ExportManager
 ) : ViewModel() {
@@ -51,6 +54,9 @@ class EditorViewModel @Inject constructor(
 
     val currentProject: StateFlow<VideoProject?> = projectRepository.currentProject
     val exportState: StateFlow<Resource<String>> = exportManager.exportState
+
+    /** Live export progress 0-100 (mirrors the foreground service). */
+    val exportProgress: StateFlow<Int> = exportManager.progress
 
     // Premium Settings state
     private val _selectedResolution = MutableStateFlow("1080p")
@@ -830,9 +836,14 @@ class EditorViewModel @Inject constructor(
             )
         }
         val project = currentProject.value ?: return
-        viewModelScope.launch {
-            exportManager.exportProject(project)
-        }
+
+        // v4.2 LONG-EXPORT RELIABILITY: delegate the export to a FOREGROUND
+        // SERVICE instead of viewModelScope. The ViewModel's scope is cleared
+        // the moment the app goes to the background, which cancels any export
+        // running in it — the #1 cause of "Export failed" on long videos.
+        // The foreground service holds a wake lock + persistent notification so
+        // the FFmpeg encode survives screen-off, Doze, and app minimisation.
+        ExportForegroundService.start(appContext)
     }
 
     fun resetToHome() {

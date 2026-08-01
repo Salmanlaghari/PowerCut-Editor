@@ -28,8 +28,27 @@ class ExportManager @Inject constructor(
     private val _exportState = MutableStateFlow<Resource<String>>(Resource.Idle)
     val exportState: StateFlow<Resource<String>> = _exportState.asStateFlow()
 
+    /**
+     * Export progress 0-100, published during the encode so the foreground
+     * service can update its notification and the UI can show a live bar.
+     * 0 = preparing / unknown, -1 = idle.
+     */
+    private val _progress = MutableStateFlow(-1)
+    val progress: StateFlow<Int> = _progress.asStateFlow()
+
     fun resetState() {
         _exportState.value = Resource.Idle
+        _progress.value = -1
+    }
+
+    /** Called by the foreground service when something blows up outside exportProject. */
+    fun publishError(message: String) {
+        _exportState.value = Resource.Error(message, Exception(message))
+    }
+
+    /** Update progress (clamped 0-100). Called by VideoProcessor's stats callback. */
+    fun updateProgress(pct: Int) {
+        _progress.value = pct.coerceIn(0, 100)
     }
 
     /**
@@ -39,6 +58,7 @@ class ExportManager @Inject constructor(
      */
     suspend fun exportProject(project: VideoProject) {
         _exportState.value = Resource.Loading
+        _progress.value = 0
         var tempInputFile: File? = null
         try {
             // Use external cache dir if available (more space), fallback to internal cache
@@ -58,6 +78,12 @@ class ExportManager @Inject constructor(
             // size) AND the output (~input size / 2 after compression). The temp
             // input file is deleted right after FFmpeg finishes (see finally{}),
             // so peak usage is input + output. We add a 150 MB safety floor.
+            //
+            // v4.2 LONG-VIDEO: For 60-minute 1080p videos the input can be 4-8 GB
+            // and the output 2-4 GB, so peak usage can hit ~12 GB + temp copy.
+            // We bump the safety floor to 500 MB for long videos and surface a
+            // clear, actionable error (with the exact GB numbers) so the user
+            // knows exactly how much to free.
             val availableSpace = secureDir.freeSpace
             val inputSize = if (project.videoPath.startsWith("content://")) {
                 try {
@@ -72,21 +98,33 @@ class ExportManager @Inject constructor(
             // the input is already on disk, so only output space is needed.
             val needsTempCopy = project.videoPath.startsWith("content://")
             val estimatedOutputSize = if (inputSize > 0) inputSize / 2 else 250L * 1024 * 1024
+            // Detect long videos (≥ 15 min ≈ >1.5 GB 1080p) and use a bigger safety floor.
+            val isLongVideo = inputSize > 1_500L * 1024 * 1024
+            val safetyFloor = if (isLongVideo) 500L * 1024 * 1024 else 150L * 1024 * 1024
             val minRequiredSpace = if (needsTempCopy && inputSize > 0) {
                 // temp input copy + output + safety floor
-                inputSize + estimatedOutputSize + (50L * 1024 * 1024)
+                inputSize + estimatedOutputSize + safetyFloor
             } else {
-                maxOf(150L * 1024 * 1024, estimatedOutputSize)
+                maxOf(safetyFloor, estimatedOutputSize)
             }
             if (availableSpace < minRequiredSpace) {
-                val availableMB = availableSpace / (1024 * 1024)
-                val requiredMB = minRequiredSpace / (1024 * 1024)
+                val availableGB = availableSpace / (1024.0 * 1024 * 1024)
+                val requiredGB = minRequiredSpace / (1024.0 * 1024 * 1024)
+                val msg = if (isLongVideo) {
+                    "Not enough storage for this long video. Free ${String.format("%.1f", requiredGB - availableGB)} GB " +
+                    "(you have ${String.format("%.1f", availableGB)} GB, need ${String.format("%.1f", requiredGB)} GB). " +
+                    "Tip: export at 720p, or delete large files, then retry."
+                } else {
+                    "Storage full! Only ${availableSpace / (1024 * 1024)}MB available, " +
+                    "need ~${minRequiredSpace / (1024 * 1024)}MB. Free up storage and try again."
+                }
                 _exportState.value = Resource.Error(
-                    "Storage full! Only ${availableMB}MB available, need ~${requiredMB}MB for the export. Free up storage and try again.",
-                    Exception("Insufficient storage: ${availableMB}MB available, need ${requiredMB}MB")
+                    msg,
+                    Exception("Insufficient storage: $availableGB GB available, need $requiredGB GB")
                 )
                 return
             }
+            _progress.value = 2 // space OK
 
             val tempFileName = "powercut_process_${System.currentTimeMillis()}.mp4"
             val tempOutputFile = File(secureDir, tempFileName)
@@ -111,6 +149,17 @@ class ExportManager @Inject constructor(
                     Exception("Failed to resolve video path")
                 )
                 return
+            }
+            _progress.value = 5 // input resolved
+
+            // THERMAL PRE-CHECK (v4.2): warn (but don't block) if the device is
+            // already hot before starting a long encode. The export will still
+            // proceed — the foreground service + wake lock keep it alive — but
+            // a hot phone is far more likely to throttle and fail.
+            if (videoProcessor.isDeviceTooHotForLongExport()) {
+                val temp = videoProcessor.getBatteryTemperatureCelsius()
+                Log.w(tag, "Device is hot ($temp°C) before export — high risk of thermal failure")
+                // We continue anyway; the user has already committed to the export.
             }
 
             // Check if input is audio file
@@ -146,6 +195,7 @@ class ExportManager @Inject constructor(
 
             val success = if (isInstantTrimPossible) {
                 Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")
+                _progress.value = 10
                 videoProcessor.instantTrim(
                     inputPath = videoPath,
                     outputPath = tempOutputPath,
@@ -154,6 +204,7 @@ class ExportManager @Inject constructor(
                 )
             } else {
                 Log.d(tag, "Using transcode pipeline for upscale/filters/speed/audio")
+                _progress.value = 10
                 videoProcessor.processAndExport(
                     inputPath = videoPath,
                     outputPath = tempOutputPath,
@@ -224,14 +275,17 @@ class ExportManager @Inject constructor(
 
             if (success && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                 Log.d(tag, "Successfully processed video inside app sandbox: $tempOutputPath")
+                _progress.value = 95 // encoding done, saving to gallery
 
                 val galleryPath = saveToPublicGallery(context, tempOutputFile)
 
                 if (galleryPath != null) {
                     Log.d(tag, "Successfully registered output in system gallery: $galleryPath")
+                    _progress.value = 100
                     _exportState.value = Resource.Success(galleryPath)
                 } else {
                     Log.w(tag, "Could not insert in MediaStore, falling back to secure sandbox path")
+                    _progress.value = 100
                     _exportState.value = Resource.Success(tempOutputPath)
                 }
             } else {
@@ -307,6 +361,7 @@ class ExportManager @Inject constructor(
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                         val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                        _progress.value = 100
                         _exportState.value = Resource.Success(galleryPath ?: tempOutputPath)
                         return
                     }
