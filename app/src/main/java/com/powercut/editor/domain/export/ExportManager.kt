@@ -328,6 +328,7 @@ class ExportManager @Inject constructor(
                         val deleted = f.delete()
                         Log.d(tag, "Cleaned up temp input file: ${f.absolutePath} (${sizeMB}MB, deleted=$deleted)")
                     }
+                    Unit
                 } catch (cleanupEx: Exception) {
                     Log.w(tag, "Could not delete temp input file: ${cleanupEx.message}")
                 }
