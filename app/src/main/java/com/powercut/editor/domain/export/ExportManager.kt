@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
-import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.processing.VideoProcessor
@@ -52,10 +51,12 @@ class ExportManager @Inject constructor(
             }
 
             // Check available space on the ACTUAL partition we're writing to.
-            // NOTE: We NO LONGER copy the input video to a temp file (that was the
-            // root cause of the "Space" issue with long videos). FFmpeg-Kit reads
-            // content:// URIs directly via the SAF protocol, so we only need space
-            // for the OUTPUT file — a fraction of the input size, not 3x.
+            // v4.1: We copy the input content:// URI to a real temp file before
+            // running FFmpeg (the SAF protocol was unreliable and caused export
+            // failures). So we need space for BOTH the temp input copy (~input
+            // size) AND the output (~input size / 2 after compression). The temp
+            // input file is deleted right after FFmpeg finishes (see finally{}),
+            // so peak usage is input + output. We add a 150 MB safety floor.
             val availableSpace = secureDir.freeSpace
             val inputSize = if (project.videoPath.startsWith("content://")) {
                 try {
@@ -66,11 +67,16 @@ class ExportManager @Inject constructor(
                 val f = java.io.File(project.videoPath)
                 if (f.exists()) f.length() else 0L
             }
-            // We only need headroom for the output (≈ input size at most, usually
-            // much less after compression). Use a modest fixed minimum plus a
-            // small fraction of input — NOT 3x input which blocked long videos.
+            // For content:// URIs we need input copy + output. For local files
+            // the input is already on disk, so only output space is needed.
+            val needsTempCopy = project.videoPath.startsWith("content://")
             val estimatedOutputSize = if (inputSize > 0) inputSize / 2 else 250L * 1024 * 1024
-            val minRequiredSpace = maxOf(150L * 1024 * 1024, estimatedOutputSize)
+            val minRequiredSpace = if (needsTempCopy && inputSize > 0) {
+                // temp input copy + output + safety floor
+                inputSize + estimatedOutputSize + (50L * 1024 * 1024)
+            } else {
+                maxOf(150L * 1024 * 1024, estimatedOutputSize)
+            }
             if (availableSpace < minRequiredSpace) {
                 val availableMB = availableSpace / (1024 * 1024)
                 val requiredMB = minRequiredSpace / (1024 * 1024)
@@ -87,8 +93,17 @@ class ExportManager @Inject constructor(
 
             // Resolve video path: if it's a content:// URI, copy to temp file for FFmpeg
             // (run on IO — the copy of long/multi-GB videos must never block the caller)
+            var tempInputFile: File? = null
             val videoPath = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                resolveVideoPath(context, project.videoPath, secureDir)
+                val resolved = resolveVideoPath(context, project.videoPath, secureDir)
+                // If we created a temp copy, track it for cleanup after export
+                if (resolved != null && project.videoPath.startsWith("content://")) {
+                    val f = File(resolved)
+                    if (f.exists() && f.name.startsWith("input_")) {
+                        tempInputFile = f
+                    }
+                }
+                resolved
             }
             if (videoPath == null) {
                 _exportState.value = Resource.Error(
@@ -221,7 +236,7 @@ class ExportManager @Inject constructor(
                 }
             } else {
                 Log.e(tag, "Export failed during video processing")
-                // Try auto-recovery: retry with lower resolution
+                // Try auto-recovery: retry with 1080p resolution (if not already)
                 if (project.targetResolution != "1080p") {
                     Log.d(tag, "Retrying export with 1080p resolution...")
                     val retrySuccess = videoProcessor.processAndExport(
@@ -304,23 +319,36 @@ class ExportManager @Inject constructor(
         } catch (e: Exception) {
             Log.e(tag, "Export failed with exception", e)
             _exportState.value = Resource.Error(e.message ?: "An unknown error occurred during export", e)
+        } finally {
+            // Always clean up the temp input copy to reclaim space (v4.1)
+            tempInputFile?.let { f ->
+                try {
+                    if (f.exists()) {
+                        val sizeMB = f.length() / (1024 * 1024)
+                        val deleted = f.delete()
+                        Log.d(tag, "Cleaned up temp input file: ${f.absolutePath} (${sizeMB}MB, deleted=$deleted)")
+                    }
+                } catch (cleanupEx: Exception) {
+                    Log.w(tag, "Could not delete temp input file: ${cleanupEx.message}")
+                }
+            }
         }
     }
 
     /**
      * Resolve video path for FFmpeg processing.
-     * - If it's a regular file path, return as-is.
-     * - If it's a content:// URI, use FFmpeg-Kit's SAF (Storage Access Framework)
-     *   protocol — `getSafParameterForRead()` — which lets FFmpeg stream directly
-     *   from the content URI WITHOUT copying the whole file to a temp file.
      *
-     *   This is the critical fix for the "Space" issue with long/multi-GB videos:
-     *   the previous implementation copied the entire video to a temp file, which
-     *   required enormous free space (and time). The SAF approach streams the
-     *   content directly, so no extra storage is needed for the input.
+     * IMPORTANT (v4.1 fix): We ALWAYS stream-copy content:// URIs to a real temp
+     * file and return the local file path. The previous implementation tried the
+     * FFmpeg-Kit SAF protocol (`getSafParameterForRead`) first, but the resulting
+     * `saf:N` pseudo-paths are unreliable for transcoding operations — FFmpeg
+     * frequently fails to seek/decode through them, producing "Export failed"
+     * even for short clips. Copying to a real file is the most robust approach
+     * and works for every FFmpeg operation (seek, decode, re-encode, filters).
      *
-     *   As a fallback (e.g. very old SAF incompatibility), it falls back to a
-     *   stream-copy, but this should rarely be hit.
+     * The stream copy uses an 8 MB buffer so it never loads the whole file into
+     * memory, and we delete the temp input file after the export completes (see
+     * the finally{} block in exportProject) so the space is reclaimed.
      */
     private fun resolveVideoPath(context: Context, videoPath: String, tempDir: File): String? {
         // Regular file path — return directly
@@ -328,58 +356,57 @@ class ExportManager @Inject constructor(
             return if (File(videoPath).exists()) videoPath else null
         }
 
-        // Content URI — use FFmpeg-Kit SAF protocol to read directly (NO full copy!)
+        // Content URI — ALWAYS copy to a real temp file (SAF protocol is unreliable)
         return try {
             val uri = android.net.Uri.parse(videoPath)
-            val safPath = FFmpegKitConfig.getSafParameterForRead(context, uri)
-            if (safPath != null) {
-                Log.d(tag, "Using FFmpeg-Kit SAF protocol to stream content URI directly (no copy): $safPath")
-                safPath
-            } else {
-                // Fallback: stream-copy to temp file (rare path for incompatible SAF)
-                Log.w(tag, "SAF parameter unavailable, falling back to stream-copy")
-                streamCopyToTemp(context, uri, tempDir)
-            }
-        } catch (e: NoSuchMethodError) {
-            Log.w(tag, "getSafParameterForRead not available on this FFmpeg-Kit build, falling back to copy: ${e.message}")
-            streamCopyToTemp(context, android.net.Uri.parse(videoPath), tempDir)
+            Log.d(tag, "Copying content URI to temp file for reliable FFmpeg processing: $videoPath")
+            streamCopyToTemp(context, uri, tempDir)
         } catch (e: Exception) {
-            Log.e(tag, "Failed to resolve content URI via SAF: $videoPath — ${e.message}")
-            // Last-resort fallback to copy
-            try {
-                streamCopyToTemp(context, android.net.Uri.parse(videoPath), tempDir)
-            } catch (inner: Exception) {
-                Log.e(tag, "Copy fallback also failed: ${inner.message}")
-                null
-            }
+            Log.e(tag, "Failed to copy content URI to temp file: $videoPath — ${e.message}")
+            null
         }
     }
 
     /**
-     * Fallback: stream-copy a content URI to a temp file using a large buffer.
-     * Never loads the whole file into memory; used only when SAF is unavailable.
+     * Stream-copy a content URI to a temp file using a large buffer.
+     * Never loads the whole file into memory. This is now the PRIMARY path for
+     * content:// URIs (v4.1) because the SAF protocol was unreliable for FFmpeg
+     * transcoding. The temp file is deleted after export completes.
      */
     private fun streamCopyToTemp(context: Context, uri: android.net.Uri, tempDir: File): String? {
+        var tempFile: File? = null
         return try {
-            val tempFile = File(tempDir, "input_${System.currentTimeMillis()}.mp4")
+            tempFile = File(tempDir, "input_${System.currentTimeMillis()}.mp4")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 java.io.FileOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(8 * 1024 * 1024)
+                    val buffer = ByteArray(8 * 1024 * 1024) // 8 MB buffer
                     var read: Int
+                    var totalBytes = 0L
                     while (input.read(buffer).also { read = it } != -1) {
                         output.write(buffer, 0, read)
+                        totalBytes += read
                     }
                     output.flush()
+                    // Force the data to physical storage so FFmpeg can read it
+                    output.fd.sync()
+                    Log.d(tag, "Streamed $totalBytes bytes (${totalBytes / (1024 * 1024)} MB) to temp file")
                 }
+            } ?: run {
+                Log.e(tag, "openInputStream returned null for URI: $uri")
+                return null
             }
             if (tempFile.exists() && tempFile.length() > 0) {
-                Log.d(tag, "Streamed content URI to temp file: ${tempFile.absolutePath} (${tempFile.length() / (1024 * 1024)} MB)")
+                Log.d(tag, "Temp input file ready: ${tempFile.absolutePath} (${tempFile.length() / (1024 * 1024)} MB)")
                 tempFile.absolutePath
             } else {
+                Log.e(tag, "Temp file is empty or missing after copy")
+                tempFile?.delete()
                 null
             }
         } catch (e: Exception) {
             Log.e(tag, "streamCopyToTemp failed: ${e.message}")
+            // Clean up partial copy
+            try { tempFile?.delete() } catch (_: Exception) {}
             null
         }
     }

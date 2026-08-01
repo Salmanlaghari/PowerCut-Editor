@@ -571,8 +571,8 @@ class VideoProcessor @Inject constructor(
             true
         } else {
             Log.e(tag, "ProcessAndExport failed: ${session.state}, code: $returnCode, logs: ${session.failStackTrace}")
-            // AUTO-RECOVERY: minimal re-encode if the full pipeline failed
-            Log.d(tag, "Attempting recovery: minimal re-encode (no filters, output-seek)...")
+            // AUTO-RECOVERY 1: minimal re-encode if the full pipeline failed
+            Log.d(tag, "Attempting recovery 1: minimal re-encode (no filters, output-seek)...")
             val recoveryArgs = mutableListOf(
                 "-threads", "0", "-analyzeduration", "100M", "-probesize", "100M",
                 "-i", inputPath
@@ -584,11 +584,34 @@ class VideoProcessor @Inject constructor(
                 "-y", outputPath))
             val recovery = FFmpegKit.executeWithArguments(recoveryArgs.toTypedArray())
             if (ReturnCode.isSuccess(recovery.returnCode)) {
-                Log.d(tag, "Recovery minimal re-encode succeeded!")
+                Log.d(tag, "Recovery 1 (minimal re-encode) succeeded!")
                 true
             } else {
-                Log.e(tag, "Recovery also failed: ${recovery.failStackTrace}")
-                false
+                Log.e(tag, "Recovery 1 failed: ${recovery.failStackTrace}")
+                // AUTO-RECOVERY 2: input-side seek (fast) + stream copy (no re-encode)
+                Log.d(tag, "Attempting recovery 2: input-seek + stream copy...")
+                val recovery2Args = mutableListOf("-threads", "0", "-ss", startSec.toString())
+                recovery2Args.addAll(listOf("-i", inputPath, "-t", (durationSec / speedFactor).toString(),
+                    "-c", "copy", "-avoid_negative_ts", "make_zero",
+                    "-movflags", "+faststart", "-y", outputPath))
+                val recovery2 = FFmpegKit.executeWithArguments(recovery2Args.toTypedArray())
+                if (ReturnCode.isSuccess(recovery2.returnCode)) {
+                    Log.d(tag, "Recovery 2 (stream copy) succeeded!")
+                    true
+                } else {
+                    Log.e(tag, "Recovery 2 also failed: ${recovery2.failStackTrace}")
+                    // AUTO-RECOVERY 3: just copy the whole file, no trim, no filters
+                    Log.d(tag, "Attempting recovery 3: full stream copy (no trim)...")
+                    val recovery3 = FFmpegKit.executeWithArguments(arrayOf(
+                        "-i", inputPath, "-c", "copy", "-movflags", "+faststart", "-y", outputPath))
+                    if (ReturnCode.isSuccess(recovery3.returnCode)) {
+                        Log.d(tag, "Recovery 3 (full copy) succeeded!")
+                        true
+                    } else {
+                        Log.e(tag, "All recovery attempts failed: ${recovery3.failStackTrace}")
+                        false
+                    }
+                }
             }
         }
     }

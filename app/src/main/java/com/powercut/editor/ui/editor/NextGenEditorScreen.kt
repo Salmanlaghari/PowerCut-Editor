@@ -98,6 +98,13 @@ import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.premiumAccentGradient
 import com.powercut.editor.ui.theme.tactileClick
 import java.util.Locale
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 
 private fun formatTime(ms: Long): String {
     val totalSecs = ms / 1000
@@ -105,6 +112,39 @@ private fun formatTime(ms: Long): String {
     val seconds = totalSecs % 60
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  FILTER MATRIX BUILDER — returns a ColorMatrix for live preview
+//  of cinematic filters. Used by the combined preview filter so that
+//  BOTH the filter and image-editor adjustments show in real-time.
+// ═══════════════════════════════════════════════════════════════
+private fun buildFilterMatrix(filter: String): ColorMatrix? {
+    val f = filter.lowercase().replace("-", "_").replace(" ", "_")
+    return when (f) {
+        "grayscale", "mono" -> ColorMatrix().apply { setToSaturation(0f) }
+        "sepia" -> ColorMatrix(floatArrayOf(0.393f,0.769f,0.189f,0f,0f,0.349f,0.686f,0.168f,0f,0f,0.272f,0.534f,0.131f,0f,0f,0f,0f,0f,1f,0f))
+        "invert" -> ColorMatrix(floatArrayOf(-1f,0f,0f,0f,255f,0f,-1f,0f,0f,255f,0f,0f,-1f,0f,255f,0f,0f,0f,1f,0f))
+        "warm" -> ColorMatrix(floatArrayOf(1.1f,0f,0f,0f,0f, 0f,1.02f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f))
+        "cool" -> ColorMatrix(floatArrayOf(0.9f,0f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,1.1f,0f,0f, 0f,0f,0f,1f,0f))
+        "vintage" -> ColorMatrix(floatArrayOf(0.5f,0.65f,0.15f,0f,0f, 0.45f,0.6f,0.12f,0f,0f, 0.35f,0.55f,0.1f,0f,0f, 0f,0f,0f,1f,0f))
+        "dramatic" -> ColorMatrix().apply { setToSaturation(1.3f) }
+        "vivid" -> ColorMatrix().apply { setToSaturation(1.6f) }
+        "noir" -> ColorMatrix().apply { setToSaturation(0f) }
+        "bloom" -> ColorMatrix(floatArrayOf(1.05f,0.05f,0.05f,0f,10f, 0.05f,1.05f,0.05f,0f,10f, 0.05f,0.05f,1.05f,0f,10f, 0f,0f,0f,1f,0f))
+        "tealorange", "teal_orange" -> ColorMatrix(floatArrayOf(1.12f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.08f,0f,0f, 0f,0f,0f,1f,0f))
+        "pastel" -> ColorMatrix().apply { setToSaturation(0.7f) }
+        "fade" -> ColorMatrix().apply { setToSaturation(0.6f) }
+        "cyberpunk" -> ColorMatrix(floatArrayOf(1.2f,0f,0.1f,0f,0f, 0f,0.8f,0f,0f,0f, 0.1f,0f,1.25f,0f,0f, 0f,0f,0f,1f,0f))
+        "sunset" -> ColorMatrix(floatArrayOf(1.15f,0.05f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,0.95f,0f,0f, 0f,0f,0f,1f,0f))
+        "arctic" -> ColorMatrix(floatArrayOf(0.85f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.12f,0f,0f, 0f,0f,0f,1f,0f))
+        "forest" -> ColorMatrix(floatArrayOf(0.9f,0f,0f,0f,0f, 0f,1.1f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f))
+        "rose" -> ColorMatrix(floatArrayOf(1.1f,0f,0.05f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.05f,0f,0f, 0f,0f,0f,1f,0f))
+        "golden" -> ColorMatrix(floatArrayOf(1.12f,0.05f,0f,0f,5f, 0f,1.03f,0f,0f,0f, 0f,0f,0.85f,0f,0f, 0f,0f,0f,1f,0f))
+        "mist" -> ColorMatrix(floatArrayOf(1.05f,0.03f,0.03f,0f,15f, 0.03f,1.05f,0.03f,0f,15f, 0.03f,0.03f,1.05f,0f,15f, 0f,0f,0f,1f,0f))
+        else -> null
+    }
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 //  NEXTGEN EDITOR — CapCut-Level Professional Video Editor
@@ -265,7 +305,7 @@ fun NextGenEditorScreen(
         })
     }
     LaunchedEffect(isPlaying) {
-        if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(33) } }
+        if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(16) } }
         else { exoPlayer.pause(); kotlinx.coroutines.delay(3000); if (!isPlaying) onSaveDraft() }
     }
     LaunchedEffect(project.isMuted, project.videoVolume) { exoPlayer.volume = if (project.isMuted) 0f else project.videoVolume }
@@ -309,6 +349,64 @@ fun NextGenEditorScreen(
             "mist" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
                 1.05f,0.03f,0.03f,0f,15f, 0.03f,1.05f,0.03f,0f,15f, 0.03f,0.03f,1.05f,0f,15f, 0f,0f,0f,1f,0f)))
             else -> null
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  COMBINED LIVE PREVIEW FILTER — merges the selected cinematic filter
+    //  WITH the image-editor adjustments (brightness, contrast, saturation,
+    //  temperature, exposure) so ALL adjustments show in real-time on the
+    //  player, not just on export. This makes every slider "real" not "fake".
+    // ═══════════════════════════════════════════════════════════
+    val combinedColorFilter = remember(
+        project.selectedFilter,
+        project.imageEditorBrightness,
+        project.imageEditorContrast,
+        project.imageEditorSaturation,
+        project.imageEditorTemperature,
+        project.imageEditorExposure
+    ) {
+        val b = project.imageEditorBrightness
+        val c = project.imageEditorContrast
+        val s = project.imageEditorSaturation
+        val t = project.imageEditorTemperature
+        val e = project.imageEditorExposure
+        val hasAdjustments = b != 1f || c != 1f || s != 1f || t != 1f || e != 1f
+
+        if (!hasAdjustments) {
+            colorFilter
+        } else {
+            // Build a combined matrix: adjustments applied on top of filter
+            val brightnessShift = (b - 1f) * 100f
+            val contrastScale = c
+            val contrastShift = (1f - c) * 128f
+            val tempRed = 1f + (t - 1f) * 0.25f
+            val tempBlue = 1f - (t - 1f) * 0.25f
+            val expScale = e
+
+            val adjMatrix = ColorMatrix(floatArrayOf(
+                contrastScale * tempRed * expScale, 0f, 0f, 0f, brightnessShift + contrastShift,
+                0f, contrastScale * expScale, 0f, 0f, brightnessShift + contrastShift,
+                0f, 0f, contrastScale * tempBlue * expScale, 0f, brightnessShift + contrastShift,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            val satMatrix = ColorMatrix().apply { setToSaturation(s) }
+            adjMatrix.postConcat(satMatrix)
+
+            // If there's also a filter, combine them
+            if (colorFilter != null) {
+                // Rebuild the filter matrix and combine
+                val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
+                val filterMatrix = buildFilterMatrix(f)
+                if (filterMatrix != null) {
+                    filterMatrix.postConcat(adjMatrix)
+                    ColorFilter.colorMatrix(filterMatrix)
+                } else {
+                    ColorFilter.colorMatrix(adjMatrix)
+                }
+            } else {
+                ColorFilter.colorMatrix(adjMatrix)
+            }
         }
     }
     val aspect = remember(project.aspectPreset) { when (project.aspectPreset) { "1:1" -> 1.0f; "9:16" -> 9f/16f; "4:5" -> 4f/5f; else -> 16f/9f } }
@@ -358,7 +456,8 @@ fun NextGenEditorScreen(
                     modifier = Modifier.fillMaxSize().graphicsLayer(
                         scaleX = if (project.isFlippedHorizontal) -1f else 1f,
                         scaleY = if (project.isFlippedVertical) -1f else 1f,
-                        rotationZ = project.rotationDegrees
+                        rotationZ = project.rotationDegrees,
+                        colorFilter = combinedColorFilter
                     )
                 )
 
@@ -457,7 +556,30 @@ fun NextGenEditorScreen(
             onToggleAudioLayer = { layerAudioVisible = !layerAudioVisible },
             onToggleTextLayer = { layerTextVisible = !layerTextVisible },
             onToggleImageLayer = { layerImageVisible = !layerImageVisible },
-            onToggleStickerLayer = { layerStickerVisible = !layerStickerVisible }
+            onToggleStickerLayer = { layerStickerVisible = !layerStickerVisible },
+            onSeekTo = { seekMs ->
+                exoPlayer.seekTo(seekMs)
+                currentPlaybackTime = seekMs
+            },
+            onSetTrimStart = { seekMs ->
+                // Set trim start to current playhead position (keep existing end)
+                val newStart = seekMs.coerceIn(0L, project.trimEndMs - 100)
+                onUpdateTrim(newStart, project.trimEndMs)
+            },
+            onSetTrimEnd = { seekMs ->
+                // Set trim end to current playhead position (keep existing start)
+                val dur = if (project.durationMs > 0) project.durationMs else
+                    if (exoPlayer.duration > 0) exoPlayer.duration else 30000L
+                val newEnd = seekMs.coerceIn(project.trimStartMs + 100, dur)
+                onUpdateTrim(project.trimStartMs, newEnd)
+            },
+            onSplitHere = { seekMs ->
+                // Split: set trim start to the playhead position for the "second half"
+                val dur = if (project.durationMs > 0) project.durationMs else
+                    if (exoPlayer.duration > 0) exoPlayer.duration else 30000L
+                val newStart = seekMs.coerceIn(0L, dur - 100)
+                onUpdateTrim(newStart, dur)
+            }
         )
 
         // ─── 5. TOOL PANEL (expandable) ───────────────────────
@@ -795,7 +917,11 @@ private fun CapCutTimeline(
     onToggleAudioLayer: () -> Unit,
     onToggleTextLayer: () -> Unit,
     onToggleImageLayer: () -> Unit,
-    onToggleStickerLayer: () -> Unit
+    onToggleStickerLayer: () -> Unit,
+    onSeekTo: (Long) -> Unit = {},
+    onSetTrimStart: (Long) -> Unit = {},
+    onSetTrimEnd: (Long) -> Unit = {},
+    onSplitHere: (Long) -> Unit = {}
 ) {
     // Real video duration for 1-second precision ruler
     val durationMs = if (project.durationMs > 0) project.durationMs else
@@ -804,11 +930,33 @@ private fun CapCutTimeline(
     // Playhead position as a fraction [0..1]
     val playheadFraction = (currentTime.toFloat() / durationMs).coerceIn(0f, 1f)
 
+    // Playhead action menu state
+    var showPlayheadMenu by remember { mutableStateOf(false) }
+
     // Wrap the whole timeline in BoxWithConstraints so the moving playhead
     // can use the EXACT measured width (perfect 1-second alignment).
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth().height(120.dp)
             .background(Color(0xFF111318)).border(1.dp, Color.White.copy(0.04f))
+            // TAP TO SEEK: tap anywhere on the timeline to move the playhead
+            .pointerInput(durationMs) {
+                detectTapGestures(
+                    onTap = { offset ->
+                        val widthPx = size.width.toFloat()
+                        val fraction = (offset.x / widthPx).coerceIn(0f, 1f)
+                        val seekMs = (fraction * durationMs).toLong()
+                        onSeekTo(seekMs)
+                    },
+                    onDoubleTap = { offset ->
+                        // Double-tap shows the playhead action menu
+                        val widthPx = size.width.toFloat()
+                        val fraction = (offset.x / widthPx).coerceIn(0f, 1f)
+                        val seekMs = (fraction * durationMs).toLong()
+                        onSeekTo(seekMs)
+                        showPlayheadMenu = true
+                    }
+                )
+            }
     ) {
         val timelineWidthDp = maxWidth.value
         val totalSeconds = kotlin.math.ceil(durationSec).toInt()
@@ -922,8 +1070,48 @@ private fun CapCutTimeline(
                 )
             }
         }
-            // ★ MOVING PLAYHEAD — tracks actual playback position (1-second precision)
+            // ★ TRIM REGION OVERLAY — shows the trimmed portion of the video
+            // Dimmed areas outside the trim region, bright area inside
+            val trimStartFraction = (project.trimStartMs.toFloat() / durationMs).coerceIn(0f, 1f)
+            val trimEndFraction = (project.trimEndMs.toFloat() / durationMs).coerceIn(0f, 1f)
+            if (trimStartFraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width((trimStartFraction * timelineWidthDp).dp)
+                        .offset(x = 0.dp)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                )
+            }
+            if (trimEndFraction < 1f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(((1f - trimEndFraction) * timelineWidthDp).dp)
+                        .offset(x = (trimEndFraction * timelineWidthDp).dp)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                )
+            }
+            // Trim start handle (left edge of trim region)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(3.dp)
+                    .offset(x = (trimStartFraction * timelineWidthDp).dp)
+                    .background(CyberCyan)
+            )
+            // Trim end handle (right edge of trim region)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(3.dp)
+                    .offset(x = (trimEndFraction * timelineWidthDp).dp)
+                    .background(CyberCyan)
+            )
+
+            // ★ LIVE MOVING PLAYHEAD — tracks actual playback position second-by-second
             // Uses the EXACT measured timelineWidthDp from BoxWithConstraints for perfect alignment.
+            // The playhead handle is DRAGGABLE so the user can scrub through the video.
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -931,16 +1119,123 @@ private fun CapCutTimeline(
                     .offset(x = (playheadFraction * timelineWidthDp).dp)
                     .background(Brush.verticalGradient(listOf(NeonOrange, Color.Transparent)))
             ) {
+                // Draggable playhead handle (the circle on top)
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(14.dp)
                         .background(NeonOrange, CircleShape)
-                        .border(1.dp, Color.White, CircleShape)
+                        .border(1.5.dp, Color.White, CircleShape)
                         .align(Alignment.TopCenter)
-                        .neonGlow(NeonOrange, CircleShape, 1.dp)
+                        .neonGlow(NeonOrange, CircleShape, 2.dp)
+                        .pointerInput(durationMs) {
+                            detectDragGestures(
+                                onDragStart = { },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val widthPx = size.width.toFloat()
+                                    if (widthPx > 0) {
+                                        val currentMs = (playheadFraction * durationMs).toLong()
+                                        val deltaMs = ((dragAmount.x / widthPx) * durationMs).toLong()
+                                        val newMs = (currentMs + deltaMs).coerceIn(0L, durationMs)
+                                        onSeekTo(newMs)
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = { showPlayheadMenu = true },
+                                onTap = { showPlayheadMenu = true }
+                            )
+                        }
                 )
             }
+
+            // ★ PLAYHEAD ACTION MENU — appears when user taps/long-presses the playhead
+            // Gives the user editing options at the current position
+            if (showPlayheadMenu) {
+                Popup(
+                    alignment = Alignment.TopCenter,
+                    onDismissRequest = { showPlayheadMenu = false },
+                    properties = PopupProperties(focusable = true)
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .width(200.dp)
+                            .padding(top = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1D24)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            // Current position display
+                            Text(
+                                "Playhead: ${formatTime(currentTime)}",
+                                fontSize = 12.sp,
+                                color = NeonOrange,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            // Split here
+                            PlayheadMenuItem(
+                                icon = "✂️",
+                                label = "Split at playhead",
+                                onClick = { onSplitHere(currentTime); showPlayheadMenu = false }
+                            )
+                            // Set trim start
+                            PlayheadMenuItem(
+                                icon = "⏮️",
+                                label = "Set trim start here",
+                                onClick = { onSetTrimStart(currentTime); showPlayheadMenu = false }
+                            )
+                            // Set trim end
+                            PlayheadMenuItem(
+                                icon = "⏭️",
+                                label = "Set trim end here",
+                                onClick = { onSetTrimEnd(currentTime); showPlayheadMenu = false }
+                            )
+                            // Play/pause toggle
+                            PlayheadMenuItem(
+                                icon = if (exoPlayer.isPlaying) "⏸️" else "▶️",
+                                label = if (exoPlayer.isPlaying) "Pause" else "Play",
+                                onClick = {
+                                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                    showPlayheadMenu = false
+                                }
+                            )
+                            // Close
+                            PlayheadMenuItem(
+                                icon = "✕",
+                                label = "Close menu",
+                                onClick = { showPlayheadMenu = false }
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+
+// ─── Playhead Menu Item ───────────────────────────────────────
+@Composable
+private fun PlayheadMenuItem(
+    icon: String,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(icon, fontSize = 16.sp, modifier = Modifier.width(24.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium)
     }
 }
 
