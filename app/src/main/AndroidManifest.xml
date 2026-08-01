@@ -11,6 +11,37 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:targetApi="30" />
 
+    <!-- ============================================================ -->
+    <!-- LONG-EXPORT RELIABILITY PERMISSIONS (v4.2)                   -->
+    <!-- These let the export run in the background for 1+ hour       -->
+    <!-- without Android killing the process.                         -->
+    <!-- ============================================================ -->
+
+    <!-- Core foreground-service permission (Android 9+). Required to show
+         the persistent "Exporting…" notification that keeps the app alive. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Android 14 (API 34) requires a typed foreground-service permission.
+         media-processing is the correct type for video encoding jobs. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+
+    <!-- Keeps the CPU running while the screen is off so FFmpeg does not
+         stall. Acquired for the whole duration of the export. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Keeps Wi-Fi active during long uploads/exports that may pull
+         background music or watermark assets over the network. -->
+    <uses-permission android:name="android.permission.WIFI_LOCK" />
+
+    <!-- Android 13+ (API 33) requires runtime permission to post the
+         foreground notification. Without it the notification (and
+         therefore the foreground service) silently fails on 13+. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- (Optional) Lets us read the battery temperature to detect thermal
+         throttling and pause encoding before the SoC shuts down. -->
+    <uses-permission android:name="android.permission.BATTERY_STATS" tools:ignore="ProtectedPermissions" />
+
     <application
         android:name="com.powercut.editor.PowerCutApp"
         android:allowBackup="true"
@@ -37,6 +68,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- ============================================================ -->
+        <!-- EXPORT FOREGROUND SERVICE (v4.2)                             -->
+        <!-- Runs the FFmpeg encode job in the background so that the     -->
+        <!-- export survives app minimisation, screen-off, and Doze.      -->
+        <!-- foregroundServiceType="mediaProcessing" is required on      -->
+        <!-- Android 14+ and is harmless on earlier versions.            -->
+        <!-- ============================================================ -->
+        <service
+            android:name="com.powercut.editor.domain.export.ExportForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing"
+            tools:targetApi="34" />
+
     </application>
 
 </manifest>

@@ -136,4 +136,9 @@
     <string name="captions_en">English</string>
     <string name="captions_ur">Urdu (اردو)</string>
     <string name="silence_remover">Silence Remover</string>
+
+    <!-- v4.2 Long-Export Reliability: foreground service notification -->
+    <string name="export_notif_title">PowerCut Export</string>
+    <string name="export_notif_channel_name">Video Export</string>
+    <string name="export_notif_channel_desc">Shows progress while exporting long videos in the background.</string>
 </resources>

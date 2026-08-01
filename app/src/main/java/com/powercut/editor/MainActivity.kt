@@ -409,7 +409,9 @@ class MainActivity : ComponentActivity() {
 
     private fun requestStoragePermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+: Request granular media permissions
+            // Android 13+: Request granular media permissions + POST_NOTIFICATIONS
+            // (POST_NOTIFICATIONS is required for the export foreground-service
+            //  notification that keeps long exports alive in the background.)
             val permissions = mutableListOf<String>()
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 permissions.add(android.Manifest.permission.READ_MEDIA_VIDEO)
@@ -419,6 +421,9 @@ class MainActivity : ComponentActivity() {
             }
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+            }
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
             }
             if (permissions.isNotEmpty()) {
                 requestPermissions(permissions.toTypedArray(), 1001)
