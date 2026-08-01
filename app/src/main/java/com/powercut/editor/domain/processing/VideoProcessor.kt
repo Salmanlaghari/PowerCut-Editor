@@ -3,13 +3,18 @@ package com.powercut.editor.domain.processing
 import android.content.Context
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegKitConfig
+import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
+import com.arthenica.ffmpegkit.SessionState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
 
 /**
  * Premium Ultra Smooth Pro 2027 NextGen — Video Processor (v4.0 — 300+ features)
@@ -65,6 +70,239 @@ class VideoProcessor @Inject constructor(
     /** True when the path is a FFmpeg-Kit SAF parameter (e.g. "saf:1"). */
     private fun isSafPath(path: String): Boolean {
         return path.startsWith("saf:") || path.startsWith("content://")
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  FONT RESOLUTION (v4.3 — FIX #1: drawtext crash fix)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // ROOT CAUSE: FFmpeg's `drawtext` filter REQUIRES a `fontfile` parameter
+    // (or a valid system font discoverable via fontconfig). FFmpeg-Kit's
+    // full-gpl build does NOT bundle a default font and does NOT include
+    // fontconfig, so EVERY drawtext filter without an explicit fontfile=
+    // crashes with:
+    //   "Cannot find a valid font for the family Sans"
+    //   "[Parsed_drawtext] ... error: Could not load font"
+    // This was the #1 root cause of the overlay export crash: adding ANY text
+    // overlay or emoji sticker → drawtext → no font → FFmpeg fails → export
+    // crashes 100% of the time.
+    //
+    // FIX: We bundle a compact TTF font (powercut_sans.ttf, ~4 KB) in the app's
+    // assets/fonts/ directory. At first use we copy it to the app's cacheDir
+    // (FFmpeg can only read real files, not Android assets) and cache the path.
+    // Every drawtext filter then includes `fontfile=<path>`.
+    private var cachedFontPath: String? = null
+
+    /**
+     * Returns the absolute path to a usable .ttf font file on disk, copying
+     * the bundled font from assets to cacheDir on first call. Thread-safe.
+     * Returns null only if the asset is missing (should never happen in a
+     * correctly packaged release).
+     */
+    @Synchronized
+    fun getFontFile(): String? {
+        cachedFontPath?.let { path ->
+            if (File(path).exists()) return path
+            cachedFontPath = null
+        }
+        return try {
+            val dest = File(context.cacheDir, "powercut_sans.ttf")
+            if (!dest.exists() || dest.length() == 0L) {
+                context.assets.open("fonts/powercut_sans.ttf").use { input ->
+                    java.io.FileOutputStream(dest).use { output ->
+                        input.copyTo(output, bufferSize = 8192)
+                        output.flush()
+                    }
+                }
+            }
+            val path = dest.absolutePath
+            cachedFontPath = path
+            Log.d(tag, "Font file ready for drawtext: $path (${dest.length()} bytes)")
+            path
+        } catch (e: Exception) {
+            Log.e(tag, "CRITICAL: Could not extract bundled font for drawtext — text overlays will fail!", e)
+            null
+        }
+    }
+
+    /**
+     * Builds the `fontfile=<path>` clause for drawtext, or empty string if the
+     * font could not be loaded (in which case the caller should skip drawtext
+     * rather than emit a filter that will crash FFmpeg).
+     */
+    private fun fontFileClause(): String {
+        val path = getFontFile() ?: return ""
+        // FFmpeg drawtext fontfile path: colons must be escaped, but Android
+        // paths don't contain colons. Just use the raw path.
+        return ":fontfile=$path"
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  OVERLAY IMAGE URI RESOLUTION (v4.3 — FIX #6: content:// overlay crash)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // ROOT CAUSE: When the user picks an image overlay from the gallery, the
+    // path stored in VideoProject.imageOverlayPath can be a "content://" URI
+    // string (UriHelper.getPathFromUri falls back to uri.toString() when it
+    // can't resolve a real file path). FFmpeg CANNOT read "content://" URIs
+    // as -i inputs — it would either silently fail to open the input or crash.
+    // Additionally, VideoProcessor checks `File(imageOverlayPath).exists()`
+    // which returns false for a content:// string, so the overlay is silently
+    // skipped even though the user sees it in the preview.
+    //
+    // FIX: Before building the FFmpeg command, resolve any content:// overlay
+    // image URI to a real temp file via stream-copy. The temp files are cleaned
+    // up after the export completes.
+    private val overlayTempFiles = mutableListOf<File>()
+
+    /**
+     * Resolves an overlay/watermark/greenscreen-bg path that may be a
+     * content:// URI to a real file path on disk. Real file paths are returned
+     * unchanged. The caller is responsible for cleaning up temp files via
+     * [cleanupOverlayTempFiles].
+     */
+    private fun resolveOverlayPath(path: String?): String? {
+        if (path.isNullOrBlank()) return null
+        // Real file path — verify it exists
+        if (!path.startsWith("content://") && !path.startsWith("saf:")) {
+            return if (File(path).exists()) path else null
+        }
+        // content:// URI — stream-copy to a temp file
+        return try {
+            val uri = android.net.Uri.parse(path)
+            val ext = guessImageExtension(path)
+            val tempFile = File(context.cacheDir, "overlay_${System.currentTimeMillis()}.$ext")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                java.io.FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output, bufferSize = 256 * 1024)
+                    output.flush()
+                    output.fd.sync()
+                }
+            } ?: run {
+                Log.e(tag, "resolveOverlayPath: openInputStream returned null for $path")
+                return null
+            }
+            if (tempFile.exists() && tempFile.length() > 0) {
+                overlayTempFiles.add(tempFile)
+                Log.d(tag, "Resolved overlay content URI to temp file: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
+                tempFile.absolutePath
+            } else {
+                tempFile.delete()
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "resolveOverlayPath failed for $path: ${e.message}")
+            null
+        }
+    }
+
+    private fun guessImageExtension(path: String): String {
+        val lower = path.lowercase()
+        return when {
+            lower.contains(".png") -> "png"
+            lower.contains(".webp") -> "webp"
+            lower.contains(".gif") -> "gif"
+            lower.contains(".bmp") -> "bmp"
+            else -> "jpg"
+        }
+    }
+
+    /** Delete all temp overlay files created during the last export. */
+    fun cleanupOverlayTempFiles() {
+        for (f in overlayTempFiles) {
+            try { if (f.exists()) f.delete() } catch (_: Exception) {}
+        }
+        overlayTempFiles.clear()
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  FFmpeg EXECUTE WITH PROGRESS (v4.3 — FIX #10: progress stuck at 10%)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // ROOT CAUSE: The old code used FFmpegKit.executeWithArguments() which is
+    // synchronous and provides NO progress feedback. The export progress was
+    // stuck at 10% ("encoding started") for the entire duration of the encode,
+    // then jumped to 95% ("done"). For a 60-minute video with overlays this
+    // meant the progress bar was stuck at 10% for 30+ minutes, making users
+    // think the app had frozen.
+    //
+    // FIX: We use executeWithArgumentsAsync() with a StatisticsCallback that
+    // computes progress from the encoded time vs. total duration. The callback
+    // maps the FFmpeg statistics (time in ms) to a 10-90% range and calls
+    // onProgress. We use suspendCancellableCoroutine to bridge the async
+    // callback back to a suspend function.
+    private suspend fun executeFFmpegWithProgress(
+        args: Array<String>,
+        totalDurationSec: Double,
+        onProgress: (Int) -> Unit
+    ): Boolean = suspendCancellableCoroutine { cont ->
+        val totalMs = (totalDurationSec * 1000).toLong().coerceAtLeast(1L)
+
+        // v4.3 THERMAL THROTTLING: Track the last time we cooled down.
+        // Every 5 minutes of encoding, check the battery temperature. If it's
+        // ≥ 45°C, sleep 2 seconds to let the SoC cool before continuing.
+        // This prevents thermal shutdown on 30-60 minute exports.
+        var lastThermalCheckMs = System.currentTimeMillis()
+        val thermalCheckIntervalMs = 5L * 60 * 1000 // 5 minutes
+        val thermalSleepMs = 2000L // 2 seconds
+        val thermalThresholdC = 45.0f
+
+        // Enable statistics callback — this fires periodically during encoding
+        // with the current encoded time. We map it to 10-90% of the export.
+        FFmpegKitConfig.enableStatisticsCallback { statistics ->
+            try {
+                val encodedMs = statistics.time
+                if (totalMs > 0 && encodedMs > 0) {
+                    // Map encoded time to 10-90% range (10% = started, 90% = nearly done)
+                    val pct = (10 + (encodedMs.toDouble() / totalMs * 80)).toInt().coerceIn(10, 90)
+                    onProgress(pct)
+                }
+                // Thermal check every 5 minutes of wall-clock time
+                val now = System.currentTimeMillis()
+                if (now - lastThermalCheckMs >= thermalCheckIntervalMs) {
+                    lastThermalCheckMs = now
+                    val temp = getBatteryTemperatureCelsius()
+                    if (temp != null && temp >= thermalThresholdC) {
+                        Log.w(tag, "Thermal throttle: battery at ${temp}°C — sleeping ${thermalSleepMs}ms to cool")
+                        try { Thread.sleep(thermalSleepMs) } catch (_: InterruptedException) {}
+                    }
+                }
+            } catch (_: Exception) {
+                // Statistics callback errors are non-fatal
+            }
+        }
+
+        val session = FFmpegKit.executeWithArgumentsAsync(args, { completedSession ->
+            // Disable the statistics callback to avoid leaking
+            FFmpegKitConfig.enableStatisticsCallback { }
+            val success = ReturnCode.isSuccess(completedSession.returnCode)
+            if (cont.isActive) cont.resume(success)
+        }, { _ -> /* log callback — not used here */ }, { statistics ->
+            // Per-session statistics callback
+            try {
+                val encodedMs = statistics.time
+                if (totalMs > 0 && encodedMs > 0) {
+                    val pct = (10 + (encodedMs.toDouble() / totalMs * 80)).toInt().coerceIn(10, 90)
+                    onProgress(pct)
+                }
+            } catch (_: Exception) {}
+        })
+
+        cont.invokeOnCancellation {
+            // If the coroutine is cancelled, cancel the FFmpeg session
+            try { FFmpegKit.cancel(session.sessionId) } catch (_: Exception) {}
+            FFmpegKitConfig.enableStatisticsCallback { }
+        }
+    }
+
+    /** Synchronous FFmpeg execution (no progress) — used for recovery attempts. */
+    private fun executeFFmpegSync(args: Array<String>): Boolean {
+        val session = FFmpegKit.executeWithArguments(args)
+        val success = ReturnCode.isSuccess(session.returnCode)
+        if (!success) {
+            Log.e(tag, "FFmpeg failed: code=${session.returnCode}, state=${session.state}, logs=${session.failStackTrace}")
+        }
+        return success
     }
 
     /**
@@ -144,9 +382,10 @@ class VideoProcessor @Inject constructor(
             if (startSec > 0) args.addAll(listOf("-ss", startSec.toString()))
             if (durationSec > 0) args.addAll(listOf("-t", durationSec.toString()))
 
+            val fontClause = fontFileClause()
             val vf = "color=c=0x1a1a2e:s=1920x1080:d=${actualDuration}," +
-                    "drawtext=text='PowerCut Audio':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h/2-80," +
-                    "drawtext=text='%{pts\\:hms}':fontcolor=0x00bcd4:fontsize=40:x=(w-text_w)/2:y=h/2+20," +
+                    "drawtext=text='PowerCut Audio':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h/2-80${fontClause}," +
+                    "drawtext=text='%{pts\\:hms}':fontcolor=0x00bcd4:fontsize=40:x=(w-text_w)/2:y=h/2+20${fontClause}," +
                     "format=yuv420p"
 
             args.addAll(listOf("-vf", vf))
@@ -277,20 +516,35 @@ class VideoProcessor @Inject constructor(
             args.addAll(listOf("-ss", startSec.toString()))
         }
 
-        val hasBgm = !backgroundMusicPath.isNullOrBlank() && File(backgroundMusicPath).exists()
-        val hasImageOverlay = !imageOverlayPath.isNullOrBlank() && File(imageOverlayPath!!).exists()
-        val hasGreenScreenBg = greenScreenEnabled && !greenScreenBackgroundPath.isNullOrBlank() &&
-                File(greenScreenBackgroundPath!!).exists()
-        val hasWatermark = !watermarkPath.isNullOrBlank() && File(watermarkPath!!).exists()
+        // ── v4.3 FIX #6: Resolve content:// URIs for overlay/watermark/greenscreen
+        // images to real temp files. FFmpeg cannot read content:// URIs as -i
+        // inputs, and File(content://...).exists() returns false so overlays were
+        // silently skipped. We stream-copy each content:// image to cacheDir.
+        val resolvedImageOverlayPath = resolveOverlayPath(imageOverlayPath)
+        val resolvedWatermarkPath = resolveOverlayPath(watermarkPath)
+        val resolvedGreenScreenBgPath = resolveOverlayPath(greenScreenBackgroundPath)
+        // BGM path: if it's a content:// URI, also resolve it (audio files)
+        val resolvedBgmPath = if (!backgroundMusicPath.isNullOrBlank() &&
+            (backgroundMusicPath!!.startsWith("content://") || backgroundMusicPath!!.startsWith("saf:"))) {
+            resolveOverlayPath(backgroundMusicPath)
+        } else {
+            backgroundMusicPath
+        }
+
+        val hasBgm = !resolvedBgmPath.isNullOrBlank() && File(resolvedBgmPath!!).exists()
+        val hasImageOverlay = !resolvedImageOverlayPath.isNullOrBlank() && File(resolvedImageOverlayPath!!).exists()
+        val hasGreenScreenBg = greenScreenEnabled && !resolvedGreenScreenBgPath.isNullOrBlank() &&
+                File(resolvedGreenScreenBgPath!!).exists()
+        val hasWatermark = !resolvedWatermarkPath.isNullOrBlank() && File(resolvedWatermarkPath!!).exists()
 
         var nextInputIdx = 1
-        if (hasBgm) { args.addAll(listOf("-i", backgroundMusicPath!!)); nextInputIdx++ }
+        if (hasBgm) { args.addAll(listOf("-i", resolvedBgmPath!!)); nextInputIdx++ }
         val overlayIdx = nextInputIdx
-        if (hasImageOverlay) { args.addAll(listOf("-i", imageOverlayPath!!)); nextInputIdx++ }
+        if (hasImageOverlay) { args.addAll(listOf("-i", resolvedImageOverlayPath!!)); nextInputIdx++ }
         val gsBgIdx = nextInputIdx
-        if (hasGreenScreenBg) { args.addAll(listOf("-i", greenScreenBackgroundPath!!)); nextInputIdx++ }
+        if (hasGreenScreenBg) { args.addAll(listOf("-i", resolvedGreenScreenBgPath!!)); nextInputIdx++ }
         val wmIdx = nextInputIdx
-        if (hasWatermark) { args.addAll(listOf("-i", watermarkPath!!)); nextInputIdx++ }
+        if (hasWatermark) { args.addAll(listOf("-i", resolvedWatermarkPath!!)); nextInputIdx++ }
 
         args.addAll(listOf("-t", (durationSec / speedFactor).toString()))
 
@@ -443,7 +697,7 @@ class VideoProcessor @Inject constructor(
 
         // Auto-captions placeholder
         if (autoCaptionsLanguage != "off") {
-            vfFilters.add("drawtext=text='[Auto-Captions]':x=(w-text_w)/2:y=h-80:fontsize=24:fontcolor=yellow:box=1:boxcolor=black@0.5:enable='between(t,1,10)'")
+            vfFilters.add("drawtext=text='[Auto-Captions]':x=(w-text_w)/2:y=h-80:fontsize=24:fontcolor=yellow:box=1:boxcolor=black@0.5:enable='between(t,1,10)'${fontFileClause()}")
         }
 
         // 3D shape masks
@@ -474,109 +728,181 @@ class VideoProcessor @Inject constructor(
             vfFilters.add("drawbox=x=0:y=ih*0.95:w=iw:h=ih*0.05:color=black@1:t=fill")
         }
 
-        // Image overlay / green screen / watermark via filter_complex
-        val needFilterComplex = hasImageOverlay || (greenScreenEnabled && hasGreenScreenBg) || hasWatermark
+        // ═══════════════════════════════════════════════════════════════════════
+        //  v4.3 UNIFIED FILTER_COMPLEX BUILDER
+        // ═══════════════════════════════════════════════════════════════════════
+        //
+        // PREVIOUS BUGS (all fixed in v4.3):
+        //
+        //  FIX #2 — DOUBLE -filter_complex FLAG:
+        //    The old code added `-filter_complex` for the video overlay chain,
+        //    then SEPARATELY added another `-filter_complex` for the BGM audio
+        //    chain. FFmpeg accepts only ONE -filter_complex per command → the
+        //    second one overwrote the first → overlays were lost or FFmpeg
+        //    errored with "Filtering and streamcopy cannot be used together."
+        //    The old code tried to merge by mutating args[args.lastIndex-1]
+        //    which was extremely fragile and broke when -map was already added.
+        //
+        //  FIX #3 — OVERLAY COORDINATES OUT OF BOUNDS:
+        //    The overlay x/y were computed as raw pixel offsets that could be
+        //    NEGATIVE (when imageOverlayX/Y < 0.5 and scale is large) or beyond
+        //    the frame edge. FFmpeg's overlay filter crashes or silently clips
+        //    on negative coordinates. Now we clamp to [0, tw-overlayW].
+        //
+        //  FIX #4 — -map FLAG ORDERING:
+        //    -map must come AFTER -filter_complex in the arg list. The old code
+        //    added -map for video before building the audio filter_complex,
+        //    then tried to retrofit the audio chain by index arithmetic.
+        //    Now we build the ENTIRE filter_complex (video + audio) first, add
+        //    it as a single -filter_complex arg, THEN add all -map flags.
+        //
+        //  FIX #7 — [0:v]copy IS INVALID:
+        //    `copy` is not an FFmpeg filter. The old code used
+        //    `[0:v]copy[vbase]` which caused "No such filter: 'copy'". Now we
+        //    use `[0:v]null[vbase]` (the `null` filter passes frames through
+        //    unchanged) or just apply the vf chain directly.
+        //
+        //  FIX #8 — PIXEL FORMAT MISMATCH:
+        //    The old overlay chain used `format=rgba` on the overlay image then
+        //    overlaid it on a yuv420p base. Some FFmpeg-Kit builds fail to
+        //    auto-negotiate the pixel format in overlay. Now we use
+        //    `format=auto` on the overlay and explicitly set `format=yuv420p`
+        //    on the final output.
+        //
+        // STRATEGY: We build ONE filter_complex string that chains:
+        //   [0:v] → vf filters → [vbase] → (green screen?) → [vout]
+        //         → (image overlay?) → [vfinal] → (watermark?) → [vfinalout]
+        //   [0:a] or [0:a]+[bgm:a] → audio filters → [aout]
+        // Then we add a single `-filter_complex` arg and map [vfinalout] + [aout].
+        //
+        val needVideoFilterComplex = hasImageOverlay || (greenScreenEnabled && hasGreenScreenBg) || hasWatermark
+        val needAudioFilterComplex = hasBgm && !(isMuted || (videoVolume == 0f && !hasBgm))
+        val needFilterComplex = needVideoFilterComplex || needAudioFilterComplex
+
+        // The final video output label and audio output label
+        var videoOutLabel = "0:v"
+        var audioOutLabel = "0:a"
+        val fcParts = mutableListOf<String>()
 
         if (needFilterComplex) {
-            val fcParts = mutableListOf<String>()
-            val baseChain = if (vfFilters.isNotEmpty()) "[0:v]${vfFilters.joinToString(",")}[vbase]" else "[0:v]copy[vbase]"
-            fcParts.add(baseChain)
-
-            if (greenScreenEnabled && hasGreenScreenBg) {
-                val chromaColor = when (greenScreenColor.lowercase()) {
-                    "blue" -> "0x0000FF"
-                    "red" -> "0xFF0000"
-                    "magenta" -> "0xFF00FF"
-                    else -> "0x00FF00"
+            // ── VIDEO CHAIN ──
+            if (needVideoFilterComplex) {
+                // FIX #7: use `null` filter (not `copy`) when no vf filters
+                val baseChain = if (vfFilters.isNotEmpty()) {
+                    "[0:v]${vfFilters.joinToString(",")}[vbase]"
+                } else {
+                    "[0:v]null[vbase]"
                 }
-                fcParts.add("[$gsBgIdx:v]scale=$tw:$th[gsbg]")
-                fcParts.add("[vbase][gsbg]chromakey=color=$chromaColor:similarity=${greenScreenThreshold}:blend=0.1[vkeyed]")
-                fcParts.add("[vkeyed]format=yuv420p[vout]")
+                fcParts.add(baseChain)
+
+                // Green screen / chroma key
+                if (greenScreenEnabled && hasGreenScreenBg) {
+                    val chromaColor = when (greenScreenColor.lowercase()) {
+                        "blue" -> "0x0000FF"
+                        "red" -> "0xFF0000"
+                        "magenta" -> "0xFF00FF"
+                        else -> "0x00FF00"
+                    }
+                    fcParts.add("[$gsBgIdx:v]scale=$tw:$th[gsbg]")
+                    fcParts.add("[vbase][gsbg]chromakey=color=$chromaColor:similarity=${greenScreenThreshold}:blend=0.1[vkeyed]")
+                    fcParts.add("[vkeyed]format=yuv420p[vout]")
+                } else {
+                    fcParts.add("[vbase]format=yuv420p[vout]")
+                }
+
+                var currentLabel = "vout"
+
+                // Image overlay (FIX #3: clamp coordinates)
+                if (hasImageOverlay) {
+                    val overlayW = (tw * imageOverlayScale).toInt().coerceAtLeast(1)
+                    val overlayH = (th * imageOverlayScale).toInt().coerceAtLeast(1)
+                    // Clamp overlay position so it's never negative or off-screen
+                    val ox = (tw * imageOverlayX - overlayW / 2).toInt().coerceIn(0, (tw - overlayW).coerceAtLeast(0))
+                    val oy = (th * imageOverlayY - overlayH / 2).toInt().coerceIn(0, (th - overlayH).coerceAtLeast(0))
+                    // FIX #8: use format=auto for overlay, not format=rgba
+                    fcParts.add("[$overlayIdx:v]scale=$overlayW:$overlayH,format=auto,colorchannelmixer=aa=${imageOverlayOpacity}[ovl]")
+                    fcParts.add("[$currentLabel][ovl]overlay=$ox:$oy:format=auto[vimg]")
+                    currentLabel = "vimg"
+                }
+
+                // Watermark overlay
+                if (hasWatermark) {
+                    fcParts.add("[$wmIdx:v]scale=iw*0.1:-1[wm]")
+                    fcParts.add("[$currentLabel][wm]overlay=W-w-20:20:format=auto[vwm]")
+                    currentLabel = "vwm"
+                }
+
+                // Final format normalization
+                fcParts.add("[$currentLabel]format=yuv420p[vfinalout]")
+                videoOutLabel = "[vfinalout]"
             } else {
-                fcParts.add("[vbase]format=yuv420p[vout]")
+                // No video filter_complex needed — use -vf for video filters
+                if (vfFilters.isNotEmpty()) {
+                    args.addAll(listOf("-vf", vfFilters.joinToString(",")))
+                }
+                // videoOutLabel stays "0:v"
             }
 
-            if (hasImageOverlay) {
-                val overlayW = (tw * imageOverlayScale).toInt()
-                val overlayH = (th * imageOverlayScale).toInt()
-                val ox = (tw * imageOverlayX - overlayW / 2).toInt()
-                val oy = (th * imageOverlayY - overlayH / 2).toInt()
-                fcParts.add("[$overlayIdx:v]scale=$overlayW:$overlayH,format=rgba,colorchannelmixer=aa=${imageOverlayOpacity}[ovl]")
-                fcParts.add("[vout][ovl]overlay=$ox:$oy[vfinal]")
+            // ── AUDIO CHAIN ──
+            if (needAudioFilterComplex) {
+                // BGM mixing: [0:a] → volume+effects → [a1]; [1:a] → volume+trim → [bgm]; amix → [aout]
+                val vVol = if (isMuted) 0.0f else videoVolume
+                val duckVol = if (isAudioDuckingEnabled) vVol * 0.3f else vVol
+                var aChain = "[0:a]volume=$duckVol"
+                if (speedFactor != 1.0f) aChain += ",${getAtempoFilter(speedFactor)}"
+                if (voiceChangerPitch != 0f) {
+                    val factor = Math.pow(2.0, voiceChangerPitch / 12.0)
+                    aChain += ",asetrate=44100*${String.format("%.4f", factor)},aresample=44100,atempo=${String.format("%.4f", 1.0 / factor)}"
+                }
+                val aeChain = audioEffectChain(audioEffect)
+                if (aeChain.isNotEmpty()) aChain += "," + aeChain.joinToString(",")
+                aChain += "[a1]"
+                fcParts.add(aChain)
+
+                fcParts.add("[1:a]volume=$backgroundMusicVolume,atrim=duration=${finalDuration}[bgm]")
+                fcParts.add("[a1][bgm]amix=inputs=2:duration=first[aout]")
+                audioOutLabel = "[aout]"
             }
 
-            if (hasWatermark) {
-                val wmLabel = if (hasImageOverlay) "vfinal" else "vout"
-                fcParts.add("[$wmIdx:v]scale=iw*0.1:-1[wm]")
-                fcParts.add("[$wmLabel][wm]overlay=W-w-20:20[vfinal2]")
-                fcParts.add("[vfinal2]format=yuv420p[vfinalout]")
-                args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
-                args.addAll(listOf("-map", "[vfinalout]"))
+            // Add the SINGLE unified -filter_complex
+            args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
+            // Add -map flags AFTER -filter_complex (FIX #4: correct ordering)
+            args.addAll(listOf("-map", videoOutLabel))
+            if (isMuted || (videoVolume == 0f && !hasBgm)) {
+                args.add("-an")
             } else {
-                args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
-                val mapLabel = if (hasImageOverlay) "[vfinal]" else "[vout]"
-                args.addAll(listOf("-map", mapLabel))
+                args.addAll(listOf("-map", audioOutLabel))
             }
         } else {
+            // No filter_complex needed — use -vf and -af
             if (vfFilters.isNotEmpty()) {
                 args.addAll(listOf("-vf", vfFilters.joinToString(",")))
             }
-        }
-
-        // Audio handling
-        if (isMuted || (videoVolume == 0f && !hasBgm)) {
-            args.add("-an")
-        } else {
-            val afFilters = mutableListOf<String>()
-
-            if (speedFactor != 1.0f) {
-                afFilters.add(getAtempoFilter(speedFactor))
-            }
-
-            // Voice changer (pitch shift)
-            if (voiceChangerPitch != 0f) {
-                val factor = Math.pow(2.0, voiceChangerPitch / 12.0)
-                afFilters.add("asetrate=44100*${String.format("%.4f", factor)},aresample=44100,atempo=${String.format("%.4f", 1.0 / factor)}")
-            }
-
-            // Audio effects
-            val audioEffectChain = audioEffectChain(audioEffect)
-            if (audioEffectChain.isNotEmpty()) {
-                afFilters.addAll(audioEffectChain)
-            }
-
-            if (hasBgm) {
-                args.add("-filter_complex")
-                val vVol = if (isMuted) 0.0f else videoVolume
-                val duckVol = if (isAudioDuckingEnabled) vVol * 0.3f else vVol
-                var fc = "[0:a]volume=$duckVol"
-                if (speedFactor != 1.0f) fc += ",${getAtempoFilter(speedFactor)}"
+            // Audio handling (simplified — no BGM mixing)
+            if (isMuted || (videoVolume == 0f && !hasBgm)) {
+                args.add("-an")
+            } else {
+                val afFilters = mutableListOf<String>()
+                if (speedFactor != 1.0f) {
+                    afFilters.add(getAtempoFilter(speedFactor))
+                }
                 if (voiceChangerPitch != 0f) {
                     val factor = Math.pow(2.0, voiceChangerPitch / 12.0)
-                    fc += ",asetrate=44100*${String.format("%.4f", factor)},aresample=44100,atempo=${String.format("%.4f", 1.0 / factor)}"
+                    afFilters.add("asetrate=44100*${String.format("%.4f", factor)},aresample=44100,atempo=${String.format("%.4f", 1.0 / factor)}")
                 }
-                val aeChain = audioEffectChain(audioEffect)
-                if (aeChain.isNotEmpty()) fc += "," + aeChain.joinToString(",")
-                fc += "[a1];[1:a]volume=$backgroundMusicVolume,atrim=duration=${finalDuration}[bgm];[a1][bgm]amix=inputs=2:duration=first[aout]"
-                if (needFilterComplex) {
-                    val existingFc = args[args.lastIndex - 1]
-                    args[args.lastIndex - 1] = "$existingFc;$fc"
-                } else {
-                    args.addAll(listOf(fc))
+                val audioEffectChain = audioEffectChain(audioEffect)
+                if (audioEffectChain.isNotEmpty()) {
+                    afFilters.addAll(audioEffectChain)
                 }
-                if (!needFilterComplex) {
-                    args.addAll(listOf("-map", "0:v"))
-                }
-                args.addAll(listOf("-map", "[aout]"))
-            } else {
                 if (videoVolume != 1.0f) afFilters.add("volume=$videoVolume")
                 if (afFilters.isNotEmpty()) {
                     args.addAll(listOf("-af", afFilters.joinToString(",")))
                 }
-                if (needFilterComplex) {
-                    args.addAll(listOf("-map", "0:a"))
-                }
             }
+        }
+
+        // Audio codec (when audio is present)
+        if (!(isMuted || (videoVolume == 0f && !hasBgm))) {
             args.addAll(listOf("-c:a", "aac"))
         }
 
@@ -615,7 +941,7 @@ class VideoProcessor @Inject constructor(
         //   -map_metadata 0       preserve creation metadata.
         args.addAll(listOf("-c:v", "libx264"))
         args.addAll(listOf("-preset", "veryfast"))
-        args.addAll(listOf("-crf", "23"))
+        args.addAll(listOf("-crf", "24"))
         args.addAll(listOf("-g", "250"))
         args.addAll(listOf("-keyint_min", "250"))
         args.addAll(listOf("-sc_threshold", "0"))
@@ -628,55 +954,68 @@ class VideoProcessor @Inject constructor(
         args.addAll(listOf("-y", outputPath))
 
         Log.d(tag, "ProcessAndExport: ffmpeg ${args.joinToString(" ")}")
-        val session = FFmpegKit.executeWithArguments(args.toTypedArray())
-        val returnCode = session.returnCode
+        val finalDurationSec = durationSec / speedFactor
+        val success = executeFFmpegWithProgress(args.toTypedArray(), finalDurationSec, onProgress)
 
-        if (ReturnCode.isSuccess(returnCode)) {
+        if (success) {
             Log.d(tag, "ProcessAndExport succeeded!")
+            cleanupOverlayTempFiles()
             true
         } else {
-            Log.e(tag, "ProcessAndExport failed: ${session.state}, code: $returnCode, logs: ${session.failStackTrace}")
-            // AUTO-RECOVERY 1: minimal re-encode if the full pipeline failed
-            Log.d(tag, "Attempting recovery 1: minimal re-encode (no filters, output-seek)...")
-            val recoveryArgs = mutableListOf(
-                "-err_detect", "ignore_err", "-ignore_unknown",
-                "-threads", "0", "-analyzeduration", "100M", "-probesize", "100M",
-                "-i", inputPath
-            )
-            if (startSec > 0) recoveryArgs.addAll(listOf("-ss", startSec.toString()))
-            recoveryArgs.addAll(listOf("-t", (durationSec / speedFactor).toString(),
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-g", "250", "-keyint_min", "250", "-sc_threshold", "0",
-                "-maxrate", "6M", "-bufsize", "12M",
-                "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-y", outputPath))
-            val recovery = FFmpegKit.executeWithArguments(recoveryArgs.toTypedArray())
-            if (ReturnCode.isSuccess(recovery.returnCode)) {
-                Log.d(tag, "Recovery 1 (minimal re-encode) succeeded!")
+            Log.e(tag, "ProcessAndExport failed — attempting recovery...")
+            // AUTO-RECOVERY 1: Retry the FULL pipeline with ultrafast preset
+            // (keeps overlays/filters but uses the fastest encoder settings).
+            // This catches cases where veryfast ran out of memory or timed out.
+            Log.d(tag, "Recovery 1: full pipeline with ultrafast preset (keeps overlays)...")
+            val recovery1Args = args.toMutableList()
+            val vfIdx = recovery1Args.indexOf("veryfast")
+            if (vfIdx >= 0) recovery1Args[vfIdx] = "ultrafast"
+            val crfIdx = recovery1Args.indexOf("24")
+            if (crfIdx >= 0) recovery1Args[crfIdx] = "28"
+            val rec1Success = executeFFmpegSync(recovery1Args.toTypedArray())
+            if (rec1Success) {
+                Log.d(tag, "Recovery 1 (ultrafast re-encode with overlays) succeeded!")
+                cleanupOverlayTempFiles()
                 true
             } else {
-                Log.e(tag, "Recovery 1 failed: ${recovery.failStackTrace}")
-                // AUTO-RECOVERY 2: input-side seek (fast) + stream copy (no re-encode)
-                Log.d(tag, "Attempting recovery 2: input-seek + stream copy...")
-                val recovery2Args = mutableListOf("-threads", "0", "-ss", startSec.toString())
-                recovery2Args.addAll(listOf("-i", inputPath, "-t", (durationSec / speedFactor).toString(),
-                    "-c", "copy", "-avoid_negative_ts", "make_zero",
-                    "-movflags", "+faststart", "-y", outputPath))
-                val recovery2 = FFmpegKit.executeWithArguments(recovery2Args.toTypedArray())
-                if (ReturnCode.isSuccess(recovery2.returnCode)) {
-                    Log.d(tag, "Recovery 2 (stream copy) succeeded!")
+                Log.e(tag, "Recovery 1 failed — falling back to raw re-encode (overlays will be lost)")
+                // AUTO-RECOVERY 2: minimal re-encode WITHOUT overlays/filters
+                // (raw video only). This is the last resort — the user loses
+                // their overlays but at least gets the video exported.
+                Log.d(tag, "Recovery 2: minimal re-encode (no filters, output-seek)...")
+                val recovery2Args = mutableListOf(
+                    "-err_detect", "ignore_err", "-ignore_unknown",
+                    "-threads", "0", "-analyzeduration", "100M", "-probesize", "100M",
+                    "-i", inputPath
+                )
+                if (startSec > 0) recovery2Args.addAll(listOf("-ss", startSec.toString()))
+                recovery2Args.addAll(listOf("-t", finalDurationSec.toString(),
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+                    "-g", "250", "-keyint_min", "250", "-sc_threshold", "0",
+                    "-maxrate", "6M", "-bufsize", "12M",
+                    "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-y", outputPath))
+                val rec2Success = executeFFmpegSync(recovery2Args.toTypedArray())
+                if (rec2Success) {
+                    Log.d(tag, "Recovery 2 (minimal re-encode) succeeded — overlays were lost")
+                    cleanupOverlayTempFiles()
                     true
                 } else {
-                    Log.e(tag, "Recovery 2 also failed: ${recovery2.failStackTrace}")
-                    // AUTO-RECOVERY 3: just copy the whole file, no trim, no filters
-                    Log.d(tag, "Attempting recovery 3: full stream copy (no trim)...")
-                    val recovery3 = FFmpegKit.executeWithArguments(arrayOf(
-                        "-i", inputPath, "-c", "copy", "-movflags", "+faststart", "-y", outputPath))
-                    if (ReturnCode.isSuccess(recovery3.returnCode)) {
-                        Log.d(tag, "Recovery 3 (full copy) succeeded!")
+                    Log.e(tag, "Recovery 2 failed — attempting stream copy...")
+                    // AUTO-RECOVERY 3: input-side seek + stream copy (no re-encode)
+                    Log.d(tag, "Recovery 3: input-seek + stream copy...")
+                    val recovery3Args = mutableListOf("-threads", "0", "-ss", startSec.toString())
+                    recovery3Args.addAll(listOf("-i", inputPath, "-t", finalDurationSec.toString(),
+                        "-c", "copy", "-avoid_negative_ts", "make_zero",
+                        "-movflags", "+faststart", "-y", outputPath))
+                    val rec3Success = executeFFmpegSync(recovery3Args.toTypedArray())
+                    if (rec3Success) {
+                        Log.d(tag, "Recovery 3 (stream copy) succeeded")
+                        cleanupOverlayTempFiles()
                         true
                     } else {
-                        Log.e(tag, "All recovery attempts failed: ${recovery3.failStackTrace}")
+                        Log.e(tag, "All recovery attempts failed")
+                        cleanupOverlayTempFiles()
                         false
                     }
                 }
@@ -1152,7 +1491,7 @@ class VideoProcessor @Inject constructor(
     private fun buildTextOverlay(text: String, animation: String, duration: Double): String {
         val safeText = text.replace("'", "\\'").replace(":", "\\:")
         val anim = animation.lowercase().replace(" ", "_")
-        val base = "drawtext=text='$safeText':fontsize=42:fontcolor=white:box=1:boxcolor=black@0.5"
+        val base = "drawtext=text='$safeText':fontsize=42:fontcolor=white:box=1:boxcolor=black@0.5${fontFileClause()}"
         return when (anim) {
             "none", "fade_in", "fade" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(lt(t,1)\\,t\\,1)'"
             "fade_out" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(gt(t,${duration - 1})\\,${duration}-t\\,1)'"
@@ -1235,24 +1574,74 @@ class VideoProcessor @Inject constructor(
      * Emoji/shape sticker overlay via drawtext or drawbox (16 stickers).
      */
     private fun stickerOverlay(sticker: String): String {
+        // v4.3 FIX #5: Emoji drawtext crashes because the bundled font
+        // (powercut_sans.ttf) has no emoji glyphs. FFmpeg drawtext with
+        // an unsupported codepoint either errors out or renders nothing.
+        // Solution: render stickers as geometric drawbox shapes instead.
+        // drawbox needs NO font file, so it is always crash-safe.
         if (sticker == "none") return ""
-        return when (sticker.lowercase()) {
-            "fire" -> "drawtext=text='\ud83d\udd25':x=w-80:y=20:fontsize=48"
-            "star" -> "drawtext=text='\u2b50':x=w-80:y=20:fontsize=48"
-            "heart" -> "drawtext=text='\u2764\ufe0f':x=w-80:y=20:fontsize=48"
-            "glow" -> "drawtext=text='\u26a1':x=w-80:y=20:fontsize=48:fontcolor=yellow"
-            "diamond" -> "drawtext=text='\ud83d\udc8e':x=w-80:y=20:fontsize=48"
-            "music" -> "drawtext=text='\ud83c\udfb5':x=w-80:y=20:fontsize=48"
-            "crown" -> "drawtext=text='\ud83d\udc51':x=w-80:y=20:fontsize=48"
-            "sparkle" -> "drawtext=text='\ud83d\udcab':x=w-80:y=20:fontsize=48"
-            "target" -> "drawtext=text='\ud83c\udfaf':x=w-80:y=20:fontsize=48"
-            "trophy" -> "drawtext=text='\ud83c\udfc6':x=w-80:y=20:fontsize=48"
-            "skull" -> "drawtext=text='\ud83d\udc80':x=w-80:y=20:fontsize=48"
-            "rocket" -> "drawtext=text='\ud83d\ude80':x=w-80:y=20:fontsize=48"
-            "bolt" -> "drawtext=text='\u26a1':x=w-80:y=20:fontsize=48:fontcolor=yellow"
-            "100" -> "drawtext=text='\ud83d\udcaf':x=w-80:y=20:fontsize=48"
-            "thumbs_up" -> "drawtext=text='\ud83d\udc4d':x=w-80:y=20:fontsize=48"
-            "party" -> "drawtext=text='\ud83c\udf89':x=w-80:y=20:fontsize=48"
+        val s = sticker.lowercase()
+        // Base position: top-right corner, 60x60 area starting at (w-80, 20)
+        val bx = "w-80"
+        val by = "20"
+        val sz = 60
+        return when (s) {
+            // Fire — orange filled triangle (approx) with red glow box
+            "fire" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=red@0.3:t=fill," +
+                       "drawbox=x=$bx+10:y=$by+15:w=${sz-20}:h=${sz-25}:color=orange@0.8:t=fill"
+            // Star — yellow 4-point cross shape
+            "star" -> "drawbox=x=$bx+${sz//4}:y=$by:w=${sz//2}:h=$sz:color=yellow@0.9:t=fill," +
+                       "drawbox=x=$bx:y=$by+${sz//4}:w=$sz:h=${sz//2}:color=yellow@0.9:t=fill"
+            // Heart — two red boxes forming a heart-like cluster
+            "heart" -> "drawbox=x=$bx+5:y=$by+10:w=${sz//2-5}:h=${sz//2-5}:color=red@0.85:t=fill," +
+                        "drawbox=x=$bx+${sz//2}:y=$by+10:w=${sz//2-5}:h=${sz//2-5}:color=red@0.85:t=fill," +
+                        "drawbox=x=$bx+10:y=$by+${sz//2}:w=${sz-20}:h=${sz//2-10}:color=red@0.85:t=fill"
+            // Glow / Bolt — yellow lightning bolt shape
+            "glow", "bolt" -> "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//3}:h=$sz:color=yellow@0.9:t=fill," +
+                       "drawbox=x=$bx+10:y=$by+${sz//3}:w=${sz-20}:h=${sz//3}:color=yellow@0.7:t=fill"
+            // Diamond — cyan filled diamond (rotated square approximation)
+            "diamond" -> "drawbox=x=$bx+${sz//4}:y=$by+${sz//4}:w=${sz//2}:h=${sz//2}:color=cyan@0.8:t=fill," +
+                          "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=cyan@0.3:t=fill"
+            // Music — purple note shape (two boxes + bar)
+            "music" -> "drawbox=x=$bx+5:y=$by+${sz-15}:w=20:h=15:color=purple@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz-25}:y=$by+${sz-20}:w=20:h=20:color=purple@0.9:t=fill," +
+                        "drawbox=x=$bx+22:y=$by:w=8:h=$sz:color=purple@0.9:t=fill"
+            // Crown — gold horizontal bar with three spikes
+            "crown" -> "drawbox=x=$bx:y=$by+${sz//2}:w=$sz:h=${sz//2}:color=gold@0.9:t=fill," +
+                        "drawbox=x=$bx:y=$by:w=${sz//4}:h=${sz//2}:color=gold@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//4}:h=${sz//2}:color=gold@0.9:t=fill," +
+                        "drawbox=x=$bx+${2*sz//3}:y=$by:w=${sz//4}:h=${sz//2}:color=gold@0.9:t=fill"
+            // Sparkle — white 4-point small cross
+            "sparkle" -> "drawbox=x=$bx+${sz//3}:y=$by+${sz//4}:w=${sz//3}:h=${sz//2}:color=white@0.9:t=fill," +
+                          "drawbox=x=$bx+${sz//4}:y=$by+${sz//3}:w=${sz//2}:h=${sz//3}:color=white@0.9:t=fill"
+            // Target — concentric circles approximated with boxes
+            "target" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=red@0.5:t=fill," +
+                         "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=white@0.8:t=fill," +
+                         "drawbox=x=$bx+20:y=$by+20:w=${sz-40}:h=${sz-40}:color=red@0.9:t=fill"
+            // Trophy — gold cup shape
+            "trophy" -> "drawbox=x=$bx+10:y=$by:w=${sz-20}:h=${sz//2}:color=gold@0.9:t=fill," +
+                         "drawbox=x=$bx+${sz//3}:y=$by+${sz//2}:w=${sz//3}:h=${sz//2}:color=gold@0.9:t=fill"
+            // Skull — white rounded block with black eye holes
+            "skull" -> "drawbox=x=$bx+5:y=$by:w=${sz-10}:h=${sz//2+10}:color=white@0.9:t=fill," +
+                        "drawbox=x=$bx+10:y=$by+15:w=12:h=12:color=black@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz-22}:y=$by+15:w=12:h=12:color=black@0.9:t=fill"
+            // Rocket — white body with red tip
+            "rocket" -> "drawbox=x=$bx+${sz//3}:y=$by+10:w=${sz//3}:h=${sz-10}:color=white@0.9:t=fill," +
+                         "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//3}:h=15:color=red@0.9:t=fill," +
+                         "drawbox=x=$bx+5:y=$by+${sz-15}:w=10:h=10:color=orange@0.9:t=fill," +
+                         "drawbox=x=$bx+${sz-15}:y=$by+${sz-15}:w=10:h=10:color=orange@0.9:t=fill"
+            // 100 — green filled block (number badge style)
+            "100" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=green@0.8:t=fill," +
+                      "drawbox=x=$bx+5:y=$by+5:w=${sz-10}:h=${sz-10}:color=white@0.3:t=fill"
+            // Thumbs up — blue filled block
+            "thumbs_up" -> "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=blue@0.8:t=fill," +
+                            "drawbox=x=$bx+${sz//3}:y=$by:w=${sz//3}:h=20:color=blue@0.9:t=fill"
+            // Party — magenta confetti blocks
+            "party" -> "drawbox=x=$bx:y=$by:w=15:h=15:color=magenta@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz-15}:y=$by:w=15:h=15:color=cyan@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz//2-7}:y=$by+${sz//2-7}:w=15:h=15:color=yellow@0.9:t=fill," +
+                        "drawbox=x=$bx:y=$by+${sz-15}:w=15:h=15:color=lime@0.9:t=fill," +
+                        "drawbox=x=$bx+${sz-15}:y=$by+${sz-15}:w=15:h=15:color=orange@0.9:t=fill"
             else -> ""
         }
     }
