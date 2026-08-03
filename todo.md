@@ -17,7 +17,7 @@ Jo options hain unko rahene do — sirf update/future update karo (don't break e
 - [x] 4. Verify Import button works (HomeScreen `pickerLauncher` + permission flow). Fix MP3→Video quick tool so it actually launches an audio picker + runs `audioToVideo`
 - [x] 5. Premium FFmpeg Media Converter MP3→MP4: real converter tool on home + export, workable, wired to `audioToVideo` with progress
 - [x] 6. Keep ALL existing options intact; only additive updates. Bump version to 4.4.0 (versionCode 9). Update README + strings
-- [ ] 7. Commit, push branch, create PR
+- [x] 7. Commit, push branch, create PR — PR #14 created: https://github.com/Salmanlaghari/PowerCut-Editor/pull/14
 
 ## Rules
 - NEVER run Gradle build locally (OOM). Rely on GitHub CI.
