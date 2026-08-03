@@ -72,7 +72,9 @@ fun HomeScreen(
     onToggleTheme: () -> Unit,
     draftsList: List<DraftItem>,
     onDraftSelected: (DraftItem) -> Unit,
-    onTemplateVideoSelected: (android.net.Uri, String, String, String, String, Float) -> Unit
+    onTemplateVideoSelected: (android.net.Uri, String, String, String, String, Float) -> Unit,
+    // v4.4.0 Premium FFmpeg Media Converter: MP3 -> MP4 (workable, not fake)
+    onConvertMp3ToMp4: (android.net.Uri) -> Unit = {}
 ) {
     var isAppLoadingIntro by remember { mutableStateOf(true) }
     var activeClickedTemplate by remember { mutableStateOf<Template?>(null) }
@@ -288,7 +290,8 @@ fun HomeScreen(
                             onTemplateSelected = { template ->
                                 activeClickedTemplate = template
                                 templateVideoLauncher.launch("video/*")
-                            }
+                            },
+                            onConvertMp3ToMp4 = onConvertMp3ToMp4
                         )
                         "templates" -> TemplatesView(
                             language = language,
@@ -447,7 +450,8 @@ val allStudioTemplates = listOf(
 fun DashboardView(
     onVideoSelected: (android.net.Uri) -> Unit,
     language: String,
-    onTemplateSelected: (Template) -> Unit
+    onTemplateSelected: (Template) -> Unit,
+    onConvertMp3ToMp4: (android.net.Uri) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val pickerLauncher = rememberLauncherForActivityResult(
@@ -455,6 +459,16 @@ fun DashboardView(
     ) { uri ->
         if (uri != null) {
             onVideoSelected(uri)
+        }
+    }
+
+    // v4.4.0 Premium MP3 -> MP4 converter: audio picker launcher
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            android.widget.Toast.makeText(context, "Converting audio to MP4…", android.widget.Toast.LENGTH_SHORT).show()
+            onConvertMp3ToMp4(uri)
         }
     }
 
@@ -665,6 +679,18 @@ fun DashboardView(
                             color = CyberCyan
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                        // v4.4.0: MP3 -> MP4 quick tool is now WORKABLE.
+                        // Tapping any preset launches a real audio picker;
+                        // the selected audio is converted to MP4 via FFmpeg
+                        // (ExportManager.convertMp3ToMp4 -> VideoProcessor.audioToVideo).
+                        if (selectedQuickTool == "convert_mp3") {
+                            Text(
+                                text = "🎵 Pick an audio file — it will be converted to a video (MP4) with a PowerCut visualizer and saved to Movies/PowerCut.",
+                                fontSize = 9.sp,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -674,7 +700,14 @@ fun DashboardView(
                                     modifier = Modifier
                                         .weight(1f)
                                         .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                                        .clickable { /* Opt change */ }
+                                        .clickable {
+                                            if (selectedQuickTool == "convert_mp3") {
+                                                // Launch the real audio picker for MP3 -> MP4 conversion.
+                                                audioPickerLauncher.launch("audio/*")
+                                            } else {
+                                                android.widget.Toast.makeText(context, "$opt selected", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                         .padding(8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {

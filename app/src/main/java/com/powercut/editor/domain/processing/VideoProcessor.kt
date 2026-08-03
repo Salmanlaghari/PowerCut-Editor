@@ -483,6 +483,8 @@ class VideoProcessor @Inject constructor(
         borderStyle: String = "none",
         watermarkPath: String? = null,
         vignetteStyle: String = "none",
+        // ── v4.4.0 Premium Looks (50+ Brightness/HDR/iPhone grades) ──
+        premiumLookId: String = "none",
         onProgress: (Int) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
         if (isAudioFile(inputPath)) {
@@ -656,6 +658,15 @@ class VideoProcessor @Inject constructor(
         val colorChain = colorGradeChain(filter)
         if (colorChain.isNotEmpty()) {
             vfFilters.add(colorChain)
+        }
+
+        // v4.4.0: Premium Looks (50+ Brightness / HDR / iPhone grades)
+        // Real FFmpeg -vf chain injected on top of the base color grade so it
+        // composites with the editor's manual adjustments (additive — existing
+        // options remain fully intact).
+        val premiumChain = premiumLookChain(premiumLookId)
+        if (premiumChain.isNotEmpty()) {
+            premiumChain.forEach { vfFilters.add(it) }
         }
 
         // Blend mode
@@ -1116,6 +1127,50 @@ class VideoProcessor @Inject constructor(
     // ════════════════════════════════════════════════════════════════════
     //  BLEND MODES — 16+ CapCut blend modes
     // ════════════════════════════════════════════════════════════════════
+    //  v4.4.0 PREMIUM LOOKS - 50+ Brightness / HDR / iPhone grades
+    //  Returns the real FFmpeg -vf sub-filters for a PremiumLooks id.
+    private fun premiumLookChain(lookId: String): List<String> {
+        val id = lookId.trim().lowercase()
+        if (id.isEmpty() || id == "none") return emptyList()
+        val chain = com.powercut.editor.domain.look.PremiumLooks.chainFor(id)
+        if (chain.isBlank()) return emptyList()
+        return chain.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    //  v4.4.0 MAGIC / ANIMATED EFFECTS - real FFmpeg time-expression filters
+    //  These animate over the clip duration using FFmpeg's `t` expression so
+    //  they are genuinely "animated effects" (not static).
+    private fun magicEffectChain(effectName: String, duration: Double, w: Int, h: Int): List<String> {
+        val e = effectName.lowercase().replace(" ", "_")
+        return when {
+            e.contains("magic_pulse") ->
+                listOf("eq=brightness='0.1*sin(2*PI*t/2)':contrast=1.15", "vignette=angle='PI/4+0.2*sin(2*PI*t)'")
+            e.contains("magic_hue_cycle") ->
+                listOf("hue=h='t*30'", "eq=saturation=1.3:contrast=1.1")
+            e.contains("magic_color_flow") ->
+                listOf("colorbalance=rs='0.08*sin(t)':bs='0.08*cos(t)'", "eq=saturation=1.2")
+            e.contains("magic_brightness_flow") ->
+                listOf("eq=brightness='0.08*sin(2*PI*t/4)':contrast=1.1")
+            e.contains("magic_zoom_pulse") ->
+                listOf("zoompan=z='1+0.1*sin(2*PI*t/2)':d=1:s=${w}x${h}:fps=30")
+            e.contains("magic_shake") ->
+                listOf("crop=iw:ih:'0+5*sin(2*PI*t*3)':'0+5*cos(2*PI*t*3)'", "scale=${w}:${h}")
+            e.contains("magic_flicker") ->
+                listOf("eq=brightness='0.15*(random(0))':contrast=1.1")
+            e.contains("magic_rainbow_flow") ->
+                listOf("hue=h='t*60'", "eq=saturation=1.5:contrast=1.1")
+            e.contains("magic_glitch_flow") ->
+                listOf("chromashift=cbh='2*sin(t)':crv='2*cos(t)'", "eq=contrast=1.15")
+            e.contains("magic_neon_flow") ->
+                listOf("eq=saturation=1.6:contrast=1.2", "colorbalance=rs='0.1+0.05*sin(t)':bs='0.1+0.05*cos(t)'")
+            e.contains("magic_wave") ->
+                listOf("crop=iw:ih:'0+8*sin(2*PI*t)':'0+8*cos(2*PI*t*0.5)'", "scale=${w}:${h}")
+            e.contains("magic_breath") ->
+                listOf("eq=brightness='0.05*sin(2*PI*t/3)':contrast='1.1+0.05*sin(2*PI*t/3)'")
+            else -> emptyList()
+        }
+    }
+
     private fun blendModeChain(mode: String): String {
         val m = mode.lowercase().replace(" ", "_")
         return when (m) {
@@ -1151,6 +1206,9 @@ class VideoProcessor @Inject constructor(
         if (effectName == "none") return emptyList()
         val e = effectName.lowercase().replace(" ", "_").replace("-", "_")
         return when {
+            // v4.4.0: Magic / animated effects use real FFmpeg time expressions.
+            e.contains("magic_") ->
+                magicEffectChain(e, duration, w, h)
             e.contains("glitch") && e.contains("rgb") ->
                 listOf("noise=alls=25:allf=t+u", "chromashift=cbh=-5:cbv=3:crh=5:crv=-3")
             e == "glitch" || e.contains("chromatic") || e.contains("electric") ->

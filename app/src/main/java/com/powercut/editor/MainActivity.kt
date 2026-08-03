@@ -222,6 +222,10 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onTemplateVideoSelected = { uri, tId, filt, trans, caps, speed ->
                                         viewModel.selectVideo(this@MainActivity, uri, tId, filt, trans, caps, speed)
+                                    },
+                                    // v4.4.0 Premium FFmpeg Media Converter: MP3 -> MP4
+                                    onConvertMp3ToMp4 = { audioUri ->
+                                        viewModel.convertMp3ToMp4(audioUri)
                                     }
                                 )
                             }
@@ -372,7 +376,8 @@ class MainActivity : ComponentActivity() {
                                         onUpdateVoiceChangerPitch = { viewModel.updateVoiceChangerPitch(it) },
                                         onToggleAudioDucking = { viewModel.toggleAudioDucking() },
                                         onUpdateBorderStyle = { viewModel.updateBorderStyle(it) },
-                                        onUpdateVignetteStyle = { viewModel.updateVignetteStyle(it) }
+                                        onUpdateVignetteStyle = { viewModel.updateVignetteStyle(it) },
+                                        onUpdatePremiumLook = { viewModel.updatePremiumLook(it) }
                                     )
                                 } ?: viewModel.resetToHome()
                             }
