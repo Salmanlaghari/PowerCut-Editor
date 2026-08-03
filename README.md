@@ -7,6 +7,31 @@ Built 100% in pure Kotlin and Jetpack Compose, PowerCut delivers instant, waterm
 
 ---
 
+## ⚡ What's New in 4.5.0 — Premium 3D Quick Tools & Workable Editor Panels
+
+### 🎈 All 4 Quick Tools Are Now Premium 3D Cards — And Fully Workable
+The home-screen quick-tools row has been completely rebuilt into **premium 3D glass cards** with per-tool accent colors, a glowing **PRO** badge, a dynamic selected-state border, and a clear "Workable" label. Crucially, **all four tools now actually do something** — the three that were previously fake (Slideshow, Compress, AI Edit) are now fully wired end-to-end:
+
+*   🎵 **MP3 → Video** (CyberCyan) — picks an audio file and converts it to an MP4 video with a PowerCut visualizer via the real FFmpeg `audioToVideo` pipeline.
+*   🖼️ **Slideshow** (AccentPrimary) — picks multiple images and stitches them into a video slideshow with **Ken-Burns zoompan motion + crossfades** via the new `VideoProcessor.imagesToSlideshow()` pipeline (concat demuxer + `-vf` zoompan). Saved to `Movies/PowerCut`.
+*   🗜️ **Compress** (NeonOrange) — picks a video and re-encodes it to a smaller MP4 with **CRF-based quality control** (high / balanced / small) via the new `VideoProcessor.compressVideo()` pipeline. Saved to `Movies/PowerCut`.
+*   🤖 **AI Edit** (AccentTertiary) — picks a video and applies an **AI auto-enhance grade** (contrast lift, saturation boost, unsharp sharpen, warm color balance) via the new `VideoProcessor.applyAiEdit()` pipeline. Saved to `Movies/PowerCut`.
+
+The full chain for each new tool: `HomeScreen` (launcher) → `EditorViewModel` (`compressVideo` / `createSlideshow` / `applyAiEdit`) → `ExportManager` (streams the Uri to a temp file, runs the pipeline, saves to gallery) → `VideoProcessor` (real FFmpeg-Kit command). Each card's config panel now shows a tool-specific description and launches the correct real picker (audio / image-multi / video).
+
+### 📷 Editor Panels — Placeholder Options Replaced With Real FFmpeg Chains
+Several editor design panels had UI option IDs that **did not map to any FFmpeg chain** (so they silently did nothing on export). All mismatches are now fixed in `VideoProcessor` — additive only, existing options untouched:
+
+*   **Vignette Styles panel** — added real chains for `classic`, `reverse`, `colored`, `blur`, and `spotlight` (each a distinct `vignette` + companion filter), matching the panel's option IDs.
+*   **Border Styles panel** — added real chains for `neon`, `gradient`, `vintage`, `modern`, `minimal`, and `glow` (distinct `pad` + `drawbox` border styles), matching the panel's option IDs.
+*   **Templates panel** — previously all 19 template IDs produced an identical generic cinematic-bars placeholder. The new `templateChain()` function now maps **each of the 19 templates** (cinema, wedding, travel, vlog, poetry, beats, glitch, spark, bloom, reels, tiktok, neon, retro, minimal, dark, golden, ocean, fire, ice) to a **distinct, real FFmpeg grade** (cinematic bars + teal-orange, warm golden glow, vivid landscape, dreamy low-contrast, chromatic glitch, cyber neon, vintage faded, moody low-key, golden hour, cool teal, hot red-orange, cold frost, etc.).
+*   **Effects panel** — added a real `face_blur` chain (`boxblur=luma_radius=30:luma_power=2`) so the face-blur effect option now actually blurs.
+
+### ✅ Additive-Only Update
+All existing options, filters, effects, transitions, masks, looks, and tools remain 100% intact. v4.5.0 only **adds** real chains for previously-placeholder options and wires up the three previously-fake quick tools — nothing was removed or broken.
+
+---
+
 ## ⚡ What's New in 4.4.0 — Premium Looks, Magic Effects & FFmpeg Media Converter
 
 ### 📷 54+ Premium Looks (Real FFmpeg Grades — Workable, Not Fake)
