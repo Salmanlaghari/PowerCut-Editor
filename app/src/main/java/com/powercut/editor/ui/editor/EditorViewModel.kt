@@ -171,6 +171,7 @@ class EditorViewModel @Inject constructor(
         json.put("visualizerStyle", project.visualizerStyle)
         json.put("isBeatSyncEnabled", project.isBeatSyncEnabled)
         json.put("active3DShapeMask", project.active3DShapeMask)
+        json.put("activePremiumLook", project.activePremiumLook)
         json.put("imageOverlayPath", project.imageOverlayPath ?: "")
         json.put("imageOverlayOpacity", project.imageOverlayOpacity.toDouble())
         json.put("imageOverlayScale", project.imageOverlayScale.toDouble())
@@ -251,6 +252,7 @@ class EditorViewModel @Inject constructor(
             visualizerStyle = json.optString("visualizerStyle", "none"),
             isBeatSyncEnabled = json.optBoolean("isBeatSyncEnabled", false),
             active3DShapeMask = json.optString("active3DShapeMask", "none"),
+            activePremiumLook = json.optString("activePremiumLook", "none"),
             imageOverlayPath = json.optString("imageOverlayPath", "").let { if (it.isEmpty()) null else it },
             imageOverlayOpacity = json.optDouble("imageOverlayOpacity", 1.0).toFloat(),
             imageOverlayScale = json.optDouble("imageOverlayScale", 1.0).toFloat(),
@@ -437,6 +439,21 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    // ── v4.4.0 Premium FFmpeg Media Converter: MP3 → MP4 (workable, not fake) ──
+    // Delegates to ExportManager.convertMp3ToMp4 which runs the real FFmpeg
+    // audioToVideo pipeline. Progress + status surface through exportState /
+    // exportProgress (the same flows the export UI already observes).
+    fun convertMp3ToMp4(audioUri: Uri) {
+        viewModelScope.launch {
+            try {
+                UriHelper.takePersistablePermission(appContext, audioUri)
+            } catch (_: Exception) {
+                // Non-fatal: audio read may still work without persistable perm.
+            }
+            exportManager.convertMp3ToMp4(audioUri)
+        }
+    }
+
     fun setVideoDuration(durationMs: Long) {
         if (durationMs <= 0L) return
         projectRepository.updateProject { project ->
@@ -600,6 +617,13 @@ class EditorViewModel @Inject constructor(
     fun update3DShapeMask(mask: String) {
         projectRepository.updateProject { project ->
             project.copy(active3DShapeMask = mask)
+        }
+    }
+
+    /** v4.4.0: apply / clear a premium Brightness/HDR/iPhone look. */
+    fun updatePremiumLook(lookId: String) {
+        projectRepository.updateProject { project ->
+            project.copy(activePremiumLook = lookId)
         }
     }
 

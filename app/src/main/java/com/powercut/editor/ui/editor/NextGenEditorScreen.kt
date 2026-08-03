@@ -235,7 +235,8 @@ fun NextGenEditorScreen(
     onUpdateVoiceChangerPitch: (Float) -> Unit = {},
     onToggleAudioDucking: () -> Unit = {},
     onUpdateBorderStyle: (String) -> Unit = {},
-    onUpdateVignetteStyle: (String) -> Unit = {}
+    onUpdateVignetteStyle: (String) -> Unit = {},
+    onUpdatePremiumLook: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -692,7 +693,8 @@ fun NextGenEditorScreen(
                 onUpdateVoiceChangerPitch = onUpdateVoiceChangerPitch,
                 onToggleAudioDucking = onToggleAudioDucking,
                 onUpdateBorderStyle = onUpdateBorderStyle,
-                onUpdateVignetteStyle = onUpdateVignetteStyle
+                onUpdateVignetteStyle = onUpdateVignetteStyle,
+                onUpdatePremiumLook = onUpdatePremiumLook
             )
         }
 
@@ -1310,7 +1312,7 @@ private fun CapCutToolBar(
         "🎬" to "Chroma", "🧹" to "Erase", "🖌️" to "ImgEdit", "📐" to "Orient",
         "🌈" to "Blend", "↺️" to "Reverse", "💉" to "ColorFX",
         "🎧" to "AudioFX", "🎤" to "Voice", "🎉" to "Borders",
-        "✨" to "Vignette", "❄️" to "Freeze"
+        "✨" to "Vignette", "❄️" to "Freeze", "📷" to "Looks"
     )
     Row(
         modifier = Modifier.fillMaxWidth().height(62.dp)
@@ -1431,7 +1433,8 @@ private fun CapCutToolPanel(
     onUpdateVoiceChangerPitch: (Float) -> Unit = {},
     onToggleAudioDucking: () -> Unit = {},
     onUpdateBorderStyle: (String) -> Unit = {},
-    onUpdateVignetteStyle: (String) -> Unit = {}
+    onUpdateVignetteStyle: (String) -> Unit = {},
+    onUpdatePremiumLook: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1524,6 +1527,7 @@ private fun CapCutToolPanel(
                 23 -> BorderStylesPanel(project, onUpdateBorderStyle)
                 24 -> VignetteStylesPanel(project, onUpdateVignetteStyle)
                 25 -> FreezeFramePanel(project, onUpdateFreezeFrame)
+                26 -> LooksPanel(project, onUpdatePremiumLook)
             }
         }
         // Collapse handle
@@ -2106,7 +2110,7 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("SUPER EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon").forEach { (id, label) ->
+            listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon", "magic" to "Magic").forEach { (id, label) ->
                 val sel = effectCategory == id
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { effectCategory = id }.padding(horizontal = 6.dp, vertical = 3.dp)) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
@@ -2175,7 +2179,20 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
                 EffectItem("RGB Glitch", "rgb_split", "invert", "vfx"),
                 EffectItem("Disco", "disco", "rainbow", "neon"),
                 EffectItem("Concert", "concert", "none", "neon"),
-                EffectItem("Party", "party", "rainbow", "neon")
+                EffectItem("Party", "party", "rainbow", "neon"),
+                // ── v4.4.0 MAGIC / ANIMATED EFFECTS (real FFmpeg time expressions) ──
+                EffectItem("✨ Magic Pulse", "magic_pulse", "none", "magic"),
+                EffectItem("🌈 Hue Cycle", "magic_hue_cycle", "none", "magic"),
+                EffectItem("🎨 Color Flow", "magic_color_flow", "none", "magic"),
+                EffectItem("💡 Bright Flow", "magic_brightness_flow", "none", "magic"),
+                EffectItem("🔍 Zoom Pulse", "magic_zoom_pulse", "none", "magic"),
+                EffectItem("📳 Magic Shake", "magic_shake", "none", "magic"),
+                EffectItem("⚡ Flicker", "magic_flicker", "none", "magic"),
+                EffectItem("🌈 Rainbow Flow", "magic_rainbow_flow", "none", "magic"),
+                EffectItem("🔀 Glitch Flow", "magic_glitch_flow", "none", "magic"),
+                EffectItem("💜 Neon Flow", "magic_neon_flow", "none", "magic"),
+                EffectItem("🌊 Wave", "magic_wave", "none", "magic"),
+                EffectItem("💨 Breath", "magic_breath", "none", "magic")
             )
             allEffects.filter { effectCategory == "all" || it.category == effectCategory }.forEach { (name, effectId, filterId, category) ->
                 val sel = project.selectedEffect == effectId
@@ -2283,27 +2300,109 @@ private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Uni
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var threeDCategory by remember { mutableStateOf("all") }
+    // (id, emoji, displayName, category) — all 25 existing masks kept, now premium-grouped
+    val allMasks = listOf(
+        Quad("⭕", "Circle", "circle", "shape"),
+        Quad("❤️", "Heart", "heart", "shape"),
+        Quad("⭐", "Star", "star", "shape"),
+        Quad("🔷", "Hexagon", "hexagon", "shape"),
+        Quad("💎", "Diamond", "diamond", "shape"),
+        Quad("🔺", "Triangle", "triangle", "shape"),
+        Quad("🞄", "Oval", "oval", "shape"),
+        Quad("⬜", "Square", "square", "shape"),
+        Quad("🛐", "Arch", "arch", "shape"),
+        Quad("🖼️", "Frame", "frame", "shape"),
+        Quad("🔆", "Spotlight", "spotlight", "cinema"),
+        Quad("🎬", "Cinematic Bars", "cinematic_bars", "cinema"),
+        Quad("🎥", "Anamorphic", "anamorphic", "cinema"),
+        Quad("🔆", "Vignette", "vignette", "cinema"),
+        Quad("🌈", "Color Splash", "color_splash", "cinema"),
+        Quad("🔥", "Film Burn", "film_burn", "fx"),
+        Quad("☀️", "Light Leak", "light_leak", "fx"),
+        Quad("✨", "Lens Flare", "lens_flare", "fx"),
+        Quad("💨", "Smoke", "smoke", "fx"),
+        Quad("💧", "Water", "water", "fx"),
+        Quad("🔥", "Fire", "fire", "fx"),
+        Quad("✨", "Particles", "particles", "fx"),
+        Quad("🔮", "Bokeh", "bokeh", "fx"),
+        Quad("🖥️", "Glitch 3D", "glitch_3d", "fx"),
+        Quad("🎨", "Chromatic", "chromatic", "fx")
+    )
+    val categories3D = listOf("all" to "All", "shape" to "Shape", "cinema" to "Cinema", "fx" to "FX")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("3D CINEMATIC MASKS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf(
-                "circle", "heart", "star", "hexagon", "diamond", "triangle",
-                "vignette", "film_burn", "light_leak", "lens_flare", "smoke",
-                "water", "fire", "particles", "bokeh", "glitch_3d",
-                "chromatic", "anamorphic", "cinematic_bars", "color_splash",
-                "oval", "square", "arch", "frame", "spotlight"
-            ).forEach { m ->
-                val display = m.replace("_", " ").replaceFirstChar { it.uppercase() }
-                val sel = project.active3DShapeMask == m
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
-                    .clickable { onUpdate3D(if (sel) "none" else m) }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    Text(display, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text("3D CINEMATIC MASKS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            Text("PREMIUM ✦ ${allMasks.size}", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        }
+        // Category filter chips
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            categories3D.forEach { (id, label) ->
+                val sel = threeDCategory == id
+                Box(Modifier
+                    .background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .clickable { threeDCategory = id }
+                    .padding(horizontal = 6.dp, vertical = 3.dp)) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                        color = if (sel) NeonOrange else Color.White)
                 }
             }
         }
+        // Premium mask cards (emoji + name, glow border on select)
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // "None" reset card first
+            val noneSel = project.active3DShapeMask == "none"
+            Box(Modifier
+                .background(if (noneSel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                .border(if (noneSel) 1.dp else 0.dp, NeonOrange, RoundedCornerShape(8.dp))
+                .clickable {
+                    onUpdate3D("none")
+                    android.widget.Toast.makeText(ctx, "3D mask cleared", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .padding(horizontal = 6.dp, vertical = 5.dp)) {
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    Text("❌", fontSize = 14.sp)
+                    Text("None", fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                        color = if (noneSel) NeonOrange else Color.White)
+                }
+            }
+            allMasks.filter { threeDCategory == "all" || it.category == threeDCategory }.forEach { (emoji, name, id, cat) ->
+                val sel = project.active3DShapeMask == id
+                Box(Modifier
+                    .background(if (sel) NeonOrange.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                    .border(if (sel) 1.dp else 0.dp, if (sel) CyberCyan else Color.Transparent, RoundedCornerShape(8.dp))
+                    .clickable {
+                        val newId = if (sel) "none" else id
+                        onUpdate3D(newId)
+                        val msg = if (sel) "3D mask removed" else "$name applied ✓"
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 6.dp, vertical = 5.dp)) {
+                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                        Text(emoji, fontSize = 14.sp)
+                        Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                            color = if (sel) NeonOrange else Color.White)
+                    }
+                }
+            }
+        }
+        val footer = if (project.active3DShapeMask != "none") {
+            "ℹ Active: ${project.active3DShapeMask.replace("_", " ").replaceFirstChar { it.uppercase() }} — real FFmpeg mask"
+        } else {
+            "ℹ Tap a premium 3D mask — applied as a real FFmpeg filter at export"
+        }
+        Text(footer, fontSize = 7.sp, color = Color.Gray)
     }
 }
+
+// helper data class for premium 3D mask cards (emoji, name, id, category)
+private data class Quad(val emoji: String, val name: String, val id: String, val category: String)
 
 
 // ─── 12. IMAGE PANEL ───────────────────────────────────────────
@@ -2630,5 +2729,93 @@ private fun FreezeFramePanel(
                 }
             }
         }
+    }
+}
+
+// ─── 26. PREMIUM LOOKS PANEL (v4.4.0) ──────────────────────────────────────
+// 50+ real, workable Brightness / HDR / iPhone-camera / Cinema / Magic
+// "Looks". Each card maps to an actual FFmpeg -vf chain (see PremiumLooks)
+// injected at export time by VideoProcessor.premiumLookChain(). Not fake.
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LooksPanel(
+    project: VideoProject,
+    onUpdatePremiumLook: (String) -> Unit
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var lookCategory by remember { mutableStateOf("all") }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text("PREMIUM LOOKS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            Text("${com.powercut.editor.domain.look.PremiumLooks.all.size}+ real grades",
+                fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        }
+        // Category filter chips
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            com.powercut.editor.domain.look.PremiumLooks.categories.forEach { (id, label) ->
+                val sel = lookCategory == id
+                Box(Modifier
+                    .background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .clickable { lookCategory = id }
+                    .padding(horizontal = 6.dp, vertical = 3.dp)) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                        color = if (sel) CyberCyan else Color.White)
+                }
+            }
+        }
+        // Premium look cards grid (emoji + name)
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val visible = com.powercut.editor.domain.look.PremiumLooks.all.filter {
+                lookCategory == "all" || it.category == lookCategory
+            }
+            // "None / Original" reset card first
+            val noneSel = !project.isPremiumLookActive
+            Box(Modifier
+                .background(if (noneSel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                .border(if (noneSel) 1.dp else 0.dp, CyberCyan, RoundedCornerShape(8.dp))
+                .clickable {
+                    onUpdatePremiumLook("none")
+                    android.widget.Toast.makeText(ctx, "Look cleared — original video", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .padding(horizontal = 6.dp, vertical = 5.dp)) {
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    Text("❌", fontSize = 14.sp)
+                    Text("Original", fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                        color = if (noneSel) CyberCyan else Color.White)
+                }
+            }
+            visible.forEach { look ->
+                val sel = project.activePremiumLook == look.id
+                Box(Modifier
+                    .background(if (sel) CyberCyan.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                    .border(if (sel) 1.dp else 0.dp, CyberCyan, RoundedCornerShape(8.dp))
+                    .clickable {
+                        val newId = if (sel) "none" else look.id
+                        onUpdatePremiumLook(newId)
+                        val msg = if (sel) "Look removed" else "${look.name} applied ✓"
+                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 6.dp, vertical = 5.dp)) {
+                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                        Text(look.emoji, fontSize = 14.sp)
+                        Text(look.name, fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                            color = if (sel) CyberCyan else Color.White)
+                    }
+                }
+            }
+        }
+        // Footer hint describing the active look
+        val active = com.powercut.editor.domain.look.PremiumLooks.byId(project.activePremiumLook)
+        val footer = if (active != null) {
+            "ℹ ${active.name} — ${active.description}"
+        } else {
+            "ℹ Tap a look to apply a real FFmpeg grade at export"
+        }
+        Text(footer, fontSize = 7.sp, color = Color.Gray)
     }
 }

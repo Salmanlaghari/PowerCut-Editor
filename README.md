@@ -7,6 +7,38 @@ Built 100% in pure Kotlin and Jetpack Compose, PowerCut delivers instant, waterm
 
 ---
 
+## ⚡ What's New in 4.4.0 — Premium Looks, Magic Effects & FFmpeg Media Converter
+
+### 📷 54+ Premium Looks (Real FFmpeg Grades — Workable, Not Fake)
+A brand-new **Looks** tab (📷) in the editor delivers 54 one-tap premium grades across five categories, each backed by a **real FFmpeg `-vf` filter chain** that runs inside the existing FFmpeg-Kit export pipeline:
+*   **Bright (7)**: Bright Lift, Bright Pop, Airy Bright, Clean Bright, Soft Glow, Dawn Light, Snow Bright — `eq` brightness/contrast lifts with `unsharp`, `boxblur` bloom, and `curves` presets.
+*   **HDR (10)**: HDR Vivid, HDR Cinema, HDR Detail, HDR Punch, HDR Deep, HDR Glow, HDR Vivid Color, HDR Sharp, HDR True Tone, HDR Ultra — local-contrast `unsharp` + saturation `eq` + `curves=increase_contrast` + `colorbalance`.
+*   **iPhone (13)**: Smart HDR, Cinematic, Photographic Standard, Photographic High Contrast, Photomatic Warm, Photomatic Cool, Night Mode, Portrait, Deep Fusion, True Tone, Studio, Vivid, Natural — emulating iPhone camera processing styles via `eq`/`curves`/`colorbalance`/`unsharp` chains.
+*   **Cinema (12)**: Teal & Orange, Blockbuster, Film Noir, Golden Hour, Blade Runner, Wes Anderson, Analog Film, Old Hollywood, Indie, Moody, Clean Cinema, Cineflat — cinematic `colorbalance`/`curves`/`vignette` grades.
+*   **Magic (12)**: Auto Magic, Magic Warm, Magic Cool, Magic Pop, Magic Dreamy, Magic Vintage, Magic Fade, Magic Bold, Magic Soft, Magic Vivid, Magic Mono, Magic Auto Film — one-tap auto looks.
+
+Every look is injected into the export `-vf` pipeline by `VideoProcessor.premiumLookChain()` **after** the color grade and **before** the blend mode, so all existing options remain fully intact (additive only).
+
+### ✨ Magic / Animated Effects (Real FFmpeg Time Expressions)
+12 new **magic/animated effects** added to the Effects panel under a dedicated **Magic** category. These are genuinely *animated* — they use FFmpeg `t` (time) expressions (`sin`, `cos`, `random`, `zoompan`) so the effect evolves over the clip duration:
+*   Magic Pulse, Hue Cycle, Color Flow, Bright Flow, Zoom Pulse, Magic Shake, Flicker, Rainbow Flow, Glitch Flow, Neon Flow, Wave, Breath.
+
+Routed through `VideoProcessor.magicEffectChain()` and dispatched at the top of `effectChain()` so they integrate with the existing Effects UI.
+
+### 🎭 Premium 3D Cinematic Masks (Upgraded UI)
+The 3D Masks panel is now **premium**: emoji-iconed cards, category filtering (Shape / Cinema / FX), glow borders on selection, a premium count badge, and Toast confirmation. All 25 existing masks are preserved and still backed by real FFmpeg `threeDMaskChain()` filters (`vignette`, `crop`, `drawbox`, `colorbalance`, `noise`, `chromashift`, `boxblur`, `eq`).
+
+### 🎵 Premium FFmpeg Media Converter — MP3 → MP4 (Workable, Not Fake)
+The home-screen **MP3→Video** quick tool is now fully wired and workable. Tapping any preset launches a real **audio picker** (`ActivityResultContracts.GetContent("audio/*")`); the selected audio is converted to an MP4 video via the real FFmpeg `audioToVideo` pipeline (color source + `drawtext` visualizer + `libx264` + AAC) and saved to `Movies/PowerCut`. The full chain: `HomeScreen` → `EditorViewModel.convertMp3ToMp4()` → `ExportManager.convertMp3ToMp4()` → `VideoProcessor.audioToVideo()`, with live progress reporting.
+
+### ✅ Import Button Verified
+The Import button (`pickerLauncher` + `checkPermissionAndPick`) is confirmed working with proper Android 13+ `READ_MEDIA_VIDEO` and legacy `READ_EXTERNAL_STORAGE` permission handling.
+
+### 🔒 Additive-Only Update
+All existing options, filters, effects, transitions, masks, and tools remain 100% intact. v4.4.0 only **adds** new premium features — nothing was removed or broken.
+
+---
+
 ## ⚡ What's New in 3.0.0 — Premium Ultra Smooth Pro 2027 NextGen
 
 ### 🎨 World Premium Interface

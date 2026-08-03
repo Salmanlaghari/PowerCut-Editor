@@ -141,4 +141,18 @@
     <string name="export_notif_title">PowerCut Export</string>
     <string name="export_notif_channel_name">Video Export</string>
     <string name="export_notif_channel_desc">Shows progress while exporting long videos in the background.</string>
+
+    <!-- v4.4.0 Premium Looks / HDR / iPhone / Magic / MP3->MP4 Converter -->
+    <string name="premium_looks">Premium Looks</string>
+    <string name="premium_looks_count">54+ real grades</string>
+    <string name="look_bright">Bright</string>
+    <string name="look_hdr">HDR</string>
+    <string name="look_iphone">iPhone</string>
+    <string name="look_cinema">Cinema</string>
+    <string name="look_magic">Magic</string>
+    <string name="magic_effects">Magic / Animated Effects</string>
+    <string name="mp3_to_mp4_converter">FFmpeg Media Converter (MP3 → MP4)</string>
+    <string name="mp3_to_mp4_pick_audio">Pick an audio file to convert to MP4</string>
+    <string name="mp3_to_mp4_converting">Converting audio to MP4…</string>
+    <string name="premium_3d_masks">Premium 3D Cinematic Masks</string>
 </resources>

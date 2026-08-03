@@ -77,6 +77,9 @@ data class VideoProject(
     val horizontalLetterbox: Boolean = false,
     val autoReframeEnabled: Boolean = false,
 
+    // ── v4.4.0 Premium Looks (50+ Brightness / HDR / iPhone grades) ──
+    val activePremiumLook: String = "none",
+
     // ── NEW v4.0 CapCut-sync Pro features ──
     val blendMode: String = "none",
     val isReverseEnabled: Boolean = false,
@@ -147,4 +150,8 @@ data class VideoProject(
 
     val isVignetteStyleActive: Boolean
         get() = vignetteStyle != "none"
+
+    /** v4.4.0: true when a premium Brightness/HDR/iPhone look is active. */
+    val isPremiumLookActive: Boolean
+        get() = activePremiumLook != "none" && activePremiumLook.isNotBlank()
 }

@@ -51,6 +51,83 @@ class ExportManager @Inject constructor(
         _progress.value = pct.coerceIn(0, 100)
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    //  v4.4.0 PREMIUM FFmpeg MEDIA CONVERTER — MP3 → MP4 (workable, not fake)
+    //  Streams the picked audio (content:// URI) to a temp file, then runs the
+    //  real FFmpeg audioToVideo pipeline (color source + drawtext + libx264 +
+    //  AAC) and saves the result into the public Movies/PowerCut gallery.
+    // ──────────────────────────────────────────────────────────────────────
+    suspend fun convertMp3ToMp4(audioUri: android.net.Uri): String? {
+        _exportState.value = Resource.Loading
+        _progress.value = 5
+        var tempAudio: File? = null
+        var tempOutput: File? = null
+        try {
+            val secureDir = context.externalCacheDir?.let { ext ->
+                val dir = File(ext, "PowerCutExports")
+                if (!dir.exists()) dir.mkdirs()
+                dir
+            } ?: File(context.cacheDir, "PowerCutExports").let { dir ->
+                if (!dir.exists()) dir.mkdirs()
+                dir
+            }
+
+            // 1) Stream the audio content:// URI to a real temp file FFmpeg can read.
+            _progress.value = 15
+            tempAudio = File(secureDir, "audio_in_${System.currentTimeMillis()}.mp3")
+            val copiedOk = context.contentResolver.openInputStream(audioUri)?.use { input ->
+                java.io.FileOutputStream(tempAudio).use { output ->
+                    val buffer = ByteArray(2 * 1024 * 1024)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                    }
+                    output.flush()
+                    output.fd.sync()
+                    true
+                }
+            } ?: false
+
+            if (!copiedOk || !tempAudio.exists() || tempAudio.length() == 0L) {
+                _exportState.value = Resource.Error("Could not read the selected audio file.", Exception("audio copy failed"))
+                _progress.value = 0
+                return null
+            }
+            _progress.value = 30
+
+            // 2) Run the real FFmpeg audioToVideo conversion.
+            tempOutput = File(secureDir, "mp3_to_mp4_${System.currentTimeMillis()}.mp4")
+            val ok = videoProcessor.audioToVideo(
+                inputPath = tempAudio.absolutePath,
+                outputPath = tempOutput.absolutePath
+            )
+            _progress.value = 85
+
+            if (!ok || !tempOutput.exists() || tempOutput.length() == 0L) {
+                _exportState.value = Resource.Error("FFmpeg conversion failed. The audio may be unsupported.", Exception("audioToVideo returned false"))
+                _progress.value = 0
+                return null
+            }
+
+            // 3) Save the MP4 into the public Movies/PowerCut gallery.
+            val galleryPath = saveToPublicGallery(context, tempOutput)
+            _progress.value = 100
+            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
+            return galleryPath ?: tempOutput.absolutePath
+        } catch (e: Exception) {
+            Log.e(tag, "convertMp3ToMp4 exception", e)
+            _exportState.value = Resource.Error("Conversion failed: ${e.message}", e)
+            _progress.value = 0
+            return null
+        } finally {
+            tempAudio?.delete()
+            tempOutput?.delete()
+            // Reset progress after a short delay so the UI can show 100%.
+            kotlinx.coroutines.delay(600)
+            _progress.value = -1
+        }
+    }
+
     /**
      * Executes the video export according to the current project configuration.
      * Uses ultra fast "Instant Trim" if no scaling, speed change, transitions, audio, or filters are requested.
@@ -278,6 +355,7 @@ class ExportManager @Inject constructor(
                     borderStyle = project.borderStyle,
                     watermarkPath = project.watermarkPath,
                     vignetteStyle = project.vignetteStyle,
+                    premiumLookId = project.activePremiumLook,
                     onProgress = { pct -> updateProgress(pct) }
                 )
             }
@@ -367,6 +445,7 @@ class ExportManager @Inject constructor(
                         borderStyle = project.borderStyle,
                         watermarkPath = project.watermarkPath,
                         vignetteStyle = project.vignetteStyle,
+                        premiumLookId = project.activePremiumLook,
                         onProgress = { pct -> updateProgress(pct) }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
