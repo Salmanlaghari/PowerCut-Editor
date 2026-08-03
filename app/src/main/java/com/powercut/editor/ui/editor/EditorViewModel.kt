@@ -454,6 +454,37 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  v4.5.0 PREMIUM QUICK TOOLS — Compress / Slideshow / AI Edit
+    //  All delegate to real FFmpeg pipelines in ExportManager. Workable.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** v4.5.0 — Compress a picked video to a smaller MP4. */
+    fun compressVideo(videoUri: Uri, qualityPreset: String = "balanced") {
+        viewModelScope.launch {
+            try { UriHelper.takePersistablePermission(appContext, videoUri) } catch (_: Exception) {}
+            exportManager.compressVideo(videoUri, qualityPreset)
+        }
+    }
+
+    /** v4.5.0 — Build a video slideshow from picked images. */
+    fun createSlideshow(imageUris: List<Uri>) {
+        viewModelScope.launch {
+            imageUris.forEach { u ->
+                try { UriHelper.takePersistablePermission(appContext, u) } catch (_: Exception) {}
+            }
+            exportManager.createSlideshow(imageUris)
+        }
+    }
+
+    /** v4.5.0 — AI Edit: apply an AI auto-enhance grade to a picked video. */
+    fun applyAiEdit(videoUri: Uri) {
+        viewModelScope.launch {
+            try { UriHelper.takePersistablePermission(appContext, videoUri) } catch (_: Exception) {}
+            exportManager.applyAiEdit(videoUri)
+        }
+    }
+
     fun setVideoDuration(durationMs: Long) {
         if (durationMs <= 0L) return
         projectRepository.updateProject { project ->

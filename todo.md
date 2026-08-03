@@ -1,25 +1,35 @@
-# PowerCut Premium Update — v4.4.0
+# PowerCut Editor v4.5.0 — Premium Quick Tools & Workable Editor Panels
 
-## Goal (from user, Roman Urdu)
-PowerCut mein Brightness, HDR, iPhone Camera — 50+ lagao (workable, not fake).
-Filter Animation, Animated Effect, Magic — sab real.
-3D card mein premium lagao (workable, not fake).
-Import Button dekhna kaam kar raha hai ya nahi (fix if broken).
-FFmpeg Media Converter MP3→MP4 lagao (premium, workable).
-Jo options hain unko rahene do — sirf update/future update karo (don't break existing).
+## Section 1: Investigation & Planning
+- [x] Create feature branch `feature/premium-quicktools-v4.5.0` from main
+- [x] Scan HomeScreen.kt quick tools section (Slideshow, Compress, AI Edit = fake)
+- [x] Scan NextGenEditorScreen.kt all panels for placeholder/fake options
+- [x] Cross-reference panel options against VideoProcessor.kt real FFmpeg chains
+  - MISMATCH: VignetteStylesPanel UI (classic/reverse/colored/blur/spotlight) vs chain (soft/strong/extreme/subtle/circular/inverted/oval)
+  - MISMATCH: BorderStylesPanel UI (neon/gradient/vintage/modern/minimal/glow) vs chain (neon_frame/vintage_frame/gold_frame/thin_white/thick_white/thick_black)
 
-## Tasks
-- [x] Clone repo & analyze current code (EditorViewModel, ImageEditorTools, AIFilter, VideoProcessor, HomeScreen, MainActivity)
-- [x] Create feature branch `feature/premium-brightness-hdr-50plus`
-- [x] 1. Add 50+ premium Brightness/HDR/iPhone-Camera-grade presets → `PremiumLook.kt` (54 real FFmpeg chains) + `LooksPanel` UI card grid (tab 26) + ViewModel/ExportManager/VideoProcessor wiring DONE
-- [x] 2. Add real Filter Animations / Animated Effects / Magic effects → `magicEffectChain` (12 real FFmpeg time-expr effects) in VideoProcessor + 12 magic EffectItems + "Magic" category in EffectsPanel DONE
-- [x] 3. Make 3D Cinematic Mask cards premium → `ThreeDPanel` upgraded (emoji icons, Shape/Cinema/FX categories, glow borders, premium badge, Toast) — all 25 masks + real FFmpeg `threeDMaskChain` intact DONE
-- [x] 4. Verify Import button works (HomeScreen `pickerLauncher` + permission flow). Fix MP3→Video quick tool so it actually launches an audio picker + runs `audioToVideo`
-- [x] 5. Premium FFmpeg Media Converter MP3→MP4: real converter tool on home + export, workable, wired to `audioToVideo` with progress
-- [x] 6. Keep ALL existing options intact; only additive updates. Bump version to 4.4.0 (versionCode 9). Update README + strings
-- [x] 7. Commit, push branch, create PR — PR #14 created: https://github.com/Salmanlaghari/PowerCut-Editor/pull/14
+## Section 2: Make Quick Tools Workable (HomeScreen.kt)
+- [x] Add necessary ViewModel + ExportManager + VideoProcessor methods
+- [x] Make Slideshow quick tool workable (image picker → FFmpeg slideshow → gallery)
+- [x] Make Compress quick tool workable (video picker → FFmpeg compress → gallery)
+- [x] Make AI Edit quick tool workable (video picker → apply premium look → gallery)
+- [x] Make all 4 quick tools premium 3D card buttons (PRO badge, accent colors, Workable label)
+- [x] Wire 3 new quick-tool callbacks in MainActivity.kt
 
-## Rules
-- NEVER run Gradle build locally (OOM). Rely on GitHub CI.
-- Push with: git push https://x-access-token:$GITHUB_TOKEN@github.com/Salmanlaghari/PowerCut-Editor.git
-- Additive only — do not remove existing options.
+## Section 3: Fix Editor Panel Placeholders (NextGenEditorScreen.kt)
+- [x] VignetteStylesPanel: added classic/reverse/colored/blur/spotlight chains
+- [x] BorderStylesPanel: added neon/gradient/vintage/modern/minimal/glow chains
+- [x] TemplatePanel: 19 templates now map to distinct real FFmpeg grades (templateChain)
+- [x] EffectsPanel: added face_blur chain
+
+## Section 4: Version & Docs
+- [x] Bump version to 4.5.0 (versionCode 10) in app/build.gradle.kts
+- [x] Update README.md with v4.5.0 "What's New" section
+- [x] strings.xml: no new keys needed (quick tools use hardcoded strings)
+
+## Section 5: Push, Merge, Build
+- [ ] Commit all changes
+- [ ] Push branch to GitHub
+- [ ] Create PR via gh CLI
+- [ ] Merge PR
+- [ ] Verify CI build passes (Build Signed APK & AAB)

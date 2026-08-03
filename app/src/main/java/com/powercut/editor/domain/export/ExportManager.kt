@@ -128,6 +128,191 @@ class ExportManager @Inject constructor(
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  v4.5.0 PREMIUM QUICK TOOLS (Compress / Slideshow / AI Edit)
+    //  All real FFmpeg pipelines, workable — not fake Toasts.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * v4.5.0 — Compress a picked video (content:// URI) to a smaller MP4.
+     * Streams the URI to temp, runs [VideoProcessor.compressVideo], saves to
+     * the public Movies/PowerCut gallery. Returns the gallery path or null.
+     */
+    suspend fun compressVideo(videoUri: android.net.Uri, qualityPreset: String = "balanced"): String? {
+        _exportState.value = Resource.Loading
+        _progress.value = 5
+        var tempInput: File? = null
+        var tempOutput: File? = null
+        try {
+            val secureDir = context.externalCacheDir?.let { ext ->
+                val dir = File(ext, "PowerCutExports"); if (!dir.exists()) dir.mkdirs(); dir
+            } ?: File(context.cacheDir, "PowerCutExports").let { dir ->
+                if (!dir.exists()) dir.mkdirs(); dir
+            }
+            _progress.value = 15
+            tempInput = File(secureDir, "compress_in_${System.currentTimeMillis()}.mp4")
+            val copiedOk = streamUriToTemp(videoUri, tempInput)
+            if (!copiedOk) {
+                _exportState.value = Resource.Error("Could not read the selected video.", Exception("video copy failed"))
+                _progress.value = 0; return null
+            }
+            _progress.value = 35
+            tempOutput = File(secureDir, "compressed_${System.currentTimeMillis()}.mp4")
+            val ok = videoProcessor.compressVideo(tempInput.absolutePath, tempOutput.absolutePath, qualityPreset)
+            _progress.value = 85
+            if (!ok || !tempOutput.exists() || tempOutput.length() == 0L) {
+                _exportState.value = Resource.Error("Compression failed. The video may be unsupported.", Exception("compressVideo returned false"))
+                _progress.value = 0; return null
+            }
+            val galleryPath = saveToPublicGallery(context, tempOutput)
+            _progress.value = 100
+            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
+            return galleryPath ?: tempOutput.absolutePath
+        } catch (e: Exception) {
+            Log.e(tag, "compressVideo exception", e)
+            _exportState.value = Resource.Error("Compression failed: ${e.message}", e)
+            _progress.value = 0; return null
+        } finally {
+            tempInput?.delete(); tempOutput?.delete()
+            kotlinx.coroutines.delay(600); _progress.value = -1
+        }
+    }
+
+    /**
+     * v4.5.0 — Build a video slideshow from picked images (content:// URIs).
+     * Streams each image to temp, runs [VideoProcessor.imagesToSlideshow],
+     * saves the MP4 to the public Movies/PowerCut gallery.
+     */
+    suspend fun createSlideshow(imageUris: List<android.net.Uri>, perImageSec: Double = 2.5): String? {
+        if (imageUris.isEmpty()) {
+            _exportState.value = Resource.Error("No images selected.", Exception("empty list"))
+            return null
+        }
+        _exportState.value = Resource.Loading
+        _progress.value = 5
+        val tempImages = mutableListOf<File>()
+        var tempOutput: File? = null
+        try {
+            val secureDir = context.externalCacheDir?.let { ext ->
+                val dir = File(ext, "PowerCutExports"); if (!dir.exists()) dir.mkdirs(); dir
+            } ?: File(context.cacheDir, "PowerCutExports").let { dir ->
+                if (!dir.exists()) dir.mkdirs(); dir
+            }
+            // Stream each image URI to a temp file.
+            _progress.value = 15
+            imageUris.forEachIndexed { idx, uri ->
+                val ext = guessImageExt(uri)
+                val tmp = File(secureDir, "slide_${System.currentTimeMillis()}_${idx}.$ext")
+                if (!streamUriToTemp(uri, tmp)) {
+                    _exportState.value = Resource.Error("Could not read image #${idx + 1}.", Exception("image copy failed"))
+                    _progress.value = 0; return null
+                }
+                tempImages.add(tmp)
+                _progress.value = 15 + (idx + 1) * 40 / imageUris.size
+            }
+            _progress.value = 60
+            tempOutput = File(secureDir, "slideshow_${System.currentTimeMillis()}.mp4")
+            val ok = videoProcessor.imagesToSlideshow(
+                imagePaths = tempImages.map { it.absolutePath },
+                outputPath = tempOutput.absolutePath,
+                perImageSec = perImageSec
+            )
+            _progress.value = 90
+            if (!ok || !tempOutput.exists() || tempOutput.length() == 0L) {
+                _exportState.value = Resource.Error("Slideshow creation failed.", Exception("imagesToSlideshow returned false"))
+                _progress.value = 0; return null
+            }
+            val galleryPath = saveToPublicGallery(context, tempOutput)
+            _progress.value = 100
+            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
+            return galleryPath ?: tempOutput.absolutePath
+        } catch (e: Exception) {
+            Log.e(tag, "createSlideshow exception", e)
+            _exportState.value = Resource.Error("Slideshow failed: ${e.message}", e)
+            _progress.value = 0; return null
+        } finally {
+            tempImages.forEach { it.delete() }
+            tempOutput?.delete()
+            kotlinx.coroutines.delay(600); _progress.value = -1
+        }
+    }
+
+    /**
+     * v4.5.0 — AI Edit quick tool: apply an AI auto-enhance grade to a picked
+     * video (content:// URI). Streams to temp, runs [VideoProcessor.applyAiEdit],
+     * saves the enhanced MP4 to the public Movies/PowerCut gallery.
+     */
+    suspend fun applyAiEdit(videoUri: android.net.Uri): String? {
+        _exportState.value = Resource.Loading
+        _progress.value = 5
+        var tempInput: File? = null
+        var tempOutput: File? = null
+        try {
+            val secureDir = context.externalCacheDir?.let { ext ->
+                val dir = File(ext, "PowerCutExports"); if (!dir.exists()) dir.mkdirs(); dir
+            } ?: File(context.cacheDir, "PowerCutExports").let { dir ->
+                if (!dir.exists()) dir.mkdirs(); dir
+            }
+            _progress.value = 15
+            tempInput = File(secureDir, "aiedit_in_${System.currentTimeMillis()}.mp4")
+            if (!streamUriToTemp(videoUri, tempInput)) {
+                _exportState.value = Resource.Error("Could not read the selected video.", Exception("video copy failed"))
+                _progress.value = 0; return null
+            }
+            _progress.value = 35
+            tempOutput = File(secureDir, "ai_edited_${System.currentTimeMillis()}.mp4")
+            val ok = videoProcessor.applyAiEdit(tempInput.absolutePath, tempOutput.absolutePath)
+            _progress.value = 85
+            if (!ok || !tempOutput.exists() || tempOutput.length() == 0L) {
+                _exportState.value = Resource.Error("AI Edit failed. The video may be unsupported.", Exception("applyAiEdit returned false"))
+                _progress.value = 0; return null
+            }
+            val galleryPath = saveToPublicGallery(context, tempOutput)
+            _progress.value = 100
+            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
+            return galleryPath ?: tempOutput.absolutePath
+        } catch (e: Exception) {
+            Log.e(tag, "applyAiEdit exception", e)
+            _exportState.value = Resource.Error("AI Edit failed: ${e.message}", e)
+            _progress.value = 0; return null
+        } finally {
+            tempInput?.delete(); tempOutput?.delete()
+            kotlinx.coroutines.delay(600); _progress.value = -1
+        }
+    }
+
+    // ── Helpers shared by the v4.5.0 quick tools ──────────────────────────
+
+    /** Streams a content:// URI to a temp file (2 MB buffer). */
+    private fun streamUriToTemp(uri: android.net.Uri, dest: File): Boolean {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                java.io.FileOutputStream(dest).use { output ->
+                    val buffer = ByteArray(2 * 1024 * 1024)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                    }
+                    output.flush(); output.fd.sync(); true
+                }
+            } ?: false
+        } catch (e: Exception) {
+            Log.e(tag, "streamUriToTemp failed for $uri", e); false
+        }
+    }
+
+    /** Guesses an image extension from the URI's MIME type. */
+    private fun guessImageExt(uri: android.net.Uri): String {
+        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+        return when {
+            mime.contains("png") -> "png"
+            mime.contains("webp") -> "webp"
+            mime.contains("bmp") -> "bmp"
+            mime.contains("gif") -> "gif"
+            else -> "jpg"
+        }
+    }
+
     /**
      * Executes the video export according to the current project configuration.
      * Uses ultra fast "Instant Trim" if no scaling, speed change, transitions, audio, or filters are requested.

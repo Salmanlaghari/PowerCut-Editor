@@ -226,6 +226,16 @@ class MainActivity : ComponentActivity() {
                                     // v4.4.0 Premium FFmpeg Media Converter: MP3 -> MP4
                                     onConvertMp3ToMp4 = { audioUri ->
                                         viewModel.convertMp3ToMp4(audioUri)
+                                    },
+                                    // v4.5.0 Premium Quick Tools (all workable)
+                                    onCompressVideo = { videoUri ->
+                                        viewModel.compressVideo(videoUri)
+                                    },
+                                    onCreateSlideshow = { imageUris ->
+                                        viewModel.createSlideshow(imageUris)
+                                    },
+                                    onApplyAiEdit = { videoUri ->
+                                        viewModel.applyAiEdit(videoUri)
                                     }
                                 )
                             }
