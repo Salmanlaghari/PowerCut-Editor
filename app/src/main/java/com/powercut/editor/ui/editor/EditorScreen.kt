@@ -1361,7 +1361,7 @@ fun EditorScreen(
                             exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
                         }
                     }
-                    exportEngine.start(Any(), cfg)
+                    exportEngine.start(project, cfg)
                     isExporting = false
                     exportEngine.destroy()
                 }
@@ -1387,7 +1387,7 @@ fun EditorScreen(
                             exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
                         }
                     }
-                    exportEngine.start(Any(), cfg)
+                    exportEngine.start(project, cfg)
                     isExporting = false
                     exportEngine.destroy()
                 }
