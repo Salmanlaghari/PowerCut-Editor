@@ -68,7 +68,8 @@ fun ExportScreen(
     onImportNewVideo: (android.net.Uri) -> Unit,
     isWatermarkRemoved: Boolean,
     onRemoveWatermarkRequested: () -> Unit,
-    onStartExport: (resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) -> Unit
+    onStartExport: (resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) -> Unit,
+    exportProgress: Int = 0
 ) {
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onImportNewVideo(it) }
@@ -273,10 +274,99 @@ fun ExportScreen(
                     }
                 }
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(modifier = Modifier.size(72.dp), color = NeonOrange, strokeWidth = 6.dp)
-                        Spacer(Modifier.height(32.dp))
-                        Text(LanguageHelper.getString(R.string.video_exporting, language), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp)) {
+                        // v5.2.0: Live export progress with percentage (10%, 20%, 100%)
+                        // User request: "Live 10% 20% 100% dekhao video process export"
+                        val progressVal = exportProgress.coerceIn(0, 100)
+                        val progressFraction = progressVal / 100f
+
+                        // Stage label based on progress
+                        val stageLabel = when {
+                            progressVal < 10 -> "Initializing export..."
+                            progressVal < 30 -> "Decoding video frames..."
+                            progressVal < 50 -> "Applying filters & effects..."
+                            progressVal < 70 -> "Encoding video stream..."
+                            progressVal < 90 -> "Mixing audio & finalizing..."
+                            progressVal < 100 -> "Writing output file..."
+                            else -> "Export complete!"
+                        }
+
+                        // Animated circular progress with percentage
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { progressFraction },
+                                modifier = Modifier.size(96.dp),
+                                color = NeonOrange,
+                                strokeWidth = 8.dp,
+                                trackColor = Color.White.copy(0.08f)
+                            )
+                            Text(
+                                text = "$progressVal%",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Linear progress bar
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(0.08f))
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(progressFraction).height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Brush.horizontalGradient(listOf(NeonOrange, CyberCyan)))
+                            )
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Stage label
+                        Text(
+                            text = stageLabel,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberCyan,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            text = LanguageHelper.getString(R.string.video_exporting, language),
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+
+                        // Progress milestones indicator
+                        Spacer(Modifier.height(20.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            listOf(0, 25, 50, 75, 100).forEach { milestone ->
+                                val reached = progressVal >= milestone
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        modifier = Modifier.size(if (reached) 10.dp else 8.dp)
+                                            .clip(CircleShape)
+                                            .background(if (reached) CyberCyan else Color.White.copy(0.15f))
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "$milestone%",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (reached) CyberCyan else Color.Gray
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

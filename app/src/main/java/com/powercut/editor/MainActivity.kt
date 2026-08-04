@@ -194,7 +194,7 @@ class MainActivity : ComponentActivity() {
                                     language = language,
                                     onLanguageToggle = { viewModel.toggleLanguage() },
                                     onVideoSelected = { uri ->
-                                        importVideoWithAd(uri)
+                                        importVideoDirect(uri)
                                     },
                                     activeTab = currentDashboardTab,
                                     onTabSelected = { tab ->
@@ -225,7 +225,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel.resumeDraft(draft)
                                     },
                                     onTemplateVideoSelected = { uri, tId, filt, trans, caps, speed ->
-                                        importVideoWithAd(uri, tId, filt, trans, caps, speed)
+                                        importVideoDirect(uri, tId, filt, trans, caps, speed)
                                     },
                                     // v4.4.0 Premium FFmpeg Media Converter: MP3 -> MP4
                                     onConvertMp3ToMp4 = { audioUri ->
@@ -410,7 +410,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onBackToEditor = { viewModel.navigateToEditor() },
                                     onImportNewVideo = { uri ->
-                                        importVideoWithAd(uri)
+                                        importVideoDirect(uri)
                                     },
                                     isWatermarkRemoved = isWatermarkRemoved,
                                     onRemoveWatermarkRequested = {
@@ -421,7 +421,8 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onStartExport = { res, fps, wm, hw ->
                                         viewModel.startExportWithSettings(res, fps, isWatermarkRemoved || wm, hw)
-                                    }
+                                    },
+                                    exportProgress = exportProgress
                                 )
                             }
                         }
@@ -537,19 +538,18 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  v5.0.0 AD-BASED WATERMARK AT IMPORT TIME
-    //  User request: "import ke time agar user ads per click kare to remove
-    //  watermark video import ho, agar ads per click na kare to watermark ke
-    //  sath video import aaye."
+    // ──────────────────────────────────────────────────────────────────
+    //  v5.2.0 NO ADS AT IMPORT — DIRECT IMPORT
+    //  User request: "User import time ads na dekhe" — user should NOT see
+    //  any ads when importing a video. Import is now instant and ad-free.
+    //  The rewarded ad for watermark removal is offered ONLY at export time
+    //  via the ExportScreen "REMOVE AD" button.
     //
-    //  Flow: When the user picks a video to import, we show a rewarded ad
-    //  FIRST. If they watch it (or the ad fails to load — graceful fallback),
-    //  isWatermarkRemoved = true → the export will have NO watermark. The ad
-    //  is always offered; the export pipeline reads isWatermarkRemoved when
-    //  the user eventually taps EXPORT.
-    // ─────────────────────────────────────────────────────────────────────
-    private fun importVideoWithAd(
+    //  Flow: User picks a video → video imports immediately (no ad).
+    //  At export time, the user can optionally watch a rewarded ad to
+    //  remove the watermark from their exported video.
+    // ──────────────────────────────────────────────────────────────────
+    private fun importVideoDirect(
         uri: android.net.Uri,
         templateId: String = "none",
         filter: String = "none",
@@ -557,29 +557,11 @@ class MainActivity : ComponentActivity() {
         captions: String = "off",
         speed: Float = 1.0f
     ) {
-        // v5.0.0 AD-BASED WATERMARK AT IMPORT TIME.
-        // Show a rewarded ad when the user picks a video to import.
-        // - If watched to completion (reward earned): mark watermark removed so
-        //   the eventual export has NO watermark, then import.
-        // - If skipped/closed early (no reward): watermark stays, then import.
-        // - If ad fails to load (fallback): grant reward (no watermark), import.
-        // The import ALWAYS proceeds; only the watermark decision changes.
-        showRewardedAd(
-            onEarnedReward = {
-                // User watched the ad (or fallback) — remove watermark.
-                isWatermarkRemoved = true
-                Toast.makeText(
-                    this,
-                    "Ad rewarded! Watermark removed for this video.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            },
-            onAdDismissed = {
-                // Ad closed — import the video regardless of reward.
-                // isWatermarkRemoved was set to true above only if reward was earned.
-                viewModel.selectVideo(this, uri, templateId, filter, transition, captions, speed)
-            }
-        )
+        // v5.2.0: No ads at import time — import the video directly.
+        // Reset watermark state so the user starts fresh (they can remove
+        // watermark at export time via the rewarded ad option).
+        isWatermarkRemoved = false
+        viewModel.selectVideo(this, uri, templateId, filter, transition, captions, speed)
     }
 
     private fun showRewardedAd(
@@ -598,7 +580,7 @@ class MainActivity : ComponentActivity() {
                     // already called onEarnedReward if the user watched to completion.
                     when {
                         // Reward earned AND a dismiss callback exists → call dismiss
-                        // (e.g. importVideoWithAd: watermark set above, now import).
+                        // (e.g. importVideoDirect: watermark set above, now import).
                         rewardEarned && onAdDismissed != null -> onAdDismissed!!.invoke()
                         // Reward earned, no dismiss callback → onEarnedReward already
                         // fired, nothing more to do (export watermark removal case).
@@ -630,7 +612,7 @@ class MainActivity : ComponentActivity() {
             }
         } ?: run {
             // Fallback: ad not loaded. Grant reward so user flows remain smooth,
-            // then fire the dismiss callback so callers like importVideoWithAd
+            // then fire the dismiss callback so callers like importVideoDirect
             // still proceed with the import.
             Toast.makeText(this, "Ad loading... Watermark unlocked instantly!", Toast.LENGTH_SHORT).show()
             onEarnedReward()

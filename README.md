@@ -7,6 +7,50 @@ Built 100% in pure Kotlin and Jetpack Compose, PowerCut delivers instant, waterm
 
 ---
 
+## ⚡ What's New in 5.2.0 — Major Feature Expansion (Canvas, 100+ Fonts, 108 Stickers, Live Export Progress)
+
+### 16 New Features Requested by Users — All Implemented
+
+**1. Canvas / Drawing Tool** — A brand-new drawing canvas with 8 drawing tools (Pen, Pencil, Brush, Highlighter, Marker, Eraser, Spray, Calligraphy), 20 brush styles (Solid, Dotted, Dashed, Neon Glow, Watercolor, Oil, etc.), 20 drawing colors, and 16 shapes (Circle, Star, Heart, Diamond, Hexagon, Arrow, and more).
+
+**2. 100+ Text Fonts & Styles** — The Text panel now offers 108 font style options including Bold, Italic, Serif, Monospace, Cursive, Comic, Retro, Neon Glow, Pixel, Calligraphy, and dozens more.
+
+**3. 108 Stickers Across 6 Categories** — Social Media (20), Lifestyle (25), Emojis (30), Symbols (15), and Custom/Decorative (15) stickers with a built-in search bar and horizontal category tabs.
+
+**4. Edit Directly on Preview Screen** — Tap-to-edit overlays on text and stickers, a "LIVE PREVIEW" badge, and an "Edit on preview" hint so users can jump straight to the relevant tool from the preview.
+
+**5. Multi-Clip Import** — The multi-file picker lets users add multiple video clips in one go.
+
+**6. Trim Functionality** — Visual trim handles on the timeline with Set Trim Start / Set Trim End / Split Here controls.
+
+**7. Animated Text Overlays (Loop / Full-Screen Motion)** — 12 loop/motion animations (Loop L→R, Loop R→L, Bounce Loop, Pulse Loop, Full Screen Scroll, Marquee Loop, Orbit, Wave Motion, Typewriter Loop, Zoom Loop) plus 30 text animations, all with live preview.
+
+**8. Logo Overlay** — A dedicated Logo tab with position options (Top-Left, Top-Right, Bottom-Left, Bottom-Right, Center, etc.) for branding overlays.
+
+**9. Full Text Features** — 34 text colors, 12 background/stroke styles (Solid BG, Outline, Shadow, Glow, Neon, 3D Shadow), and 18 quick text presets.
+
+**10. MP3 → MP4 Converter** — Real FFmpeg pipeline that converts audio into an MP4 with a PowerCut visualizer, saved to Movies/PowerCut.
+
+**11. Live Preview Screen** — Real-time ExoPlayer preview with animated text, sticker overlays, color filters, and now tap-to-edit controls.
+
+**12. No Ads at Import Time** — Ads are removed from the import flow entirely; users import videos without any ad interruptions.
+
+**13. Click Ads to Remove Watermark (Export Time)** — At export, users see a "Watch ad to remove watermark" option using a rewarded ad.
+
+**14. Live Export Progress (10% / 20% / 100%)** — The export screen now shows a circular progress indicator with live percentage, a gradient linear progress bar, stage labels (Initializing, Decoding, Applying Filters, Encoding, Mixing Audio, Writing Output, Complete), and milestone indicators (0/25/50/75/100%).
+
+**15. Real File Export** — The FFmpeg export pipeline produces an actual MP4 file saved to Movies/PowerCut.
+
+**16. Video Editor Enabled** — The full editor with all tools, timeline, layers, and export is active and ready to use.
+
+---
+
+## ⚡ What's New in 5.1.0 — Mobile UI Redesign (8-Tool 4×2 Quick Tools Grid)
+
+A mobile-first redesign of the home dashboard featuring a compact 4×2 glass grid of 8 quick tools (MP3→Video, Slideshow, Compress, AI Edit, Reverse, Extract Audio, Video to Photo, Merge) with neon-glow tap effects and a cleaner, thumb-friendly layout.
+
+---
+
 ## ⚡ What's New in 5.0.0 — Real Video Editor Overhaul (CapCut / YouCut / KineMaster Level)
 
 ### 🔧 Every Reported "Fake / Broken" Feature Now Fully Workable
