@@ -4,6 +4,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -632,14 +637,84 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // Text overlay
+                // Text overlay -- v5.0.0 LIVE PREVIEW ANIMATION
+                // Renders the text with a real Compose animation matching the
+                // selected textAnimationType so the user sees the effect live
+                // (the same effect is burned in at export via FFmpeg drawtext).
                 if (project.activeTextOverlay != null && layerTextVisible) {
+                    val animType = project.textAnimationType.lowercase()
+                    val transition = rememberInfiniteTransition(label = "textAnim")
+                    // Shared animated float 0..1 used by all effects
+                    val t = transition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 1800, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "t"
+                    ).value
+                    // Second float for staggered/jitter effects
+                    val t2 = transition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 600, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "t2"
+                    ).value
+
+                    // Compute per-animation modifiers
+                    val alpha = when (animType) {
+                        "fade", "fade in", "fadein" -> 0.25f + 0.75f * t
+                        else -> 1f
+                    }
+                    val scale = when (animType) {
+                        "zoom", "zoom in", "zoomin" -> 0.8f + 0.4f * t
+                        "pop" -> 0.9f + 0.2f * t
+                        else -> 1f
+                    }
+                    val offsetY = when (animType) {
+                        "bounce", "bounce in" -> (-12f * (1f - t)).dp
+                        "wave" -> (-6f * kotlin.math.sin(t * kotlin.math.PI.toFloat() * 2f)).dp
+                        else -> 0.dp
+                    }
+                    val offsetX = when (animType) {
+                        "slide", "slide in", "slidein" -> (-40f + 40f * t).dp
+                        "glitch" -> (4f * kotlin.math.sin(t2 * kotlin.math.PI.toFloat() * 8f)).dp
+                        else -> 0.dp
+                    }
+                    val textColor = when (animType) {
+                        "neon" -> Color.White.copy(alpha = 0.6f + 0.4f * t)
+                        else -> Color.White
+                    }
+                    val showCursor = animType == "typewriter" && (t2 < 0.5f)
+
                     Box(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
+                            .graphicsLayer {
+                                this.alpha = alpha
+                                this.scaleX = scale
+                                this.scaleY = scale
+                                this.translationX = offsetX.value
+                                this.translationY = offsetY.value
+                            }
                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Text(project.activeTextOverlay!!, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = project.activeTextOverlay!!,
+                                color = textColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (showCursor) {
+                                Spacer(Modifier.width(2.dp))
+                                Text("|", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
 
@@ -1562,7 +1637,7 @@ private fun CapCutToolPanel(
     ) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
             when (selectedTool) {
-                0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim)
+                0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame)
                 1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
@@ -1657,7 +1732,11 @@ private fun CapCutToolPanel(
 }
 
 
-// ─── 0. EDIT PANEL ─────────────────────────────────────────────
+// ─// v5.0.0 helper: 5-tuple for adjustment data (emoji, name, value, range, onChange)
+private data class Quint(val emoji: String, val name: String, val value: Float, val range: ClosedFloatingPointRange<Float>, val onChange: (Float) -> Unit)
+
+
+// ── 0. EDIT PANEL ─────────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EditPanel(
@@ -1670,7 +1749,17 @@ private fun EditPanel(
     onToggleFlipH: () -> Unit,
     onToggleFlipV: () -> Unit,
     onUpdateResolution: (String) -> Unit,
-    onUpdateTrim: (Long, Long) -> Unit
+    onUpdateTrim: (Long, Long) -> Unit,
+    onUpdateBrightness: (Float) -> Unit = {},
+    onUpdateContrast: (Float) -> Unit = {},
+    onUpdateSaturation: (Float) -> Unit = {},
+    onUpdateSharpen: (Float) -> Unit = {},
+    onUpdateTemperature: (Float) -> Unit = {},
+    onUpdateFade: (Float) -> Unit = {},
+    onUpdateVignette: (Float) -> Unit = {},
+    onUpdateGrain: (Float) -> Unit = {},
+    onToggleReverse: () -> Unit = {},
+    onUpdateFreezeFrame: (Long) -> Unit = {}
 ) {
     var editSubTab by remember { mutableStateOf("adjust") }
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -1689,22 +1778,35 @@ private fun EditPanel(
             "adjust" -> {
                 // CapCut style adjustments
                 Text("ADJUSTMENTS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                val adjustments = listOf(
-                    Triple("☀️", "Brightness", 0.5f),
-                    Triple("🔲", "Contrast", 0.5f),
-                    Triple("🎨", "Saturation", 0.5f),
-                    Triple("🔪", "Sharpness", 0.5f),
-                    Triple("🌡️", "Temperature", 0.5f),
-                    Triple("🌫️", "Fade", 0f),
-                    Triple("🌑", "Vignette", 0f),
-                    Triple("📸", "Grain", 0f)
+                // v5.0.0: Real wired adjustment sliders (no more empty onValueChange)
+                val adjData = listOf(
+                    Quint("☀️", "Brightness", project.imageEditorBrightness, 0f..1f, onUpdateBrightness),
+                    Quint("🔲", "Contrast", (project.imageEditorContrast / 2f).coerceIn(0f, 1f), 0f..1f, { v -> onUpdateContrast((v * 2f).coerceIn(0f, 2f)) }),
+                    Quint("🎨", "Saturation", (project.imageEditorSaturation / 2f).coerceIn(0f, 1f), 0f..1f, { v -> onUpdateSaturation((v * 2f).coerceIn(0f, 2f)) }),
+                    Quint("🔪", "Sharpness", project.imageEditorSharpen.coerceIn(0f, 1f), 0f..1f, onUpdateSharpen),
+                    Quint("🌡️", "Temperature", (project.imageEditorTemperature / 2f + 0.5f).coerceIn(0f, 1f), 0f..1f, { v -> onUpdateTemperature((v * 2f - 1f).coerceIn(-1f, 1f)) }),
+                    Quint("🌫️", "Fade", project.imageEditorFade.coerceIn(0f, 1f), 0f..1f, onUpdateFade),
+                    Quint("🌑", "Vignette", project.imageEditorVignette.coerceIn(0f, 1f), 0f..1f, onUpdateVignette),
+                    Quint("📸", "Grain", project.imageEditorGrain.coerceIn(0f, 1f), 0f..1f, onUpdateGrain)
                 )
-                adjustments.forEach { (emoji, name, defaultVal) ->
+                adjData.forEach { (emoji, name, value, range, onChange) ->
                     Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(emoji, fontSize = 12.sp)
                         Spacer(Modifier.width(6.dp))
                         Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(60.dp))
-                        Slider(value = defaultVal, onValueChange = {}, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(18.dp))
+                        Slider(value = value.coerceIn(range.start, range.endInclusive), onValueChange = onChange, valueRange = range, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(18.dp))
+                        Text("${(value * 100).toInt()}%", fontSize = 7.sp, color = NeonOrange, fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
+                    }
+                }
+                // Reset button
+                Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.End) {
+                    Box(Modifier.background(Color.White.copy(0.06f), RoundedCornerShape(6.dp)).clickable {
+                        onUpdateBrightness(0.5f); onUpdateContrast(1f); onUpdateSaturation(1f)
+                        onUpdateSharpen(0f); onUpdateTemperature(0f); onUpdateFade(0f)
+                        onUpdateVignette(0f); onUpdateGrain(0f)
+                        android.widget.Toast.makeText(ctx, "Adjustments reset!", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Text("↺ Reset All", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -1826,9 +1928,10 @@ private fun EditPanel(
                 }
             }
             "reverse" -> {
-                var isReversed by remember { mutableStateOf(false) }
+                // v5.0.0: Wired to project.isReverseEnabled + onToggleReverse
+                val isReversed = project.isReverseEnabled
                 Text("REVERSE VIDEO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(if (isReversed) CyberCyan.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (isReversed) CyberCyan.copy(0.3f) else Color.Transparent, RoundedCornerShape(8.dp)).clickable { isReversed = !isReversed; android.widget.Toast.makeText(ctx, if (isReversed) "Reverse applied!" else "Reverse removed!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().background(if (isReversed) CyberCyan.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (isReversed) CyberCyan.copy(0.3f) else Color.Transparent, RoundedCornerShape(8.dp)).clickable { onToggleReverse(); android.widget.Toast.makeText(ctx, if (!isReversed) "Reverse applied!" else "Reverse removed!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🔄", fontSize = 28.sp)
                         Text(if (isReversed) "Tap to Remove Reverse" else "Tap to Reverse Video", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isReversed) CyberCyan else Color.White)
@@ -1837,13 +1940,18 @@ private fun EditPanel(
                 }
             }
             "freeze" -> {
-                var isFrozen by remember { mutableStateOf(false) }
+                // v5.0.0: Wired to project.freezeFrameMs + onUpdateFreezeFrame
+                val isFrozen = project.freezeFrameMs > 0L
                 Text("FREEZE FRAME", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(if (isFrozen) CyberCyan.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (isFrozen) CyberCyan.copy(0.3f) else Color.Transparent, RoundedCornerShape(8.dp)).clickable { isFrozen = !isFrozen; android.widget.Toast.makeText(ctx, if (isFrozen) "Freeze at ${formatTime(project.trimStartMs)}!" else "Freeze removed!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🧊", fontSize = 28.sp)
-                        Text(if (isFrozen) "Tap to Remove Freeze" else "Freeze at Playhead", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isFrozen) CyberCyan else Color.White)
-                        Text(if (isFrozen) "Freeze is active" else "Creates still frame", fontSize = 8.sp, color = if (isFrozen) CyberCyan else Color.Gray)
+                if (isFrozen) {
+                    Text("Active: ${project.freezeFrameMs / 1000.0}s at ${formatTime(project.trimStartMs)}", fontSize = 7.sp, color = CyberCyan)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(0L, 250L, 500L, 1000L, 2000L, 3000L).forEach { ms ->
+                        val sel = project.freezeFrameMs == ms
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFreezeFrame(ms); android.widget.Toast.makeText(ctx, if (ms > 0L) "Freeze ${ms / 1000.0}s at ${formatTime(project.trimStartMs)}!" else "Freeze removed!", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(if (ms == 0L) "Off" else "${ms / 1000.0}s", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
                     }
                 }
             }
@@ -2156,7 +2264,12 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
 private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit) {
     var filterCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("CINEMATIC FILTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("CINEMATIC FILTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Real FFmpeg", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            }
+        }
         // Category tabs
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("all" to "All", "basic" to "Basic", "cinema" to "Cinema", "film" to "Film", "vintage" to "Vintage", "mood" to "Mood", "neon" to "Neon").forEach { (id, label) ->
@@ -2227,7 +2340,12 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var effectCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("SUPER EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("SUPER EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            Box(Modifier.background(NeonOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Real FFmpeg", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            }
+        }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon", "magic" to "Magic").forEach { (id, label) ->
                 val sel = effectCategory == id
@@ -2391,7 +2509,12 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
 @Composable
 private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TEXT ANIMATIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("TEXT ANIMATIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Live Preview + FFmpeg", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            }
+        }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             listOf(
                 "none", "fade", "fade_out", "fade_in_out", "typewriter", "typewriter_fast",
