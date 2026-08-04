@@ -269,7 +269,12 @@ class MainActivity : ComponentActivity() {
                                     // actually sees progress / success / error when MP3->MP4, Slideshow,
                                     // Compress or AI Edit runs.
                                     quickToolState = exportState,
-                                    quickToolProgress = exportProgress
+                                    quickToolProgress = exportProgress,
+                                    // v6.0.0 Premium launcher — top bar buttons rendered inside HomeScreen
+                                    onAiHub = { showAiHub = true },
+                                    onSocialPresets = { showSocialPresets = true },
+                                    onProTier = { showProTier = true },
+                                    onPremiumStudio = { showPremiumStudio = true }
                                 )
                             }
                             "editor" -> {
@@ -479,14 +484,6 @@ class MainActivity : ComponentActivity() {
                                 onExit = { showPremiumStudio = false }
                             )
                         }
-
-                        // v6.0.0 Floating Premium launcher bar (bottom)
-                        PowerCutPremiumLauncherBar(
-                            onAiHub = { showAiHub = true },
-                            onSocialPresets = { showSocialPresets = true },
-                            onProTier = { showProTier = true },
-                            onPremiumStudio = { showPremiumStudio = true }
-                        )
                     }
                 }
             }
