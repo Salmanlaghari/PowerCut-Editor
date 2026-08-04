@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                         val currentDashboardTab by viewModel.currentDashboardTab.collectAsState()
                         val project by viewModel.currentProject.collectAsState()
                         val exportState by viewModel.exportState.collectAsState()
+                        val exportProgress by viewModel.exportProgress.collectAsState()
 
                         val settingsRes by viewModel.selectedResolution.collectAsState()
                         val settingsFps by viewModel.selectedFps.collectAsState()
@@ -236,7 +237,12 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onApplyAiEdit = { videoUri ->
                                         viewModel.applyAiEdit(videoUri)
-                                    }
+                                    },
+                                    // v4.6.0: pass quick-tool export feedback to HomeScreen so the user
+                                    // actually sees progress / success / error when MP3->MP4, Slideshow,
+                                    // Compress or AI Edit runs.
+                                    quickToolState = exportState,
+                                    quickToolProgress = exportProgress
                                 )
                             }
                             "editor" -> {

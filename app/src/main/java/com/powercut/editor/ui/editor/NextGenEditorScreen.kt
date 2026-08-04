@@ -146,6 +146,100 @@ private fun buildFilterMatrix(filter: String): ColorMatrix? {
     }
 }
 
+// ============================================================================
+//  v4.6.0 PREMIUM LOOK PREVIEW MATRIX
+//  Parses a PremiumLook's real FFmpeg chain (eq / colorbalance / saturation)
+//  into an approximate Compose ColorMatrix so the look is VISIBLE in the
+//  real-time editor preview - not only at export. This makes every HDR /
+//  iPhone / Bright / Cinema / Magic look "select for real" in the preview.
+//  (unsharp / boxblur / curves are sharpen/blurring ops with no direct
+//   ColorMatrix equivalent, so we approximate their *tone* contribution via
+//   the eq/contrast/saturation/colorbalance parts that DO map cleanly.)
+// ============================================================================
+private fun premiumLookPreviewMatrix(lookId: String): ColorMatrix? {
+    val chain = com.powercut.editor.domain.look.PremiumLooks.chainFor(lookId)
+    if (chain.isBlank()) return null
+
+    // Defaults that match FFmpeg eq defaults.
+    var brightness = 0f      // eq brightness add (0..1), default 0
+    var contrast = 1f        // eq contrast multiplier, default 1
+    var saturation = 1f      // eq saturation multiplier, default 1
+    var cbRs = 0f; var cbGs = 0f; var cbBs = 0f   // colorbalance shadows r/g/b
+    var cbRm = 0f; var cbGm = 0f; var cbBm = 0f   // colorbalance midtones r/g/b
+    var grayscale = false
+
+    for (filter in chain.split(",")) {
+        val f = filter.trim()
+        when {
+            f.startsWith("eq=") -> {
+                for (kv in f.removePrefix("eq=").split(":")) {
+                    val p = kv.split("=")
+                    if (p.size != 2) continue
+                    val k = p[0].trim(); val v = p[1].trim().toFloatOrNull() ?: continue
+                    when (k) {
+                        "brightness" -> brightness = v
+                        "contrast" -> contrast = v
+                        "saturation" -> { saturation = v; if (v == 0f) grayscale = true }
+                    }
+                }
+            }
+            f.startsWith("colorbalance=") -> {
+                for (kv in f.removePrefix("colorbalance=").split(":")) {
+                    val p = kv.split("=")
+                    if (p.size != 2) continue
+                    val k = p[0].trim(); val v = p[1].trim().toFloatOrNull() ?: continue
+                    when (k) {
+                        "rs" -> cbRs = v; "gs" -> cbGs = v; "bs" -> cbBs = v
+                        "rm" -> cbRm = v; "gm" -> cbGm = v; "bm" -> cbBm = v
+                    }
+                }
+            }
+        }
+    }
+
+    // If nothing meaningful parsed, bail (let other adjustments show alone).
+    val hasEq = brightness != 0f || contrast != 1f || saturation != 1f
+    val hasCb = cbRs != 0f || cbGs != 0f || cbBs != 0f || cbRm != 0f || cbGm != 0f || cbBm != 0f
+    if (!hasEq && !hasCb) return null
+
+    // Build a 4x5 ColorMatrix approximation.
+    // FFmpeg eq contrast scales around 0.5 mid-point: out = (in - 0.5)*c + 0.5 + b
+    // In 0..255 ColorMatrix terms: scale = c, add = (0.5 - 0.5*c)*255 + b*255
+    val contrastShift = (0.5f - 0.5f * contrast) * 255f
+    val brightnessAdd = brightness * 255f
+
+    // colorbalance values are in roughly -1..1; map to a +-~40 channel add and
+    // a small channel scale so warm/cool tints show clearly in preview.
+    val rShift = (cbRs + cbRm) * 38f
+    val gShift = (cbGs + cbGm) * 38f
+    val bShift = (cbBs + cbBm) * 38f
+
+    val mat = if (grayscale) {
+        // saturation=0 -> pure grayscale, then apply contrast/brightness/tint.
+        val gray = ColorMatrix().apply { setToSaturation(0f) }
+        val tone = ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, contrastShift + brightnessAdd + rShift,
+            0f, contrast, 0f, 0f, contrastShift + brightnessAdd + gShift,
+            0f, 0f, contrast, 0f, contrastShift + brightnessAdd + bShift,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        gray *= tone
+        gray
+    } else {
+        // Saturation via setToSaturation, then contrast/brightness/tint on top.
+        val sat = ColorMatrix().apply { setToSaturation(saturation) }
+        val tone = ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, contrastShift + brightnessAdd + rShift,
+            0f, contrast, 0f, 0f, contrastShift + brightnessAdd + gShift,
+            0f, 0f, contrast, 0f, contrastShift + brightnessAdd + bShift,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        sat *= tone
+        sat
+    }
+    return mat
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 //  NEXTGEN EDITOR — CapCut-Level Professional Video Editor
@@ -362,12 +456,18 @@ fun NextGenEditorScreen(
     // ═══════════════════════════════════════════════════════════
     val combinedColorFilter = remember(
         project.selectedFilter,
+        project.activePremiumLook,
         project.imageEditorBrightness,
         project.imageEditorContrast,
         project.imageEditorSaturation,
         project.imageEditorTemperature,
         project.imageEditorExposure
     ) {
+        // v4.6.0: preview matrix for the active Premium Look (HDR/iPhone/Bright/
+        // Cinema/Magic). Composed in so the look is VISIBLE in real-time preview,
+        // not only applied at export.
+        val lookMatrix = premiumLookPreviewMatrix(project.activePremiumLook)
+
         val b = project.imageEditorBrightness
         val c = project.imageEditorContrast
         val s = project.imageEditorSaturation
@@ -375,8 +475,22 @@ fun NextGenEditorScreen(
         val e = project.imageEditorExposure
         val hasAdjustments = b != 1f || c != 1f || s != 1f || t != 1f || e != 1f
 
-        if (!hasAdjustments) {
+        if (!hasAdjustments && lookMatrix == null) {
             colorFilter
+        } else if (!hasAdjustments && lookMatrix != null) {
+            // Only a premium look is active (no slider adjustments).
+            if (colorFilter != null) {
+                val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
+                val filterMatrix = buildFilterMatrix(f)
+                if (filterMatrix != null) {
+                    filterMatrix *= lookMatrix
+                    ColorFilter.colorMatrix(filterMatrix)
+                } else {
+                    ColorFilter.colorMatrix(lookMatrix)
+                }
+            } else {
+                ColorFilter.colorMatrix(lookMatrix)
+            }
         } else {
             // Build a combined matrix: adjustments applied on top of filter
             val brightnessShift = (b - 1f) * 100f
@@ -394,6 +508,11 @@ fun NextGenEditorScreen(
             ))
             val satMatrix = ColorMatrix().apply { setToSaturation(s) }
             adjMatrix *= satMatrix
+
+            // v4.6.0: compose the premium look preview matrix on top of adjustments
+            if (lookMatrix != null) {
+                adjMatrix *= lookMatrix
+            }
 
             // If there's also a filter, combine them
             if (colorFilter != null) {

@@ -1,35 +1,30 @@
-# PowerCut Editor v4.5.0 — Premium Quick Tools & Workable Editor Panels
+# PowerCut Editor v4.6.0 — Quick Tools Feedback UI + Premium Looks Real-Time Preview
 
-## Section 1: Investigation & Planning
-- [x] Create feature branch `feature/premium-quicktools-v4.5.0` from main
-- [x] Scan HomeScreen.kt quick tools section (Slideshow, Compress, AI Edit = fake)
-- [x] Scan NextGenEditorScreen.kt all panels for placeholder/fake options
-- [x] Cross-reference panel options against VideoProcessor.kt real FFmpeg chains
-  - MISMATCH: VignetteStylesPanel UI (classic/reverse/colored/blur/spotlight) vs chain (soft/strong/extreme/subtle/circular/inverted/oval)
-  - MISMATCH: BorderStylesPanel UI (neon/gradient/vintage/modern/minimal/glow) vs chain (neon_frame/vintage_frame/gold_frame/thin_white/thick_white/thick_black)
+## User Feedback (Roman Urdu)
+1. Quick tools (MP3→MP4, Slideshow, Compress, AI Edit): file select karne ke baad
+   "agayi screen par kuch nahi aata" — koi progress/success/error feedback nahi.
+2. Editor mein Brightness/Sharp/HDR/iPhone layers "kam ziyada nahin ho rahy /
+   select nahin ho rahe" — looks real-time preview mein nahi dikhte (sirf Toast).
 
-## Section 2: Make Quick Tools Workable (HomeScreen.kt)
-- [x] Add necessary ViewModel + ExportManager + VideoProcessor methods
-- [x] Make Slideshow quick tool workable (image picker → FFmpeg slideshow → gallery)
-- [x] Make Compress quick tool workable (video picker → FFmpeg compress → gallery)
-- [x] Make AI Edit quick tool workable (video picker → apply premium look → gallery)
-- [x] Make all 4 quick tools premium 3D card buttons (PRO badge, accent colors, Workable label)
-- [x] Wire 3 new quick-tool callbacks in MainActivity.kt
+## Root Causes
+1. HomeScreen ko exportState/exportProgress pass NAHI hota → koi feedback UI.
+2. combinedColorFilter preview mein activePremiumLook use NAHI hota → looks
+   preview mein invisible (export pe apply hote hain, lekin preview pe nahi).
 
-## Section 3: Fix Editor Panel Placeholders (NextGenEditorScreen.kt)
-- [x] VignetteStylesPanel: added classic/reverse/colored/blur/spotlight chains
-- [x] BorderStylesPanel: added neon/gradient/vintage/modern/minimal/glow chains
-- [x] TemplatePanel: 19 templates now map to distinct real FFmpeg grades (templateChain)
-- [x] EffectsPanel: added face_blur chain
+## Section 1: Quick Tools Feedback UI (HomeScreen)
+- [x] HomeScreen/DashboardView ko exportState + exportProgress params add karo
+- [x] MainActivity se exportState/exportProgress HomeScreen ko pass karo
+- [x] DashboardView mein premium progress + success/error overlay/card banao
+      (loading spinner + progress %, success "Saved to Movies/PowerCut ✓",
+       error message with retry)
 
-## Section 4: Version & Docs
-- [x] Bump version to 4.5.0 (versionCode 10) in app/build.gradle.kts
-- [x] Update README.md with v4.5.0 "What's New" section
-- [x] strings.xml: no new keys needed (quick tools use hardcoded strings)
+## Section 2: Premium Looks Real-Time Preview (NextGenEditorScreen)
+- [x] PremiumLook.kt mein har look ke liye preview ColorMatrix approx add karo (premiumLookPreviewMatrix in NextGenEditorScreen parses ffmpegChain)
+      (previewColorMatrix field) — eq/curves/colorbalance approx
+- [x] NextGenEditorScreen combinedColorFilter mein activePremiumLook ka matrix compose kiya (reactive via remember key)
+      compose karo taaki HDR/iPhone/Bright/Cinema/Magic looks preview mein dikhein
 
-## Section 5: Push, Merge, Build
-- [ ] Commit all changes
-- [ ] Push branch to GitHub
-- [ ] Create PR via gh CLI
-- [ ] Merge PR
-- [ ] Verify CI build passes (Build Signed APK & AAB)
+## Section 3: Version, Docs, Push, Merge, Build
+- [x] Bump version 4.5.0 → 4.6.0 (versionCode 10 → 11)
+- [x] Update README v4.6.0 What's New
+- [ ] Commit, push branch, create PR, merge, verify CI

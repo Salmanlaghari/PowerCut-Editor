@@ -87,7 +87,10 @@ fun HomeScreen(
     // v4.5.0 Premium Quick Tools (workable, not fake)
     onCompressVideo: (android.net.Uri) -> Unit = {},
     onCreateSlideshow: (List<android.net.Uri>) -> Unit = {},
-    onApplyAiEdit: (android.net.Uri) -> Unit = {}
+    onApplyAiEdit: (android.net.Uri) -> Unit = {},
+    // v4.6.0: quick-tool export feedback (so the user SEES progress + result)
+    quickToolState: com.powercut.editor.core.base.Resource<String> = com.powercut.editor.core.base.Resource.Idle,
+    quickToolProgress: Int = -1
 ) {
     var isAppLoadingIntro by remember { mutableStateOf(true) }
     var activeClickedTemplate by remember { mutableStateOf<Template?>(null) }
@@ -307,7 +310,9 @@ fun HomeScreen(
                             onConvertMp3ToMp4 = onConvertMp3ToMp4,
                             onCompressVideo = onCompressVideo,
                             onCreateSlideshow = onCreateSlideshow,
-                            onApplyAiEdit = onApplyAiEdit
+                            onApplyAiEdit = onApplyAiEdit,
+                            quickToolState = quickToolState,
+                            quickToolProgress = quickToolProgress
                         )
                         "templates" -> TemplatesView(
                             language = language,
@@ -470,7 +475,10 @@ fun DashboardView(
     onConvertMp3ToMp4: (android.net.Uri) -> Unit,
     onCompressVideo: (android.net.Uri) -> Unit,
     onCreateSlideshow: (List<android.net.Uri>) -> Unit,
-    onApplyAiEdit: (android.net.Uri) -> Unit
+    onApplyAiEdit: (android.net.Uri) -> Unit,
+    // v4.6.0: quick-tool export feedback
+    quickToolState: com.powercut.editor.core.base.Resource<String> = com.powercut.editor.core.base.Resource.Idle,
+    quickToolProgress: Int = -1
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val pickerLauncher = rememberLauncherForActivityResult(
@@ -574,6 +582,127 @@ fun DashboardView(
             .fillMaxSize()
             .padding(horizontal = 20.dp)
     ) {
+        // ★ v4.6.0 QUICK-TOOL EXPORT FEEDBACK CARD — progress / success / error
+        // so the user actually SEES that MP3→MP4 / Slideshow / Compress / AI Edit ran.
+        item {
+            when (val s = quickToolState) {
+                is com.powercut.editor.core.base.Resource.Loading -> {
+                    val pct = if (quickToolProgress in 0..100) quickToolProgress else 0
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 4.dp)
+                            .glassCard3D(
+                                shape = RoundedCornerShape(14.dp),
+                                glowColor = CyberCyan,
+                                backColor = GlassBackground
+                            )
+                            .border(1.dp, CyberCyan.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(22.dp),
+                                color = CyberCyan
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Processing\u2026",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { pct / 100f },
+                                    color = CyberCyan,
+                                    trackColor = Color.White.copy(alpha = 0.1f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "$pct%  \u2022  saving to Movies/PowerCut",
+                                    fontSize = 9.sp,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+                is com.powercut.editor.core.base.Resource.Success<*> -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 4.dp)
+                            .glassCard3D(
+                                shape = RoundedCornerShape(14.dp),
+                                glowColor = Color(0xFF2DD4BF),
+                                backColor = GlassBackground
+                            )
+                            .border(1.dp, Color(0xFF2DD4BF).copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("\u2705", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Done! Saved to Movies/PowerCut",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2DD4BF)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "Your file is ready in the gallery.",
+                                    fontSize = 9.sp,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+                is com.powercut.editor.core.base.Resource.Error -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 4.dp)
+                            .glassCard3D(
+                                shape = RoundedCornerShape(14.dp),
+                                glowColor = Color(0xFFFF5252),
+                                backColor = GlassBackground
+                            )
+                            .border(1.dp, Color(0xFFFF5252).copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("\u26a0\ufe0f", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Something went wrong",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF5252)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    s.message,
+                                    fontSize = 9.sp,
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> { /* Idle \u2014 nothing to show */ }
+            }
+        }
         // ★ NextGen 2027 PRO badge row
         item {
             Spacer(modifier = Modifier.height(6.dp))
