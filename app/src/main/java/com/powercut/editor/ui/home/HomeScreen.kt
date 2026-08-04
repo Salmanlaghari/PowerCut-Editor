@@ -816,7 +816,11 @@ fun DashboardView(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     tools.take(4).forEach { tool ->
-                        QuickToolCard(tool, selectedQuickTool == tool.id) {
+                        QuickToolCard(
+                            tool = tool,
+                            isSelected = selectedQuickTool == tool.id,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             selectedQuickTool = if (selectedQuickTool == tool.id) null else tool.id
                         }
                     }
@@ -827,7 +831,11 @@ fun DashboardView(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     tools.drop(4).forEach { tool ->
-                        QuickToolCard(tool, selectedQuickTool == tool.id) {
+                        QuickToolCard(
+                            tool = tool,
+                            isSelected = selectedQuickTool == tool.id,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             selectedQuickTool = if (selectedQuickTool == tool.id) null else tool.id
                         }
                     }
@@ -1978,11 +1986,11 @@ fun BottomTabItem(
 private fun QuickToolCard(
     tool: QuickTool,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Box(
-        modifier = Modifier
-            .weight(1f)
+        modifier = modifier
             .height(88.dp)
             .glassCard3D(
                 shape = RoundedCornerShape(16.dp),
