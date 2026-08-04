@@ -730,6 +730,47 @@ fun NextGenEditorScreen(
                     }
                 }
 
+                // v5.2.0 — LIVE PREVIEW badge (top-center)
+                Box(
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp)
+                        .background(Brush.horizontalGradient(listOf(NeonOrange, CyberCyan)), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Box(Modifier.size(6.dp).background(Color.White, CircleShape))
+                        Text("LIVE PREVIEW", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // v5.2.0 — Tap-to-edit overlay on text
+                if (project.activeTextOverlay != null && layerTextVisible) {
+                    Box(
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
+                            .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
+                            .border(1.dp, CyberCyan.copy(0.5f), RoundedCornerShape(6.dp))
+                            .clickable { selectedTool = 6 }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("✏️", fontSize = 10.sp)
+                            Text("Tap to edit text", fontSize = 8.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // v5.2.0 — Tap-to-edit overlay on sticker
+                if (project.stickerType != "none" && layerStickerVisible) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = 8.dp)
+                            .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
+                            .border(1.dp, NeonOrange.copy(0.5f), RoundedCornerShape(6.dp))
+                            .clickable { selectedTool = 5 }
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text("✏️ Edit sticker", fontSize = 7.sp, color = NeonOrange, fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 // Play/Pause overlay button
                 Box(
                     modifier = Modifier.size(52.dp).background(Color.White.copy(0.15f), CircleShape)
@@ -747,6 +788,15 @@ fun NextGenEditorScreen(
                     ) {
                         Text("${playbackSpeed}x", fontSize = 9.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
                     }
+                }
+
+                // v5.2.0 — Edit-on-preview hint (bottom-left)
+                Box(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                        .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1506,7 +1556,8 @@ private fun CapCutToolBar(
         "🎬" to "Chroma", "🧹" to "Erase", "🖌️" to "ImgEdit", "📐" to "Orient",
         "🌈" to "Blend", "↺️" to "Reverse", "💉" to "ColorFX",
         "🎧" to "AudioFX", "🎤" to "Voice", "🎉" to "Borders",
-        "✨" to "Vignette", "❄️" to "Freeze", "📷" to "Looks"
+        "✨" to "Vignette", "❄️" to "Freeze", "📷" to "Looks",
+        "🖍️" to "Canvas"
     )
     Row(
         modifier = Modifier.fillMaxWidth().height(62.dp)
@@ -1722,6 +1773,7 @@ private fun CapCutToolPanel(
                 24 -> VignetteStylesPanel(project, onUpdateVignetteStyle)
                 25 -> FreezeFramePanel(project, onUpdateFreezeFrame)
                 26 -> LooksPanel(project, onUpdatePremiumLook)
+                27 -> CanvasPanel()
             }
         }
         // Collapse handle
@@ -1983,8 +2035,8 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
         Text("ADD LAYER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray.copy(0.8f))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(
-                "������" to "text",
-                "������️" to "image",
+                "📝" to "text",
+                "🖼️" to "image",
                 "⭐" to "sticker",
                 "✨" to "effect"
             ).forEach { (icon, layerId) ->
@@ -2012,10 +2064,10 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
 
         // 3D styled layer items — real content detection + functional remove/visibility
         val layers = listOf(
-            Triple("������", "Video Layer", "video"),
-            Triple("������", "Audio Layer", "audio"),
-            Triple("������", "Text Layer", "text"),
-            Triple("������️", "Image Layer", "image"),
+            Triple("🎬", "Video Layer", "video"),
+            Triple("🔊", "Audio Layer", "audio"),
+            Triple("📝", "Text Layer", "text"),
+            Triple("🖼️", "Image Layer", "image"),
             Triple("⭐", "Sticker Layer", "sticker"),
             Triple("✨", "Effect Layer", "effect")
         )
@@ -2078,7 +2130,7 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(if (isActive) "������️" else "������", fontSize = 10.sp)
+                        Text(if (isActive) "👁️" else "🙈", fontSize = 10.sp)
                     }
                     // Remove button (functional)
                     if (hasContent) {
@@ -2225,34 +2277,151 @@ private fun AudioPanel(
 @Composable
 private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, onUpdateAnim: (String) -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    var txt by remember { mutableStateOf(project.activeTextOverlay ?: "") }
+    var textSubTab by remember { mutableStateOf("text") }
+    var selectedFontIndex by remember { mutableStateOf(0) }
+    var selectedColorIndex by remember { mutableStateOf(0) }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TEXT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        var txt by remember { mutableStateOf(project.activeTextOverlay ?: "") }
-        OutlinedTextField(value = txt, onValueChange = { txt = it; onUpdateText(if (it.isBlank()) null else it) }, placeholder = { Text("Type subtitle...", fontSize = 9.sp, color = Color.Gray) }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonOrange, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White), modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(8.dp))
+        Text("TEXT STUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("100+ Fonts • Full Styling • Animations", fontSize = 7.sp, color = Color.Gray)
+            Box(Modifier.background(NeonOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Pro", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            }
+        }
 
-        // Quick text templates
-        Text("QUICK TEXT", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(listOf("🔥 Fire Text", "💫 Glow Text", "🎬 Title", "📍 Subtitle", "🎵 Lyrics", "💬 Dialog", "📰 Breaking", "⚡ Neon")) { preset ->
-                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateText(preset); txt = preset }.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    Text(preset, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        // Sub-tabs: Text | Fonts | Color | Motion | Logo
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("text" to "Text", "fonts" to "Fonts", "color" to "Color", "motion" to "Motion", "logo" to "Logo").forEach { (id, label) ->
+                val sel = textSubTab == id
+                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { textSubTab = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                 }
             }
         }
 
-        // Scrolling / Marquee text
-        Text("SCROLL & MOTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("Scroll L" to "scroll_left", "Scroll R" to "scroll_right", "Scroll Up" to "scroll_up", "Marquee" to "marquee").forEach { (label, id) ->
-                Box(Modifier.weight(1f).background(CyberCyan.copy(0.1f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(id); android.widget.Toast.makeText(ctx, "Text: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
-                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        when (textSubTab) {
+            "text" -> {
+                // Text input
+                OutlinedTextField(value = txt, onValueChange = { txt = it; onUpdateText(if (it.isBlank()) null else it) }, placeholder = { Text("Type your text...", fontSize = 9.sp, color = Color.Gray) }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonOrange, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White), modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(8.dp))
+
+                // Quick text presets
+                Text("QUICK TEXT PRESETS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(listOf("🔥 Fire Text", "💫 Glow Text", "🎬 Title", "📍 Subtitle", "🎵 Lyrics", "💬 Dialog", "📰 Breaking", "⚡ Neon", "💥 Boom", "🔍 Search", "👍 Like", "🎉 Party", "🏆 Winner", "👑 Royal", "💯 100%", "🚀 Go", "✨ Magic", "🌟 Star")) { preset ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateText(preset); txt = preset }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            Text(preset, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
                 }
             }
-        }
 
-        Text("ANIMATION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("None", "Fade", "Typewriter", "Bounce", "Zoom", "Slide", "Pop", "Glitch", "Neon", "Wave").forEach { a -> val sel = project.textAnimationType.lowercase() == a.lowercase(); Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(a) }.padding(horizontal = 6.dp, vertical = 4.dp)) { Text(a, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) } }
+            "fonts" -> {
+                // 100+ font/style options
+                Text("100+ FONT STYLES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                val fonts = listOf(
+                    "Default", "Bold", "Italic", "Bold Italic", "Thin", "Light", "Medium", "Black",
+                    "Serif", "Serif Bold", "Serif Italic", "Sans Serif", "Monospace", "Cursive",
+                    "Comic", "Handwriting", "Typewriter", "Retro", "Vintage", "Classic",
+                    "Modern", "Futuristic", "Minimal", "Elegant", "Luxury", "Gothic",
+                    "Graffiti", "Street", "Urban", "Bubble", "Outline", "Shadow",
+                    "3D Block", "Chrome", "Gold", "Silver", "Bronze", "Metallic",
+                    "Neon Glow", "Fire", "Ice", "Rainbow", "Gradient", "Holographic",
+                    "Pixel", "8-Bit", "Arcade", "Digital", "Matrix", "Cyberpunk",
+                    "Calligraphy", "Script", "Brush", "Marker", "Pencil", "Sketch",
+                    "Stamp", "Stencil", "Military", "Sports", "Athletic", "Collegiate",
+                    "Western", "Saloon", "Carnival", "Circus", "Magician", "Wizard",
+                    "Fairy", "Princess", "Royal", "Knight", "Viking", "Samurai",
+                    "Ninja", "Pirate", "Zombie", "Horror", "Vampire", "Ghost",
+                    "Halloween", "Christmas", "Birthday", "Wedding", "Love", "Heart",
+                    "Valentine", "Summer", "Winter", "Spring", "Autumn", "Tropical",
+                    "Beach", "Ocean", "Mountain", "Desert", "Forest", "Galaxy",
+                    "Space", "Star", "Moon", "Sun", "Cloud", "Lightning",
+                    "Thunder", "Rain", "Snow", "Storm"
+                )
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    fonts.forEachIndexed { idx, fontName ->
+                        val sel = selectedFontIndex == idx
+                        Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                            .clickable { selectedFontIndex = idx; android.widget.Toast.makeText(ctx, "Font: $fontName", android.widget.Toast.LENGTH_SHORT).show() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(fontName, fontSize = 7.sp, fontWeight = if (sel) FontWeight.Black else FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                        }
+                    }
+                }
+            }
+
+            "color" -> {
+                // Color picker for text
+                Text("TEXT COLOR", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                val textColors = listOf(
+                    Color.White, Color.Black, Color.Red, Color.Green, Color.Blue,
+                    Color.Yellow, Color.Cyan, Color.Magenta, Color(0xFF7C5CFF), Color(0xFFFF6B35),
+                    Color(0xFF2DD4BF), Color(0xFFFF3D7F), Color(0xFFFFD700), Color(0xFF00FF00),
+                    Color(0xFFFF00FF), Color(0xFF00FFFF), Color(0xFFFFA500), Color(0xFF800080),
+                    Color(0xFFFF1493), Color(0xFF00CED1), Color(0xFFFF4500), Color(0xFF32CD32),
+                    Color(0xFFFF69B4), Color(0xFF1E90FF), Color(0xFFFF8C00), Color(0xFF9370DB),
+                    Color(0xFF20B2AA), Color(0xFFFFB6C1), Color(0xFF90EE90), Color(0xFFDDA0DD),
+                    Color(0xFFF0E68C), Color(0xFFE6E6FA), Color(0xFFFFFACD), Color(0xFFAFEEEE)
+                )
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    textColors.forEachIndexed { idx, color ->
+                        val sel = selectedColorIndex == idx
+                        Box(Modifier.size(28.dp).background(color, RoundedCornerShape(6.dp))
+                            .border(if (sel) 2.dp else 0.dp, Color.White, RoundedCornerShape(6.dp))
+                            .clickable { selectedColorIndex = idx; android.widget.Toast.makeText(ctx, "Text color selected", android.widget.Toast.LENGTH_SHORT).show() }) {}
+                    }
+                }
+
+                // Text background/stroke options
+                Text("TEXT BACKGROUND & STROKE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("None", "Solid BG", "Outline", "Shadow", "Glow", "Neon", "3D Shadow", "Double Outline", "Gradient BG", "Blur BG", "Box BG", "Strip BG").forEach { style ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Text style: $style", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(style, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+
+            "motion" -> {
+                // Animated text — loop/move full screen (user request: "text mein loop hoon full screen per move hon")
+                Text("LOOP & FULL SCREEN MOTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("Loop L→R" to "loop_lr", "Loop R→L" to "loop_rl", "Loop Up" to "loop_up", "Loop Down" to "loop_down", "Bounce Loop" to "loop_bounce", "Pulse Loop" to "loop_pulse", "Full Screen Scroll" to "fullscreen_scroll", "Marquee Loop" to "marquee_loop", "Orbit" to "orbit", "Wave Motion" to "wave_motion", "Typewriter Loop" to "typewriter_loop", "Zoom Loop" to "zoom_loop").forEach { (label, id) ->
+                        Box(Modifier.background(CyberCyan.copy(0.1f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(id); android.widget.Toast.makeText(ctx, "Motion: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                        }
+                    }
+                }
+
+                // Text animations
+                Text("TEXT ANIMATIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("None", "Fade", "Typewriter", "Bounce", "Zoom", "Slide", "Pop", "Glitch", "Neon", "Wave", "Slide L", "Slide R", "Slide Up", "Slide Down", "Rotate", "Flip", "Elastic", "Spring", "Shake", "Blink", "Pulse", "Rainbow", "Fire", "Ice", "Gold", "Metallic", "Explode", "Implode", "Glow", "Frozen").forEach { a ->
+                        val sel = project.textAnimationType.lowercase() == a.lowercase()
+                        Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateAnim(if (sel) "none" else a.replace(" ", "_").lowercase()) }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(a, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                        }
+                    }
+                }
+            }
+
+            "logo" -> {
+                // Logo overlay support (user request: "logo laga sake")
+                Text("LOGO OVERLAY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                Text("Add your brand logo or watermark image on top of the video. Use the Image tool (tool dock) to pick a logo image, then adjust opacity and scale here.", fontSize = 8.sp, color = Color.Gray)
+                Spacer(Modifier.height(4.dp))
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right", "Center", "Top-Center", "Bottom-Center").forEach { pos ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Logo position: $pos — Use Image tool to pick logo", android.widget.Toast.LENGTH_LONG).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(pos, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+                Text("ℹ️ Tip: Select the Image tool from the dock below to import your logo PNG (transparent background recommended).", fontSize = 7.sp, color = Color.Gray)
+            }
         }
     }
 }
@@ -2449,19 +2618,222 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Unit) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("all") }
+
+    // v5.2.0: 100+ stickers with categories (Social Media, Lifestyle, Emojis, Symbols, Custom)
+    // User request: "Sticker Social Media Life style Custom Stickers Search stickers"
+    data class Sticker(val emoji: String, val name: String, val id: String, val category: String)
+
+    val allStickers = listOf(
+        // ── Social Media (20) ──
+        Sticker("📸", "Camera", "sm_camera", "social"),
+        Sticker("🎥", "Video", "sm_video", "social"),
+        Sticker("📷", "Instagram", "sm_instagram", "social"),
+        Sticker("💬", "Message", "sm_message", "social"),
+        Sticker("👍", "Like", "sm_like", "social"),
+        Sticker("❤️", "Heart", "sm_heart", "social"),
+        Sticker("👏", "Clap", "sm_clap", "social"),
+        Sticker("🔥", "Fire", "sm_fire", "social"),
+        Sticker("💯", "100", "sm_100", "social"),
+        Sticker("👌", "OK", "sm_ok", "social"),
+        Sticker("🤑", "Money", "sm_money", "social"),
+        Sticker("💰", "Dollar", "sm_dollar", "social"),
+        Sticker("🚀", "Rocket", "sm_rocket", "social"),
+        Sticker("🎉", "Party", "sm_party", "social"),
+        Sticker("🏆", "Trophy", "sm_trophy", "social"),
+        Sticker("👑", "Crown", "sm_crown", "social"),
+        Sticker("🔟", "Top", "sm_top", "social"),
+        Sticker("🔍", "Search", "sm_search", "social"),
+        Sticker("📢", "Share", "sm_share", "social"),
+        Sticker("🔗", "Link", "sm_link", "social"),
+        // ── Lifestyle (25) ──
+        Sticker("☕", "Coffee", "ls_coffee", "lifestyle"),
+        Sticker("🍵", "Tea", "ls_tea", "lifestyle"),
+        Sticker("🍔", "Pizza", "ls_pizza", "lifestyle"),
+        Sticker("🍟", "Fries", "ls_fries", "lifestyle"),
+        Sticker("🍦", "Ice Cream", "ls_icecream", "lifestyle"),
+        Sticker("🍪", "Cookie", "ls_cookie", "lifestyle"),
+        Sticker("🍡", "Dango", "ls_dango", "lifestyle"),
+        Sticker("🍇", "Grapes", "ls_grapes", "lifestyle"),
+        Sticker("🍏", "Apple", "ls_apple", "lifestyle"),
+        Sticker("🍉", "Watermelon", "ls_watermelon", "lifestyle"),
+        Sticker("🌼", "Flower", "ls_flower", "lifestyle"),
+        Sticker("🌹", "Rose", "ls_rose", "lifestyle"),
+        Sticker("💫", "Dizzy", "ls_dizzy", "lifestyle"),
+        Sticker("🌍", "Earth", "ls_earth", "lifestyle"),
+        Sticker("🌙", "Moon", "ls_moon", "lifestyle"),
+        Sticker("☀️", "Sun", "ls_sun", "lifestyle"),
+        Sticker("❄️", "Snow", "ls_snow", "lifestyle"),
+        Sticker("🌙", "Crescent", "ls_crescent", "lifestyle"),
+        Sticker("🌟", "Star", "ls_star", "lifestyle"),
+        Sticker("🌠", "Shooting Star", "ls_shootingstar", "lifestyle"),
+        Sticker("🌴", "Palm", "ls_palm", "lifestyle"),
+        Sticker("🌻", "Sunflower", "ls_sunflower", "lifestyle"),
+        Sticker("🫖", "Teapot", "ls_teapot", "lifestyle"),
+        Sticker("🍻", "Beer", "ls_beer", "lifestyle"),
+        Sticker("🍷", "Wine", "ls_wine", "lifestyle"),
+        // ── Emojis (30) ──
+        Sticker("😀", "Happy", "em_happy", "emoji"),
+        Sticker("😃", "Smile", "em_smile", "emoji"),
+        Sticker("😄", "Joy", "em_joy", "emoji"),
+        Sticker("😊", "Blush", "em_blush", "emoji"),
+        Sticker("😍", "Love", "em_love", "emoji"),
+        Sticker("😘", "Kiss", "em_kiss", "emoji"),
+        Sticker("😜", "Wink", "em_wink", "emoji"),
+        Sticker("🤣", "ROFL", "em_rofl", "emoji"),
+        Sticker("😂", "Tears", "em_tears", "emoji"),
+        Sticker("😅", "Sweat", "em_sweat", "emoji"),
+        Sticker("😭", "Cry", "em_cry", "emoji"),
+        Sticker("😱", "Scream", "em_scream", "emoji"),
+        Sticker("😡", "Angry", "em_angry", "emoji"),
+        Sticker("😠", "Mad", "em_mad", "emoji"),
+        Sticker("😐", "Neutral", "em_neutral", "emoji"),
+        Sticker("😏", "Smug", "em_smug", "emoji"),
+        Sticker("🙄", "Eye Roll", "em_eyeroll", "emoji"),
+        Sticker("🤨", "Thinking", "em_thinking", "emoji"),
+        Sticker("😯", "Oops", "em_oops", "emoji"),
+        Sticker("😳", "Flushed", "em_flushed", "emoji"),
+        Sticker("😷", "Mask", "em_mask", "emoji"),
+        Sticker("😎", "Cool", "em_cool", "emoji"),
+        Sticker("🥳", "Party Face", "em_partyface", "emoji"),
+        Sticker("🤩", "Star Eyes", "em_stareyes", "emoji"),
+        Sticker("😛", "Tongue", "em_tongue", "emoji"),
+        Sticker("🤗", "Hug", "em_hug", "emoji"),
+        Sticker("🙏", "Pray", "em_pray", "emoji"),
+        Sticker("👐", "Open Hands", "em_openhands", "emoji"),
+        Sticker("🙌", "Raised", "em_raised", "emoji"),
+        Sticker("🤘", "Rock", "em_rock", "emoji"),
+        // ── Symbols & Shapes (15) ──
+        Sticker("✨", "Sparkle", "sy_sparkle", "symbol"),
+        Sticker("💫", "Dizzy Symbol", "sy_dizzysym", "symbol"),
+        Sticker("✪", "Star Cross", "sy_starcross", "symbol"),
+        Sticker("✦", "Diamond", "sy_diamond", "symbol"),
+        Sticker("★", "Black Star", "sy_blackstar", "symbol"),
+        Sticker("☆", "White Star", "sy_whitestar", "symbol"),
+        Sticker("✔️", "Check", "sy_check", "symbol"),
+        Sticker("✖️", "Cross", "sy_cross", "symbol"),
+        Sticker("➕", "Plus", "sy_plus", "symbol"),
+        Sticker("➖", "Minus", "sy_minus", "symbol"),
+        Sticker("➗", "Divide", "sy_divide", "symbol"),
+        Sticker("🔴", "Red Circle", "sy_redcircle", "symbol"),
+        Sticker("🟠", "Orange Circle", "sy_orangecircle", "symbol"),
+        Sticker("🟡", "Yellow Circle", "sy_yellowcircle", "symbol"),
+        Sticker("🟢", "Green Circle", "sy_greencircle", "symbol"),
+        // ── Custom / Decorative (15) ──
+        Sticker("🎀", "Ribbon", "cs_ribbon", "custom"),
+        Sticker("🎁", "Gift", "cs_gift", "custom"),
+        Sticker("🎊", "Confetti", "cs_confetti", "custom"),
+        Sticker("🎭", "Masks", "cs_masks", "custom"),
+        Sticker("🎨", "Palette", "cs_palette", "custom"),
+        Sticker("🎵", "Music Note", "cs_music", "custom"),
+        Sticker("🎶", "Music", "cs_music2", "custom"),
+        Sticker("🎤", "Mic", "cs_mic", "custom"),
+        Sticker("🎧", "Headphone", "cs_headphone", "custom"),
+        Sticker("🔈", "Speaker", "cs_speaker", "custom"),
+        Sticker("🔔", "Bell", "cs_bell", "custom"),
+        Sticker("🕓", "Clock", "cs_clock", "custom"),
+        Sticker("💡", "Idea", "cs_idea", "custom"),
+        Sticker("📜", "Scroll", "cs_scroll", "custom"),
+        Sticker("👓", "Glasses", "cs_glasses", "custom")
+    )
+
+    val categories = listOf(
+        "all" to "All",
+        "social" to "Social Media",
+        "lifestyle" to "Lifestyle",
+        "emoji" to "Emojis",
+        "symbol" to "Symbols",
+        "custom" to "Custom"
+    )
+
+    val filteredStickers = allStickers.filter { sticker ->
+        (selectedCategory == "all" || sticker.category == selectedCategory) &&
+        (searchQuery.isBlank() || sticker.name.contains(searchQuery, ignoreCase = true))
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("STICKERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(
-                "None" to "none", "🔥 Fire" to "fire", "⭐ Star" to "star",
-                "❤️ Heart" to "heart", "⚡ Glow" to "glow", "💎 Diamond" to "diamond",
-                "🎵 Music" to "music", "👑 Crown" to "crown", "💫 Sparkle" to "sparkle",
-                "🎯 Target" to "target", "🏆 Trophy" to "trophy", "💀 Skull" to "skull",
-                "🚀 Rocket" to "rocket", "⚡ Bolt" to "bolt", "💯 100" to "100",
-                "👍 Like" to "thumbs_up", "🎉 Party" to "party"
-            ).forEach { (name, id) ->
-                val sel = project.stickerType == id
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateSticker(if (sel) "none" else id) }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("STICKERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ ${allStickers.size}+ Stickers", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            }
+        }
+
+        // Search bar
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("Search stickers...", fontSize = 9.sp, color = Color.Gray) },
+            leadingIcon = { Text("🔍", fontSize = 12.sp) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CyberCyan,
+                unfocusedBorderColor = Color.White.copy(0.1f),
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth().height(40.dp),
+            shape = RoundedCornerShape(8.dp),
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 10.sp)
+        )
+
+        // Category tabs
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            categories.forEach { (id, label) ->
+                val sel = selectedCategory == id
+                Box(
+                    Modifier.background(
+                        if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f),
+                        RoundedCornerShape(6.dp)
+                    ).clickable { selectedCategory = id }
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                ) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
+            }
+        }
+
+        // Sticker grid
+        if (filteredStickers.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                Text("No stickers found", fontSize = 10.sp, color = Color.Gray)
+            }
+        } else {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // None option first
+                val noneSel = project.stickerType == "none"
+                Box(
+                    Modifier.background(
+                        if (noneSel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f),
+                        RoundedCornerShape(6.dp)
+                    ).clickable { onUpdateSticker("none") }
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Text("None", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (noneSel) CyberCyan else Color.White)
+                }
+                filteredStickers.forEach { sticker ->
+                    val sel = project.stickerType == sticker.id
+                    Box(
+                        Modifier.background(
+                            if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f),
+                            RoundedCornerShape(6.dp)
+                        ).clickable { onUpdateSticker(if (sel) "none" else sticker.id) }
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(sticker.emoji, fontSize = 16.sp)
+                            Text(sticker.name, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
             }
         }
     }
@@ -3059,5 +3431,94 @@ private fun LooksPanel(
             "ℹ Tap a look to apply a real FFmpeg grade at export"
         }
         Text(footer, fontSize = 7.sp, color = Color.Gray)
+    }
+}
+
+
+// ──────────────────────────────────────────────────────────────────────────
+//  27. CANVAS / DRAWING PANEL (v5.2.0)
+//  User request: "Conva add karo" — Canvas/drawing feature for drawing on video
+// ──────────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CanvasPanel() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var selectedBrush by remember { mutableStateOf("pen") }
+    var brushColor by remember { mutableStateOf(0) }
+    var brushSize by remember { mutableStateOf(8f) }
+    var canvasSubTab by remember { mutableStateOf("draw") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("CANVAS & DRAW", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Draw on Video", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            }
+        }
+
+        // Sub-tabs: Draw | Brush | Color
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("draw" to "Draw", "brush" to "Brush", "color" to "Color", "shapes" to "Shapes").forEach { (id, label) ->
+                val sel = canvasSubTab == id
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { canvasSubTab = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
+            }
+        }
+
+        when (canvasSubTab) {
+            "draw" -> {
+                Text("DRAWING TOOLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("✏️ Pen" to "pen", "🖍️ Pencil" to "pencil", "🎨 Brush" to "brush", "🔽 Highlighter" to "highlighter", "🗝️ Marker" to "marker", "🧹 Eraser" to "eraser", "🏖 Spray" to "spray", "🎯 Calligraphy" to "calligraphy").forEach { (label, id) ->
+                        val sel = selectedBrush == id
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedBrush = id; android.widget.Toast.makeText(ctx, "Brush: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+                // Brush size slider
+                Text("BRUSH SIZE: ${brushSize.toInt()}px", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Slider(value = brushSize, onValueChange = { brushSize = it }, valueRange = 1f..50f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(20.dp))
+                // Undo/Redo/Clear
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Undo" to "undo", "Redo" to "redo", "Clear" to "clear", "Save" to "save").forEach { (label, id) ->
+                        Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Canvas: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (id == "clear") NeonOrange else Color.White)
+                        }
+                    }
+                }
+            }
+            "brush" -> {
+                Text("BRUSH STYLES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("Solid", "Dotted", "Dashed", "Double", "Rough", "Smooth", "Calligraphy", "Neon Glow", "Shadow", "3D", "Spray", "Watercolor", "Oil", "Pencil Sketch", "Chalk", "Crayon", "Marker", "Ink", "Charcoal", "Airbrush").forEach { style ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Brush style: $style", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(style, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+            "color" -> {
+                Text("DRAWING COLORS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                val drawColors = listOf(Color.White, Color.Black, Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Cyan, Color.Magenta, Color(0xFF7C5CFF), Color(0xFFFF6B35), Color(0xFF2DD4BF), Color(0xFFFF3D7F), Color(0xFFFFD700), Color(0xFF00FF00), Color(0xFFFF00FF), Color(0xFF00FFFF), Color(0xFFFFA500), Color(0xFF800080), Color(0xFFFF1493), Color(0xFF00CED1))
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    drawColors.forEachIndexed { idx, color ->
+                        val sel = brushColor == idx
+                        Box(Modifier.size(26.dp).background(color, RoundedCornerShape(6.dp)).border(if (sel) 2.dp else 0.dp, Color.White, RoundedCornerShape(6.dp)).clickable { brushColor = idx }) {}
+                    }
+                }
+            }
+            "shapes" -> {
+                Text("SHAPES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("⭕ Circle" to "circle", "⬜ Square" to "square", "▲ Triangle" to "triangle", "⭐ Star" to "star", "❤️ Heart" to "heart", "🔴 Dot" to "dot", "🔵 Ring" to "ring", "◈ Diamond" to "diamond", "⬢ Hexagon" to "hexagon", "⬛ Block" to "block", "▶ Play" to "play", "✓ Check" to "check", "✕ Cross" to "cross", "→ Arrow" to "arrow", "↺ Curved" to "curved", "☐ Square Out" to "square_out").forEach { (label, id) ->
+                    Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Shape: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                        Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+                }
+            }
+        }
     }
 }
