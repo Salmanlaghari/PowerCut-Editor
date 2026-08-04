@@ -7,6 +7,25 @@ Built 100% in pure Kotlin and Jetpack Compose, PowerCut delivers instant, waterm
 
 ---
 
+## ⚡ What's New in 4.6.0 — Quick Tools Feedback UI + Premium Looks Real-Time Preview
+
+### ✅ Quick Tools Now Show Real Progress, Success & Error Feedback
+In v4.5.0 the four premium quick tools (MP3→MP4, Slideshow, Compress, AI Edit) ran their real FFmpeg pipeline in the background, but the dashboard gave **zero feedback** — after picking a file, nothing appeared on screen, so the tools felt broken. v4.6.0 wires the live `exportState` + `exportProgress` flows from the ViewModel straight into the Home dashboard, so now you see:
+
+- **Processing…** card with a circular spinner + linear progress bar + live percentage and "saving to Movies/PowerCut" hint while FFmpeg works.
+- **✅ Done! Saved to Movies/PowerCut** success card the moment the file is written to the gallery.
+- **⚠️ Something went wrong** error card with the actual error message if transcoding fails.
+
+No more "screen par kuch nahi aata" — every quick tool now confirms it ran.
+
+### 🎨 Premium Looks (HDR / iPhone / Bright / Cinema / Magic) Now Visible in Real-Time Preview
+Previously the 54+ premium looks applied a real FFmpeg grade at **export** time, but in the editor preview they were invisible — tapping HDR Vivid or iPhone Rich Contrast only showed a Toast, so the looks appeared "fake / not selecting". v4.6.0 adds a `premiumLookPreviewMatrix()` that parses each look's real FFmpeg chain (`eq` brightness/contrast/saturation, `colorbalance` warm/cool tints, `saturation=0` grayscale) into a Compose `ColorMatrix` approximation, and composes it into the live `combinedColorFilter`. Now selecting any HDR / iPhone / Bright / Cinema / Magic look **instantly changes the preview** — exactly like the brightness/contrast/sharp sliders already do — while the full-grade FFmpeg chain still runs at export for the final output.
+
+### 🔒 Additive-Only Update
+All existing options, filters, effects, transitions, masks, looks, templates, and tools remain 100% intact. v4.6.0 only **adds** a feedback UI for the quick tools and a preview ColorMatrix for premium looks — nothing was removed or broken.
+
+---
+
 ## ⚡ What's New in 4.5.0 — Premium 3D Quick Tools & Workable Editor Panels
 
 ### 🎈 All 4 Quick Tools Are Now Premium 3D Cards — And Fully Workable
