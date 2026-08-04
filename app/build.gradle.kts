@@ -15,12 +15,30 @@ android {
         applicationId = "com.powercut.editor"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "6.0.0"
+        versionCode = 16
+        versionName = "6.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // ---- Native C++ export engine (JNI bridge + FFmpeg pipeline) ----
+        externalNativeBuild {
+            cmake {
+                cppFlags("-std=c++17", "-fexceptions", "-frtti")
+            }
+        }
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    // ---- Point Gradle at the app-level CMakeLists.txt ----
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 

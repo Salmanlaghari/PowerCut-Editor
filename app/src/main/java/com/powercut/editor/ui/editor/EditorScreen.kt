@@ -88,6 +88,14 @@ import com.powercut.editor.ui.theme.tactileClick
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.premiumAccentGradient
 import java.util.Locale
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.CircularProgressIndicator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import android.os.Environment
+import com.powercut.editor.ui.editor.ExportBottomBar
+import com.powercut.editor.export.ExportEngine
+import com.powercut.editor.export.ExportConfig
 
 private fun formatTime(ms: Long): String {
     val totalSecs = ms / 1000
@@ -172,6 +180,12 @@ fun EditorScreen(
     onToggleAutoReframe: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportProgress by remember { mutableStateOf(0f) }
+    var isExporting by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    val exportEngine = remember { ExportEngine() }
+
 
     // Clip local Video Picker
     val clipPickerLauncher = rememberLauncherForActivityResult(
@@ -363,7 +377,7 @@ fun EditorScreen(
                             premiumAccentGradient,
                             shape = RoundedCornerShape(24.dp)
                         )
-                        .tactileClick(onClick = onExport)
+                        .tactileClick(onClick = { showExportDialog = true })
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -1320,6 +1334,82 @@ fun EditorScreen(
             BottomToolItem("📐", "Crop", selectedBottomTool == "Crop") {
                 selectedBottomTool = "Crop"
                 activeCategory = "Edit"
+            }
+        }
+
+        // ---- Export watermark dialog (Watch Ad -> clean / Export with watermark) ----
+        ExportBottomBar(
+            onWatchAd = {
+                // ==== ADMOB REWARDED AD CALL HERE ====
+                // When the rewarded ad completes successfully, start a clean export
+                // (removeWatermark = true -> no PowerCut watermark on the output).
+                isExporting = true
+                scope.launch(Dispatchers.IO) {
+                    val moviesDir = android.io.File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                        "PowerCut"
+                    )
+                    if (!moviesDir.exists()) moviesDir.mkdirs()
+                    val outPath = moviesDir.absolutePath + "/export_${'$'}{System.currentTimeMillis()}.mp4"
+                    val cfg = ExportConfig(
+                        preset = ExportEngine.presetTikTok(),
+                        out = outPath,
+                        removeWatermark = true
+                    )
+                    exportEngine.onProgress = { p ->
+                        scope.launch(Dispatchers.Main) {
+                            exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
+                        }
+                    }
+                    exportEngine.start(Any(), cfg)
+                    isExporting = false
+                    exportEngine.destroy()
+                }
+            },
+            onExportWithWatermark = {
+                // Export with the semi-transparent "PowerCut" watermark overlay
+                // (removeWatermark = false -> watermark auto-applied in the native engine).
+                isExporting = true
+                scope.launch(Dispatchers.IO) {
+                    val moviesDir = android.io.File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                        "PowerCut"
+                    )
+                    if (!moviesDir.exists()) moviesDir.mkdirs()
+                    val outPath = moviesDir.absolutePath + "/export_${'$'}{System.currentTimeMillis()}.mp4"
+                    val cfg = ExportConfig(
+                        preset = ExportEngine.presetTikTok(),
+                        out = outPath,
+                        removeWatermark = false
+                    )
+                    exportEngine.onProgress = { p ->
+                        scope.launch(Dispatchers.Main) {
+                            exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
+                        }
+                    }
+                    exportEngine.start(Any(), cfg)
+                    isExporting = false
+                    exportEngine.destroy()
+                }
+            },
+            triggerDialog = showExportDialog,
+            onDialogDismissed = { showExportDialog = false }
+        )
+    }
+
+    // ---- Full-screen export progress overlay ----
+    if (isExporting) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(progress = { exportProgress / 100f })
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Exporting: ${'$'}{exportProgress.toInt()}%",
+                    color = Color.White
+                )
             }
         }
     }

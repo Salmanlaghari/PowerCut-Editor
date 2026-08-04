@@ -10,11 +10,11 @@
 namespace PowerCut {
 using TimeMicros = int64_t;
 struct ExportPreset { std::string name; int w,h; double fps; int64_t tbr,mbr; std::string vcodec,acodec,container; };
-struct ExportConfig { 
-  ExportPreset preset; 
-  std::string out; 
+struct ExportConfig {
+  ExportPreset preset;
+  std::string out;
   bool hw=true, two_pass=true, faststart=true;
-  bool remove_watermark=false; // ✅ NEW: true = ad clicked → no watermark
+  bool remove_watermark=false;
 };
 struct ExportProgress { int64_t cur,total; double speed_x; int eta_s; size_t bytes; };
 class ExportEngine {
@@ -33,6 +33,6 @@ public:
 private:
   struct Impl; std::unique_ptr<Impl> m;
   void worker(); bool setup_enc(); bool enc_v(RGBAFrame*); bool enc_a(PCMFrame*); bool mux();
-  void apply_watermark(RGBAFrame* frame); // ✅ NEW: watermark overlay function
+  void apply_watermark(RGBAFrame* frame);
 };
 }
