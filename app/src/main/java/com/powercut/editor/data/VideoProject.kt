@@ -92,7 +92,29 @@ data class VideoProject(
     val isAudioDuckingEnabled: Boolean = false,
     val borderStyle: String = "none",
     val watermarkPath: String? = null,
-    val vignetteStyle: String = "none"
+    val vignetteStyle: String = "none",
+
+    // ── v6.0.0 PREMIUM EXPORT features ──
+    /** Target frame rate for export (24/30/60/120). Replaces the old hardcoded fps=30. */
+    val targetFps: Int = 30,
+    /** 10-bit HDR (BT.2020 PQ) export pipeline. */
+    val isHdrEnabled: Boolean = false,
+    /** High-bitrate visually-lossless export (lower CRF + higher maxrate). */
+    val isHighBitrateEnabled: Boolean = false,
+    /** Batch export queue membership (Pro). */
+    val isBatchExport: Boolean = false,
+
+    // ── v6.0.0 AI feature pipeline ──
+    /** Active AI feature id from PremiumFeatureCatalog (e.g. "ai_frame_interp"). "none" = disabled. */
+    val activeAiFeature: String = "none",
+
+    // ── v6.0.0 Social media export preset ──
+    /** Social preset id from PremiumFeatureCatalog (e.g. "sm_tiktok"). "none" = use aspectPreset. */
+    val socialPreset: String = "none",
+
+    // ── v6.0.0 Pro tier ──
+    /** Whether the user has unlocked Pro tier (disables watermark, unlocks Pro assets). */
+    val isProTier: Boolean = false
 ) {
     val isTrimmed: Boolean
         get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L
@@ -138,6 +160,19 @@ data class VideoProject(
 
     val isVoiceChanged: Boolean
         get() = voiceChangerPitch != 0f
+
+    // ── v6.0.0 computed properties ──
+    val isAiFeatureActive: Boolean
+        get() = activeAiFeature != "none"
+
+    val isHdrExport: Boolean
+        get() = isHdrEnabled
+
+    val isHighBitrate: Boolean
+        get() = isHighBitrateEnabled
+
+    val hasSocialPreset: Boolean
+        get() = socialPreset != "none"
 
     val isAudioDuckingActive: Boolean
         get() = isAudioDuckingEnabled

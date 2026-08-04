@@ -51,7 +51,26 @@ import com.powercut.editor.ui.editor.NextGenEditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
 import com.powercut.editor.ui.home.HomeScreen
+import com.powercut.editor.ui.premium.AiFeatureHubScreen
+import com.powercut.editor.ui.premium.PremiumEntryPoint
+import com.powercut.editor.ui.premium.ProTierScreen
+import com.powercut.editor.ui.premium.SocialPresetScreen
 import com.powercut.editor.ui.theme.PowerCutTheme
+import com.powercut.editor.ui.theme.AccentPrimary
+import com.powercut.editor.ui.theme.AccentSecondary
+import com.powercut.editor.ui.theme.CyberCyan
+import com.powercut.editor.ui.theme.NeonOrange
+import com.powercut.editor.ui.theme.OnPrimary
+import com.powercut.editor.ui.theme.OnSurfaceSecondary
+import com.powercut.editor.ui.theme.SurfaceVariant
+import com.powercut.editor.ui.theme.premiumAccentGradient
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.clip
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -98,6 +117,11 @@ class MainActivity : ComponentActivity() {
                         val project by viewModel.currentProject.collectAsState()
                         val exportState by viewModel.exportState.collectAsState()
                         val exportProgress by viewModel.exportProgress.collectAsState()
+                        // v6.0.0 Premium overlay screen state — AI Hub, Social Presets, Pro Tier, Studio
+                        var showAiHub by remember { mutableStateOf(false) }
+                        var showSocialPresets by remember { mutableStateOf(false) }
+                        var showProTier by remember { mutableStateOf(false) }
+                        var showPremiumStudio by remember { mutableStateOf(false) }
 
                         val settingsRes by viewModel.selectedResolution.collectAsState()
                         val settingsFps by viewModel.selectedFps.collectAsState()
@@ -419,13 +443,50 @@ class MainActivity : ComponentActivity() {
                                             Toast.makeText(this@MainActivity, "Watermark successfully removed!", Toast.LENGTH_SHORT).show()
                                         })
                                     },
-                                    onStartExport = { res, fps, wm, hw ->
-                                        viewModel.startExportWithSettings(res, fps, isWatermarkRemoved || wm, hw)
+                                    onStartExport = { res, fps, wm, hw, hdr, hbr ->
+                                        viewModel.startExportWithSettings(res, fps, isWatermarkRemoved || wm, hw, hdr, hbr)
                                     },
                                     exportProgress = exportProgress
                                 )
                             }
                         }
+
+                        // ─────────────────────────────────────────────────────────────
+                        //  v6.0.0 PREMIUM OVERLAY SCREENS
+                        //  Rendered on top of the active tab. Each drives REAL FFmpeg
+                        //  chains through EditorViewModel → VideoProcessor at export.
+                        // ─────────────────────────────────────────────────────────────
+                        if (showAiHub) {
+                            AiFeatureHubScreen(
+                                viewModel = viewModel,
+                                onBack = { showAiHub = false }
+                            )
+                        }
+                        if (showSocialPresets) {
+                            SocialPresetScreen(
+                                viewModel = viewModel,
+                                onBack = { showSocialPresets = false }
+                            )
+                        }
+                        if (showProTier) {
+                            ProTierScreen(
+                                viewModel = viewModel,
+                                onBack = { showProTier = false }
+                            )
+                        }
+                        if (showPremiumStudio) {
+                            PremiumEntryPoint(
+                                onExit = { showPremiumStudio = false }
+                            )
+                        }
+
+                        // v6.0.0 Floating Premium launcher bar (bottom)
+                        PowerCutPremiumLauncherBar(
+                            onAiHub = { showAiHub = true },
+                            onSocialPresets = { showSocialPresets = true },
+                            onProTier = { showProTier = true },
+                            onPremiumStudio = { showPremiumStudio = true }
+                        )
                     }
                 }
             }
@@ -618,6 +679,55 @@ class MainActivity : ComponentActivity() {
             onEarnedReward()
             onAdDismissed?.invoke()
             loadRewardedAd()
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  v6.0.0 PREMIUM LAUNCHER BAR
+//  A horizontally-scrolling row of entry points to the new premium screens.
+//  Each button opens a workable screen that drives real FFmpeg chains.
+// ═══════════════════════════════════════════════════════════════════════════════
+@Composable
+fun PowerCutPremiumLauncherBar(
+    onAiHub: () -> Unit,
+    onSocialPresets: () -> Unit,
+    onProTier: () -> Unit,
+    onPremiumStudio: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, SurfaceVariant.copy(alpha = 0.9f))))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        PremiumLaunchChip("🤖", "AI Hub", onAiHub)
+        PremiumLaunchChip("📱", "Presets", onSocialPresets)
+        PremiumLaunchChip("👑", "Pro", onProTier)
+        PremiumLaunchChip("✨", "Studio", onPremiumStudio)
+    }
+}
+
+@Composable
+private fun PremiumLaunchChip(emoji: String, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(premiumAccentGradient, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(emoji, fontSize = 16.sp)
+            Text(
+                label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
         }
     }
 }

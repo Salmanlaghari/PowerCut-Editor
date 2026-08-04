@@ -68,7 +68,7 @@ fun ExportScreen(
     onImportNewVideo: (android.net.Uri) -> Unit,
     isWatermarkRemoved: Boolean,
     onRemoveWatermarkRequested: () -> Unit,
-    onStartExport: (resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) -> Unit,
+    onStartExport: (resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean, isHdr: Boolean, isHighBitrate: Boolean) -> Unit,
     exportProgress: Int = 0
 ) {
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -78,8 +78,11 @@ fun ExportScreen(
     var selectedResIndex by remember { mutableIntStateOf(2) }
     var selectedFpsIndex by remember { mutableIntStateOf(1) }
     var isHardwareAccEnabled by remember { mutableStateOf(true) }
+    var isHdrEnabled by remember { mutableStateOf(false) }
+    var isHighBitrateEnabled by remember { mutableStateOf(false) }
 
-    val resolutionsList = listOf("480p", "720p", "1080p", "4k")
+    // v6.0.0: Added 2K (QHD) to the resolution list.
+    val resolutionsList = listOf("480p", "720p", "1080p", "2k", "4k")
     val fpsList = listOf(24, 30, 60, 120)
 
     Column(
@@ -131,29 +134,28 @@ fun ExportScreen(
                         }
                     }
 
-                    // RESOLUTION
+                    // RESOLUTION — v6.0.0: 5 options including 2K (QHD)
                     Text("SELECT RESOLUTION", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("480p (SD)", "720p (HD)").forEachIndexed { index, title ->
-                            val isSel = selectedResIndex == index
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("480p (SD)" to 0, "720p (HD)" to 1, "1080p (FHD)" to 2).forEachIndexed { idx, (title, resIdx) ->
+                            val isSel = selectedResIndex == resIdx
                             Box(
                                 modifier = Modifier.weight(1f).height(44.dp)
                                     .neonGlow(if (isSel) NeonOrange else Color.Transparent, RoundedCornerShape(10.dp), 1.dp)
                                     .glassmorphic(RoundedCornerShape(10.dp))
-                                    .clickable { selectedResIndex = index }.padding(8.dp),
+                                    .clickable { selectedResIndex = resIdx }.padding(6.dp),
                                 contentAlignment = Alignment.Center
-                            ) { Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White) }
+                            ) { Text(title, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White, textAlign = TextAlign.Center) }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("1080p (FHD)", "4K (UHD)").forEachIndexed { index, title ->
-                            val actualIndex = index + 2
-                            val isSel = selectedResIndex == actualIndex
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("2K (QHD)" to 3, "4K (UHD)" to 4).forEach { (title, resIdx) ->
+                            val isSel = selectedResIndex == resIdx
                             Box(
                                 modifier = Modifier.weight(1f).height(44.dp)
                                     .neonGlow(if (isSel) NeonOrange else Color.Transparent, RoundedCornerShape(10.dp), 1.dp)
                                     .glassmorphic(RoundedCornerShape(10.dp))
-                                    .clickable { selectedResIndex = actualIndex }.padding(8.dp),
+                                    .clickable { selectedResIndex = resIdx }.padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) { Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White) }
                         }
@@ -215,8 +217,35 @@ fun ExportScreen(
                         Modifier.fillMaxWidth().glassmorphic(RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Hardware Acceleration", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Column {
+                            Text("Hardware Acceleration", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Faster encoding when supported", fontSize = 8.sp, color = Color.LightGray)
+                        }
                         Switch(checked = isHardwareAccEnabled, onCheckedChange = { isHardwareAccEnabled = it }, colors = SwitchDefaults.colors(checkedThumbColor = CyberCyan))
+                    }
+
+                    // v6.0.0 TOGGLE: HDR Export (10-bit BT.2020 PQ)
+                    Row(
+                        Modifier.fillMaxWidth().glassmorphic(RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("🌈 HDR Export", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("10-bit BT.2020 PQ (HEVC) — richer colors & dynamic range", fontSize = 8.sp, color = Color.LightGray)
+                        }
+                        Switch(checked = isHdrEnabled, onCheckedChange = { isHdrEnabled = it }, colors = SwitchDefaults.colors(checkedThumbColor = NeonOrange))
+                    }
+
+                    // v6.0.0 TOGGLE: High Bitrate Export (visually-lossless)
+                    Row(
+                        Modifier.fillMaxWidth().glassmorphic(RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("💎 High Bitrate", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Near-lossless CRF 18 — maximum detail for mastering", fontSize = 8.sp, color = Color.LightGray)
+                        }
+                        Switch(checked = isHighBitrateEnabled, onCheckedChange = { isHighBitrateEnabled = it }, colors = SwitchDefaults.colors(checkedThumbColor = CyberCyan))
                     }
 
                     Spacer(Modifier.height(4.dp))
@@ -250,7 +279,7 @@ fun ExportScreen(
                                 .neonGlow(NeonOrange, RoundedCornerShape(16.dp))
                                 .background(Brush.verticalGradient(listOf(NeonOrange, Color(0xFFE64A19))), RoundedCornerShape(16.dp))
                                 .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(16.dp))
-                                .tactileClick { onStartExport(resolutionsList[selectedResIndex], fpsList[selectedFpsIndex], isWatermarkRemoved, isHardwareAccEnabled) },
+                                .tactileClick { onStartExport(resolutionsList[selectedResIndex], fpsList[selectedFpsIndex], isWatermarkRemoved, isHardwareAccEnabled, isHdrEnabled, isHighBitrateEnabled) },
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
