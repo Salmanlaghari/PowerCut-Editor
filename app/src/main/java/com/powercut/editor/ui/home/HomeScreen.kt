@@ -243,7 +243,7 @@ fun HomeScreen(
                                 letterSpacing = (-0.5).sp
                             )
                             Text(
-                                text = "Pro Studio Edition",
+                                text = "PRO",
                                 fontSize = 10.sp,
                                 color = CyberCyan,
                                 fontWeight = FontWeight.SemiBold
@@ -714,7 +714,7 @@ fun DashboardView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "NEXTGEN PRO",
+                    text = "POWERCUT PRO",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Black,
                     color = AccentTertiary,
@@ -780,7 +780,7 @@ fun DashboardView(
                             color = Color.White
                         )
                         Text(
-                            text = "Import ultra-high 4K/8K tracks",
+                            text = "Import video & start editing — ad unlocks no-watermark",
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.85f),
                             fontWeight = FontWeight.Medium
@@ -790,71 +790,45 @@ fun DashboardView(
             }
         }
 
-        // ★ v4.5.0 PREMIUM QUICK TOOLS GRID — 3D glass cards, all workable
+        // ★ v5.1.0 MOBILE QUICK TOOLS GRID — 8 tools in 4×2 glass grid
         item {
             Spacer(modifier = Modifier.height(20.dp))
-            Row(
+            // 4×2 grid of 8 mobile-first quick tools
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .slideInUp(contentVisible, delayMs = 140),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // All 4 quick tools are now WORKABLE (v4.5.0)
                 val tools = listOf(
+                    QuickTool("✂️", "Trim & Cut", "trim", AccentRose),
                     QuickTool("🎵", "MP3→Video", "convert_mp3", CyberCyan),
-                    QuickTool("🖼️", "Slideshow", "slideshow", AccentPrimary),
+                    QuickTool("✂", "Crop", "crop", AccentPrimary),
                     QuickTool("🗜️", "Compress", "compress", NeonOrange),
-                    QuickTool("🤖", "AI Edit", "aiedit", AccentTertiary)
+                    QuickTool("↺️", "Reverse", "reverse", AccentTertiary),
+                    QuickTool("⏱️", "Slow-Mo", "slowmo", AccentRose),
+                    QuickTool("🖼️", "Slideshow", "slideshow", AccentPrimary),
+                    QuickTool("🎧", "Add Music", "addmusic", CyberCyan)
                 )
-                tools.forEach { tool ->
-                    val isSelected = selectedQuickTool == tool.id
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .glassCard3D(
-                                shape = RoundedCornerShape(16.dp),
-                                glowColor = if (isSelected) tool.accent else tool.accent.copy(alpha = 0.35f),
-                                backColor = GlassBackground
-                            )
-                            .border(
-                                if (isSelected) 1.5.dp else 1.dp,
-                                if (isSelected) tool.accent else Color.White.copy(alpha = 0.08f),
-                                RoundedCornerShape(16.dp)
-                            )
-                            .tactileClick { selectedQuickTool = if (isSelected) null else tool.id }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // PRO badge top-right corner
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(end = 4.dp, top = 3.dp)
-                                .background(tool.accent.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Text("PRO", fontSize = 6.sp, fontWeight = FontWeight.Black, color = tool.accent)
+                // Row 1: first 4 tools
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    tools.take(4).forEach { tool ->
+                        QuickToolCard(tool, selectedQuickTool == tool.id) {
+                            selectedQuickTool = if (selectedQuickTool == tool.id) null else tool.id
                         }
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(tool.emoji, fontSize = 22.sp)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = tool.label,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) tool.accent else Color.White
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Workable",
-                                fontSize = 6.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.45f)
-                            )
+                    }
+                }
+                // Row 2: last 4 tools
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    tools.drop(4).forEach { tool ->
+                        QuickToolCard(tool, selectedQuickTool == tool.id) {
+                            selectedQuickTool = if (selectedQuickTool == tool.id) null else tool.id
                         }
                     }
                 }
@@ -884,10 +858,14 @@ fun DashboardView(
                         // picker that runs an actual FFmpeg pipeline via the
                         // ViewModel -> ExportManager -> VideoProcessor chain.
                         val toolDesc = when (selectedQuickTool) {
+                            "trim" -> "✂️ Pick a video — trim and cut precise segments with frame accuracy, saved to Movies/PowerCut."
                             "convert_mp3" -> "🎵 Pick an audio file — converted to MP4 with a PowerCut visualizer, saved to Movies/PowerCut."
-                            "slideshow" -> "🖼️ Pick images — they are stitched into a video slideshow with Ken-Burns zoom + fades, saved to Movies/PowerCut."
+                            "crop" -> "✂ Pick a video — crop to 1:1, 9:16, or 16:9 aspect ratios, saved to Movies/PowerCut."
                             "compress" -> "🗜️ Pick a video — it is re-encoded to a smaller MP4 (CRF quality control), saved to Movies/PowerCut."
-                            "aiedit" -> "🤖 Pick a video — AI auto-enhance (contrast/saturation/sharpen/warmth) is applied, saved to Movies/PowerCut."
+                            "reverse" -> "↺️ Pick a video — reverse playback for creative rewind effects, saved to Movies/PowerCut."
+                            "slowmo" -> "⏱️ Pick a video — apply slow-motion or speed-ramp effects, saved to Movies/PowerCut."
+                            "slideshow" -> "🖼️ Pick images — they are stitched into a video slideshow with Ken-Burns zoom + fades, saved to Movies/PowerCut."
+                            "addmusic" -> "🎧 Pick a video — overlay background music with fade in/out, saved to Movies/PowerCut."
                             else -> ""
                         }
                         if (toolDesc.isNotEmpty()) {
@@ -900,10 +878,14 @@ fun DashboardView(
                         ) {
                             // Tool-specific preset labels + actions.
                             val presets = when (selectedQuickTool) {
+                                "trim" -> listOf("Start Trim", "End Trim", "Split")
                                 "convert_mp3" -> listOf("Ultra Quality", "Fast Mode", "Default")
-                                "slideshow" -> listOf("2s / Image", "3s / Image", "4s / Image")
+                                "crop" -> listOf("1:1 Square", "9:16 Vertical", "16:9 Wide")
                                 "compress" -> listOf("High Quality", "Balanced", "Small Size")
-                                "aiedit" -> listOf("Auto Enhance", "Vivid", "Warm Cinema")
+                                "reverse" -> listOf("Full Reverse", "Echo", "Loop")
+                                "slowmo" -> listOf("0.25x", "0.5x", "2x Speed")
+                                "slideshow" -> listOf("2s / Image", "3s / Image", "4s / Image")
+                                "addmusic" -> listOf("Fade In/Out", "Full Volume", "Background")
                                 else -> listOf("Ultra Quality", "Fast Mode", "Default Preset")
                             }
                             presets.forEach { opt ->
@@ -915,10 +897,14 @@ fun DashboardView(
                                         .clickable {
                                             // \u2500 Launch the REAL picker + pipeline for each tool \u2500
                                             when (selectedQuickTool) {
+                                                "trim" -> pickerLauncher.launch("video/*")
                                                 "convert_mp3" -> audioPickerLauncher.launch("audio/*")
-                                                "slideshow" -> slideshowPickerLauncher.launch("image/*")
+                                                "crop" -> pickerLauncher.launch("video/*")
                                                 "compress" -> compressPickerLauncher.launch("video/*")
-                                                "aiedit" -> aiEditPickerLauncher.launch("video/*")
+                                                "reverse" -> pickerLauncher.launch("video/*")
+                                                "slowmo" -> pickerLauncher.launch("video/*")
+                                                "slideshow" -> slideshowPickerLauncher.launch("image/*")
+                                                "addmusic" -> pickerLauncher.launch("video/*")
                                                 else -> android.widget.Toast.makeText(context, "$opt selected", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         }
@@ -1983,6 +1969,57 @@ fun BottomTabItem(
                     color = NeonOrange
                 )
             }
+        }
+    }
+}
+
+// v5.1.0: Reusable quick-tool card for the 4×2 mobile tools grid
+@Composable
+private fun QuickToolCard(
+    tool: QuickTool,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(88.dp)
+            .glassCard3D(
+                shape = RoundedCornerShape(16.dp),
+                glowColor = if (isSelected) tool.accent else tool.accent.copy(alpha = 0.3f),
+                backColor = GlassBackground
+            )
+            .border(
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) tool.accent else Color.White.copy(alpha = 0.08f),
+                RoundedCornerShape(16.dp)
+            )
+            .tactileClick { onClick() }
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // PRO badge top-right corner
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 4.dp, top = 3.dp)
+                .background(tool.accent.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 4.dp, vertical = 1.dp)
+        ) {
+            Text("PRO", fontSize = 6.sp, fontWeight = FontWeight.Black, color = tool.accent)
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(tool.emoji, fontSize = 22.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = tool.label,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) tool.accent else Color.White
+            )
         }
     }
 }
