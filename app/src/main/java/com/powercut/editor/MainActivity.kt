@@ -44,7 +44,7 @@ import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.FullScreenContentCallback
-import com.google.android.gms.ads.rewarded.OnUserEarnedRewardListener
+import com.google.android.gms.ads.OnUserEarnedRewardListener
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.AdConstants
 import com.powercut.editor.ui.editor.NextGenEditorScreen
@@ -414,10 +414,10 @@ class MainActivity : ComponentActivity() {
                                     },
                                     isWatermarkRemoved = isWatermarkRemoved,
                                     onRemoveWatermarkRequested = {
-                                        showRewardedAd {
+                                        showRewardedAd(onEarnedReward = {
                                             isWatermarkRemoved = true
                                             Toast.makeText(this@MainActivity, "Watermark successfully removed!", Toast.LENGTH_SHORT).show()
-                                        }
+                                        })
                                     },
                                     onStartExport = { res, fps, wm, hw ->
                                         viewModel.startExportWithSettings(res, fps, isWatermarkRemoved || wm, hw)
@@ -593,7 +593,7 @@ class MainActivity : ComponentActivity() {
             // fires on ad dismissed/failed regardless.
             var rewardEarned = false
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenAd() {
+                override fun onAdDismissedFullScreenContent() {
                     // Ad closed (watched or skipped). OnUserEarnedRewardListener
                     // already called onEarnedReward if the user watched to completion.
                     when {
@@ -614,7 +614,7 @@ class MainActivity : ComponentActivity() {
                     loadRewardedAd()
                 }
 
-                override fun onAdFailedToShowFullScreenAd(adError: AdError) {
+                override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                     // Ad failed to show — treat as fallback (grant reward so flow
                     // continues), then fire dismiss so callers still proceed.
                     onEarnedReward()
