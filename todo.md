@@ -27,4 +27,4 @@
 ## Section 3: Version, Docs, Push, Merge, Build
 - [x] Bump version 4.5.0 → 4.6.0 (versionCode 10 → 11)
 - [x] Update README v4.6.0 What's New
-- [ ] Commit, push branch, create PR, merge, verify CI
+- [x] Commit, push branch, create PR (#16), merge, verify CI
