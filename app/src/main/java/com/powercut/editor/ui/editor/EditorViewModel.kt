@@ -70,6 +70,22 @@ class EditorViewModel @Inject constructor(
     private val _isHardwareAccEnabled = MutableStateFlow(true)
     val isHardwareAccEnabled: StateFlow<Boolean> = _isHardwareAccEnabled.asStateFlow()
 
+    // ── v6.0.0 Premium export state ──
+    private val _isHdrEnabled = MutableStateFlow(false)
+    val isHdrEnabled: StateFlow<Boolean> = _isHdrEnabled.asStateFlow()
+
+    private val _isHighBitrateEnabled = MutableStateFlow(false)
+    val isHighBitrateEnabled: StateFlow<Boolean> = _isHighBitrateEnabled.asStateFlow()
+
+    private val _activeAiFeature = MutableStateFlow("none")
+    val activeAiFeature: StateFlow<String> = _activeAiFeature.asStateFlow()
+
+    private val _socialPreset = MutableStateFlow("none")
+    val socialPreset: StateFlow<String> = _socialPreset.asStateFlow()
+
+    private val _isProTier = MutableStateFlow(false)
+    val isProTier: StateFlow<Boolean> = _isProTier.asStateFlow()
+
     private val _selectedStoragePath = MutableStateFlow("Movies/PowerCut")
     val selectedStoragePath: StateFlow<String> = _selectedStoragePath.asStateFlow()
 
@@ -210,6 +226,14 @@ class EditorViewModel @Inject constructor(
         json.put("verticalSafeZone", project.verticalSafeZone)
         json.put("horizontalLetterbox", project.horizontalLetterbox)
         json.put("autoReframeEnabled", project.autoReframeEnabled)
+        // v6.0.0 Premium export + AI + social + pro
+        json.put("targetFps", project.targetFps)
+        json.put("isHdrEnabled", project.isHdrEnabled)
+        json.put("isHighBitrateEnabled", project.isHighBitrateEnabled)
+        json.put("isBatchExport", project.isBatchExport)
+        json.put("activeAiFeature", project.activeAiFeature)
+        json.put("socialPreset", project.socialPreset)
+        json.put("isProTier", project.isProTier)
 
         val clipsArray = JSONArray()
         for (clip in clipsList) {
@@ -292,7 +316,15 @@ class EditorViewModel @Inject constructor(
             orientationMode = json.optString("orientationMode", "free"),
             verticalSafeZone = json.optBoolean("verticalSafeZone", false),
             horizontalLetterbox = json.optBoolean("horizontalLetterbox", false),
-            autoReframeEnabled = json.optBoolean("autoReframeEnabled", false)
+            autoReframeEnabled = json.optBoolean("autoReframeEnabled", false),
+            // v6.0.0 Premium export + AI + social + pro
+            targetFps = json.optInt("targetFps", 30),
+            isHdrEnabled = json.optBoolean("isHdrEnabled", false),
+            isHighBitrateEnabled = json.optBoolean("isHighBitrateEnabled", false),
+            isBatchExport = json.optBoolean("isBatchExport", false),
+            activeAiFeature = json.optString("activeAiFeature", "none"),
+            socialPreset = json.optString("socialPreset", "none"),
+            isProTier = json.optBoolean("isProTier", false)
         )
 
         val clipsList = mutableListOf<Clip>()
@@ -330,6 +362,30 @@ class EditorViewModel @Inject constructor(
 
     fun toggleHardwareAcc() {
         _isHardwareAccEnabled.value = !_isHardwareAccEnabled.value
+    }
+
+    // ── v6.0.0 Premium export updaters ──
+    fun toggleHdr() {
+        _isHdrEnabled.value = !_isHdrEnabled.value
+    }
+
+    fun toggleHighBitrate() {
+        _isHighBitrateEnabled.value = !_isHighBitrateEnabled.value
+    }
+
+    fun updateAiFeature(featureId: String) {
+        _activeAiFeature.value = featureId
+        projectRepository.updateProject { it.copy(activeAiFeature = featureId) }
+    }
+
+    fun updateSocialPreset(presetId: String) {
+        _socialPreset.value = presetId
+        projectRepository.updateProject { it.copy(socialPreset = presetId) }
+    }
+
+    fun unlockProTier() {
+        _isProTier.value = true
+        projectRepository.updateProject { it.copy(isProTier = true) }
     }
 
     fun updateStoragePath(path: String) {
@@ -885,7 +941,14 @@ class EditorViewModel @Inject constructor(
         _currentScreen.value = "export"
     }
 
-    fun startExportWithSettings(resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) {
+    fun startExportWithSettings(
+        resolution: String,
+        fps: Int,
+        isNoWatermark: Boolean,
+        isHardwareAcc: Boolean,
+        isHdr: Boolean = false,
+        isHighBitrate: Boolean = false
+    ) {
         // v5.0.0 WATERMARK FIX: Previously `isNoWatermark` was received but
         // NEVER used — the watermark was never applied to any export, so the
         // rewarded-ad "remove watermark" feature was effectively decorative.
@@ -903,9 +966,18 @@ class EditorViewModel @Inject constructor(
         projectRepository.updateProject { project ->
             project.copy(
                 targetResolution = resolution,
-                watermarkPath = watermarkPath
+                targetFps = fps,
+                isHdrEnabled = isHdr,
+                isHighBitrateEnabled = isHighBitrate,
+                watermarkPath = watermarkPath,
+                activeAiFeature = _activeAiFeature.value,
+                socialPreset = _socialPreset.value
             )
         }
+        // Keep the StateFlows in sync with the chosen settings
+        _selectedFps.value = fps
+        _isHdrEnabled.value = isHdr
+        _isHighBitrateEnabled.value = isHighBitrate
         val project = currentProject.value ?: return
 
         // v4.2 LONG-EXPORT RELIABILITY: delegate the export to a FOREGROUND

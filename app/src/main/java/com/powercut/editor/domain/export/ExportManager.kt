@@ -576,6 +576,12 @@ class ExportManager @Inject constructor(
                     watermarkPath = project.watermarkPath,
                     vignetteStyle = project.vignetteStyle,
                     premiumLookId = project.activePremiumLook,
+                    // v6.0.0 Premium export + AI + social
+                    targetFps = project.targetFps,
+                    isHdrEnabled = project.isHdrEnabled,
+                    isHighBitrateEnabled = project.isHighBitrateEnabled,
+                    activeAiFeature = project.activeAiFeature,
+                    socialPreset = project.socialPreset,
                     onProgress = { pct -> updateProgress(pct) }
                 )
             }

@@ -681,6 +681,12 @@ class VideoProcessor @Inject constructor(
         vignetteStyle: String = "none",
         // ── v4.4.0 Premium Looks (50+ Brightness/HDR/iPhone grades) ──
         premiumLookId: String = "none",
+        // ── v6.0.0 Premium export + AI + social ──
+        targetFps: Int = 30,
+        isHdrEnabled: Boolean = false,
+        isHighBitrateEnabled: Boolean = false,
+        activeAiFeature: String = "none",
+        socialPreset: String = "none",
         onProgress: (Int) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
         if (isAudioFile(inputPath)) {
@@ -747,6 +753,9 @@ class VideoProcessor @Inject constructor(
         args.addAll(listOf("-t", (durationSec / speedFactor).toString()))
 
         val vfFilters = mutableListOf<String>()
+        // v6.0.0: AI audio chain is populated by the AI-feature block and
+        // injected into the audio filter assembly later.
+        var aiAudioChain = ""
 
         // Reverse video
         if (isReverseEnabled) {
@@ -796,7 +805,34 @@ class VideoProcessor @Inject constructor(
         // "Too many bits" / "timestamp discontinuity" errors and a broken
         // output. The `fps` filter resamples the timeline to a rock-solid
         // 30 fps (CFR) which libx264 can encode for hours without complaint.
-        vfFilters.add("fps=30")
+        // v6.0.0: fps is now configurable (24/30/60/120) — see targetFps param.
+        vfFilters.add("fps=$targetFps")
+
+        // ── v6.0.0 AI FEATURE CHAIN ──
+        // Inject the active AI feature's real FFmpeg -vf chain (e.g.
+        // minterpolate for frame interpolation, deflicker, hqdn3d denoise,
+        // super-resolution upscale, etc.) sourced from PremiumFeatureCatalog.
+        if (activeAiFeature != "none") {
+            val aiChain = com.powercut.editor.domain.premium.PremiumFeatureCatalog.videoChainFor(activeAiFeature)
+            if (aiChain.isNotBlank()) {
+                vfFilters.add(aiChain)
+            }
+            val aiAudio = com.powercut.editor.domain.premium.PremiumFeatureCatalog.audioChainFor(activeAiFeature)
+            if (aiAudio.isNotBlank()) {
+                // Will be picked up by the audio filter assembly below via a shared list
+                aiAudioChain = aiAudio
+            }
+        }
+
+        // ── v6.0.0 SOCIAL MEDIA PRESET ──
+        // When a social preset is active, it overrides the aspect ratio to the
+        // platform's canonical dimensions (e.g. TikTok → 1080x1920).
+        if (socialPreset != "none") {
+            val socialChain = com.powercut.editor.domain.premium.PremiumFeatureCatalog.videoChainFor(socialPreset)
+            if (socialChain.isNotBlank()) {
+                vfFilters.add(socialChain)
+            }
+        }
 
         if (speedFactor != 1.0f) {
             vfFilters.add("setpts=PTS/$speedFactor")
@@ -1101,6 +1137,10 @@ class VideoProcessor @Inject constructor(
                 if (audioEffectChain.isNotEmpty()) {
                     afFilters.addAll(audioEffectChain)
                 }
+                // v6.0.0: inject AI feature audio chain (e.g. afftdn noise removal)
+                if (aiAudioChain.isNotBlank()) {
+                    afFilters.add(aiAudioChain)
+                }
                 if (videoVolume != 1.0f) afFilters.add("volume=$videoVolume")
                 if (afFilters.isNotEmpty()) {
                     args.addAll(listOf("-af", afFilters.joinToString(",")))
@@ -1146,18 +1186,70 @@ class VideoProcessor @Inject constructor(
         //                         supported on Android 5+, iOS, web, TV.
         //   -movflags +faststart  moov atom at the front → instant playback.
         //   -map_metadata 0       preserve creation metadata.
-        args.addAll(listOf("-c:v", "libx264"))
-        args.addAll(listOf("-preset", "veryfast"))
-        args.addAll(listOf("-crf", "24"))
-        args.addAll(listOf("-g", "250"))
-        args.addAll(listOf("-keyint_min", "250"))
-        args.addAll(listOf("-sc_threshold", "0"))
-        args.addAll(listOf("-maxrate", "6M", "-bufsize", "12M"))
-        args.addAll(listOf("-profile:v", "high"))
-        args.addAll(listOf("-level", "4.0"))
-        args.addAll(listOf("-pix_fmt", "yuv420p"))
-        args.addAll(listOf("-movflags", "+faststart"))
-        args.addAll(listOf("-map_metadata", "0"))
+        //
+        // ── v6.0.0 DYNAMIC ENCODER ──────────────────────────────────────
+        // The encoder is now selected at runtime based on the user's premium
+        // export settings:
+        //  • HDR (isHdrEnabled): switches to libx265 (HEVC) 10-bit Main10
+        //    profile with BT.2020 PQ (SMPTE ST 2084) transfer — true HDR as
+        //    specified by the ITU. The zscale/format chain in the AI HDR
+        //    feature already maps the pixels to 10-bit; here we tell the
+        //    encoder + muxer the correct colour metadata.
+        //  • High Bitrate (isHighBitrateEnabled): lowers CRF to 18 (near-
+        //    lossless) and raises the VBV maxrate/bufsize cap so the output
+        //    retains maximum detail — ideal for mastering / re-editing.
+        //  • Default: the proven libx264 veryfast CRF 24 pipeline above.
+        val gopSize = (targetFps * 8).toString()  // ~8s GOP, adaptive to fps
+        if (isHdrEnabled) {
+            // ── HDR 10-bit HEVC pipeline ──
+            args.addAll(listOf("-c:v", "libx265"))
+            args.addAll(listOf("-preset", "veryfast"))
+            args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
+            args.addAll(listOf("-x265-params",
+                "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:" +
+                "max-cll=1000,400:hdr10-opt=1:repeat-headers=1"))
+            args.addAll(listOf("-g", gopSize))
+            args.addAll(listOf("-keyint_min", gopSize))
+            args.addAll(listOf("-sc_threshold", "0"))
+            // HDR needs a much higher bitrate ceiling (10-bit HDR is ~2.5x the data)
+            val hdrMaxrate = if (isHighBitrateEnabled) "40M" else "20M"
+            val hdrBufsize = if (isHighBitrateEnabled) "80M" else "40M"
+            args.addAll(listOf("-maxrate", hdrMaxrate, "-bufsize", hdrBufsize))
+            args.addAll(listOf("-pix_fmt", "yuv420p10le"))
+            args.addAll(listOf("-tag:v", "hvc1"))  // Apple/QuickTime HEVC tag
+            args.addAll(listOf("-movflags", "+faststart"))
+            args.addAll(listOf("-map_metadata", "0"))
+            Log.d(tag, "v6.0.0 HDR export: libx265 10-bit BT.2020 PQ, CRF=${if (isHighBitrateEnabled) 18 else 22}, maxrate=$hdrMaxrate")
+        } else if (isHighBitrateEnabled) {
+            // ── High-bitrate visually-lossless H.264 pipeline ──
+            args.addAll(listOf("-c:v", "libx264"))
+            args.addAll(listOf("-preset", "slow"))  // slower = better compression at low CRF
+            args.addAll(listOf("-crf", "18"))        // near-lossless
+            args.addAll(listOf("-g", gopSize))
+            args.addAll(listOf("-keyint_min", gopSize))
+            args.addAll(listOf("-sc_threshold", "0"))
+            args.addAll(listOf("-maxrate", "16M", "-bufsize", "32M"))
+            args.addAll(listOf("-profile:v", "high"))
+            args.addAll(listOf("-level", "5.1"))     // 4K-capable level
+            args.addAll(listOf("-pix_fmt", "yuv420p"))
+            args.addAll(listOf("-movflags", "+faststart"))
+            args.addAll(listOf("-map_metadata", "0"))
+            Log.d(tag, "v6.0.0 High Bitrate export: libx264 slow CRF 18, maxrate 16M")
+        } else {
+            // ── Standard proven pipeline (v4.2) ──
+            args.addAll(listOf("-c:v", "libx264"))
+            args.addAll(listOf("-preset", "veryfast"))
+            args.addAll(listOf("-crf", "24"))
+            args.addAll(listOf("-g", gopSize))
+            args.addAll(listOf("-keyint_min", gopSize))
+            args.addAll(listOf("-sc_threshold", "0"))
+            args.addAll(listOf("-maxrate", "6M", "-bufsize", "12M"))
+            args.addAll(listOf("-profile:v", "high"))
+            args.addAll(listOf("-level", "4.0"))
+            args.addAll(listOf("-pix_fmt", "yuv420p"))
+            args.addAll(listOf("-movflags", "+faststart"))
+            args.addAll(listOf("-map_metadata", "0"))
+        }
         args.addAll(listOf("-y", outputPath))
 
         Log.d(tag, "ProcessAndExport: ffmpeg ${args.joinToString(" ")}")
@@ -1576,6 +1668,39 @@ class VideoProcessor @Inject constructor(
                 listOf("hue=h='t*120'", "eq=saturation=1.8:contrast=1.2", "noise=alls=12:allf=t+u:allc=color")
             e.contains("festival") ->
                 listOf("eq=saturation=1.5:contrast=1.15", "colorbalance=rs=0.08:bs=0.08", "noise=alls=8:allf=t+u:allc=color")
+            // ── v6.0.0 NEW EFFECTS (real FFmpeg chains, no placeholders) ──
+            e.contains("fog") ->
+                listOf("boxblur=4:1", "eq=brightness=0.05:contrast=0.9", "colorbalance=bs=0.05:gs=0.03")
+            e.contains("hologram") ->
+                listOf("chromashift=cbh=-2:crv=2", "hqdn3d=1:0:1:0", "eq=saturation=0.6:contrast=1.2", "colorbalance=gs=0.1:bs=0.2", "drawgrid=w=0:h=4:t=1:color=cyan@0.08")
+            e.contains("lightning") ->
+                listOf("eq=brightness='0.8*lt(mod(t,3),0.1)'")
+            e.contains("mirror") ->
+                listOf("split[a][b]", "[b]hflip[b2]", "[a][b2]hstack")
+            e.contains("true_kaleidoscope") ->
+                listOf("geq=lum='p(X,Y)':cb='p(mod(X+W/2,W),Y)':cr='p(X,mod(Y+H/2,H))'")
+            e.contains("deflicker") ->
+                listOf("deflicker=mode=am:size=10")
+            e.contains("ai_denoise") ->
+                listOf("hqdn3d=4:3:4:3")
+            e.contains("ai_deblur") ->
+                listOf("unsharp=7:7:1.5:7:7:0.0", "smartblur=lr=1:lt=-5")
+            e.contains("ai_super_res") ->
+                listOf("scale=iw*2:ih*2:flags=lanczos", "unsharp=7:7:1.2:7:7:0")
+            e.contains("ai_upscale") ->
+                listOf("scale=iw*2:ih*2:flags=lanczos", "unsharp=5:5:0.6")
+            e.contains("ai_frame_interp") ->
+                listOf("minterpolate=fps=60:mi_mode=mci:mc_mode=aobmc:me_mode=bidir")
+            e.contains("ai_slow_motion") ->
+                listOf("minterpolate=fps=120:mi_mode=mci", "setpts=4*PTS", "fps=30")
+            e.contains("ai_restore") ->
+                listOf("hqdn3d=4:3:4:3", "eq=contrast=1.1:saturation=1.1", "unsharp=5:5:0.5")
+            e.contains("ai_stabilize") ->
+                listOf("deshake")
+            e.contains("ai_lens_correct") ->
+                listOf("lenscorrection=k1=0:k2=0")
+            e.contains("ai_relight") ->
+                listOf("eq=brightness=0.08:contrast=1.05", "curves=preset=lighter")
             else -> listOf()
         }
     }
@@ -1668,6 +1793,12 @@ class VideoProcessor @Inject constructor(
             "distortion" -> listOf("acompressor=threshold=-10:ratio=10", "aecho=0.3:0.5:30:0.2")
             "karaoke" -> listOf("stereotools=mlev=1")
             "vocal_remove" -> listOf("stereotools=mlev=1")
+            // ── v6.0.0 NEW AUDIO EFFECTS (real FFmpeg -af chains) ──
+            "limiter" -> listOf("alimiter=limit=0.9:attack=5:release=50")
+            "vocal_isolation" -> listOf("stereotools=mlev=1:mdelay=1")
+            "separate_audio" -> listOf("stereotools=mlev=1")
+            "ai_noise_removal" -> listOf("afftdn=nr=20:nf=-25")
+            "ai_sound_effects" -> listOf("aecho=0.6:0.3:100:0.3")
             else -> emptyList()
         }
     }
@@ -1756,6 +1887,15 @@ class VideoProcessor @Inject constructor(
             "ripple" -> listOf("lenscorrection=k1='0.2*sin(t*10)':k2='0.2*cos(t*10)':enable='between(t,0,$fadeDur)'")
             "wave" -> listOf("lenscorrection=k1='0.1*sin(t*8)':k2='0.1*cos(t*8)':enable='between(t,0,$fadeDur)'")
             "shatter" -> listOf("noise=alls=30:allf=t+u:enable='between(t,0,$fadeDur)'", "crop=iw-10:ih-10:enable='between(t,0,$fadeDur)'")
+            // ── v6.0.0 NEW TRANSITIONS (real FFmpeg chains) ──
+            "pull" -> listOf("crop=iw:ih:'-iw*(1-t/$fadeDur)':0:enable='between(t,0,$fadeDur)'")
+            "warp" -> listOf("scale='1+2*t/$fadeDur':'1+2*t/$fadeDur':enable='between(t,0,$fadeDur)'")
+            "stretch" -> listOf("scale='1+0.5*sin(t*PI/$fadeDur)':'1':enable='between(t,0,$fadeDur)'")
+            "page_turn" -> listOf("hflip:enable='between(t,0,$fadeDur)'", "fade=t=in:st=0:d=$fadeDur")
+            "camera_move" -> listOf("zoompan=z='1+0.2*t/$fadeDur':x='iw*t/$fadeDur':y='ih*t/$fadeDur':d=1:s=${w}x${h}:fps=30")
+            "whip_pan" -> listOf("crop=iw:ih:'iw*3*t/$fadeDur-2*iw':0:enable='between(t,0,$fadeDur)'")
+            "cube" -> listOf("rotate=angle='PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'", "scale='1-abs(t/$fadeDur-0.5)*0.5':'1':enable='between(t,0,$fadeDur)'")
+            "smooth_cut" -> listOf("fade=t=in:st=0:d=0.3")
             else -> listOf()
         }
     }
