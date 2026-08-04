@@ -1345,7 +1345,7 @@ fun EditorScreen(
                 // (removeWatermark = true -> no PowerCut watermark on the output).
                 isExporting = true
                 scope.launch(Dispatchers.IO) {
-                    val moviesDir = android.io.File(
+                    val moviesDir = java.io.File(
                         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
                         "PowerCut"
                     )
@@ -1371,7 +1371,7 @@ fun EditorScreen(
                 // (removeWatermark = false -> watermark auto-applied in the native engine).
                 isExporting = true
                 scope.launch(Dispatchers.IO) {
-                    val moviesDir = android.io.File(
+                    val moviesDir = java.io.File(
                         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
                         "PowerCut"
                     )
