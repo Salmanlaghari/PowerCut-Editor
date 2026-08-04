@@ -63,8 +63,21 @@ class ExportEngine {
 
     /**
      * Start an export on the native worker thread.
-     * Returns true if the export was started, false if already running or
-     * the native engine is unavailable.
+     *
+     * @param dag the CURRENT active timeline state — must be the live
+     *            [com.powercut.editor.data.VideoProject] instance, NOT a stale
+     *            global or empty `Any()`. The JNI bridge reads its fields
+     *            (trim, speed, filter, text overlay, crop, rotation, background
+     *            music, volumes, etc.) and builds a PowerCutDAG so the native
+     *            engine can resolve every timeline edit per-frame, mix all
+     *            audio tracks, and hash the DAG for cache invalidation.
+     * @param config export configuration. The `removeWatermark` boolean is
+     *               mapped directly to the native `remove_watermark` field via
+     *               JNI GetBooleanField (Kotlin `Boolean` -> JNI `"Z"`).
+     *               `removeWatermark = true`  -> clean export (ad watched).
+     *               `removeWatermark = false` -> PowerCut watermark overlay.
+     * @return true if the export was started, false if already running or
+     *         the native engine is unavailable.
      */
     fun start(dag: Any, config: ExportConfig): Boolean {
         return try {
