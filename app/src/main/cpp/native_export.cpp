@@ -80,7 +80,7 @@ static ExportPreset read_preset(JNIEnv* env, jobject presetObj) {
 
     jclass cls = env->GetObjectClass(presetObj);
 
-    jfieldId fName = env->GetFieldID(cls, "name", "Ljava/lang/String;");
+    jfieldID fName = env->GetFieldID(cls, "name", "Ljava/lang/String;");
     if (fName) {
         jstring js = (jstring) env->GetObjectField(presetObj, fName);
         if (js) {
@@ -90,21 +90,21 @@ static ExportPreset read_preset(JNIEnv* env, jobject presetObj) {
         }
     }
 
-    jfieldId fW = env->GetFieldID(cls, "w", "I");
-    jfieldId fH = env->GetFieldID(cls, "h", "I");
+    jfieldID fW = env->GetFieldID(cls, "w", "I");
+    jfieldID fH = env->GetFieldID(cls, "h", "I");
     if (fW) p.w = env->GetIntField(presetObj, fW);
     if (fH) p.h = env->GetIntField(presetObj, fH);
 
-    jfieldId fFps = env->GetFieldID(cls, "fps", "D");
+    jfieldID fFps = env->GetFieldID(cls, "fps", "D");
     if (fFps) p.fps = env->GetDoubleField(presetObj, fFps);
 
-    jfieldId fTbr = env->GetFieldID(cls, "tbr", "J");
-    jfieldId fMbr = env->GetFieldID(cls, "mbr", "J");
+    jfieldID fTbr = env->GetFieldID(cls, "tbr", "J");
+    jfieldID fMbr = env->GetFieldID(cls, "mbr", "J");
     if (fTbr) p.tbr = env->GetLongField(presetObj, fTbr);
     if (fMbr) p.mbr = env->GetLongField(presetObj, fMbr);
 
     auto read_str = [&](const char* field) -> std::string {
-        jfieldId fid = env->GetFieldID(cls, field, "Ljava/lang/String;");
+        jfieldID fid = env->GetFieldID(cls, field, "Ljava/lang/String;");
         if (!fid) return {};
         jstring js = (jstring) env->GetObjectField(presetObj, fid);
         if (!js) return {};
@@ -130,7 +130,7 @@ static ExportConfig read_config(JNIEnv* env, jobject configObj) {
 
     jclass cls = env->GetObjectClass(configObj);
 
-    jfieldId fPreset = env->GetFieldID(cls, "preset",
+    jfieldID fPreset = env->GetFieldID(cls, "preset",
         "Lcom/powercut/editor/export/ExportPreset;");
     if (fPreset) {
         jobject presetObj = env->GetObjectField(configObj, fPreset);
@@ -138,7 +138,7 @@ static ExportConfig read_config(JNIEnv* env, jobject configObj) {
         if (presetObj) env->DeleteLocalRef(presetObj);
     }
 
-    jfieldId fOut = env->GetFieldID(cls, "out", "Ljava/lang/String;");
+    jfieldID fOut = env->GetFieldID(cls, "out", "Ljava/lang/String;");
     if (fOut) {
         jstring js = (jstring) env->GetObjectField(configObj, fOut);
         if (js) {
@@ -149,7 +149,7 @@ static ExportConfig read_config(JNIEnv* env, jobject configObj) {
     }
 
     auto read_bool = [&](const char* field) -> bool {
-        jfieldId fid = env->GetFieldID(cls, field, "Z");
+        jfieldID fid = env->GetFieldID(cls, field, "Z");
         return fid ? env->GetBooleanField(configObj, fid) : false;
     };
     c.hw = read_bool("hw");
