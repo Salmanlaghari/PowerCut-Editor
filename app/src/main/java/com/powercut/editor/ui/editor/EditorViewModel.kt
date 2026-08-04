@@ -10,6 +10,7 @@ import com.powercut.editor.data.ProjectRepository
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.export.ExportForegroundService
 import com.powercut.editor.domain.export.ExportManager
+import com.powercut.editor.domain.processing.VideoProcessor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +41,8 @@ data class DraftItem(
 class EditorViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val projectRepository: ProjectRepository,
-    private val exportManager: ExportManager
+    private val exportManager: ExportManager,
+    private val videoProcessor: VideoProcessor
 ) : ViewModel() {
 
     private val _currentScreen = MutableStateFlow("home") // "home" (dashboard), "editor", "export"
@@ -884,10 +886,24 @@ class EditorViewModel @Inject constructor(
     }
 
     fun startExportWithSettings(resolution: String, fps: Int, isNoWatermark: Boolean, isHardwareAcc: Boolean) {
+        // v5.0.0 WATERMARK FIX: Previously `isNoWatermark` was received but
+        // NEVER used — the watermark was never applied to any export, so the
+        // rewarded-ad "remove watermark" feature was effectively decorative.
+        // Now: if the user has NOT earned watermark removal (isNoWatermark =
+        // false), we set watermarkPath to the bundled PowerCut watermark PNG
+        // so the FFmpeg overlay filter burns it into the output. If the user
+        // DID earn removal (watched ad / premium), we clear the path.
+        val watermarkPath = if (isNoWatermark) {
+            null
+        } else {
+            videoProcessor.getWatermarkFile()
+        }
+
         // Update project configuration before start
         projectRepository.updateProject { project ->
             project.copy(
-                targetResolution = resolution
+                targetResolution = resolution,
+                watermarkPath = watermarkPath
             )
         }
         val project = currentProject.value ?: return

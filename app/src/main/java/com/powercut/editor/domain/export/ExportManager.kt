@@ -62,6 +62,7 @@ class ExportManager @Inject constructor(
         _progress.value = 5
         var tempAudio: File? = null
         var tempOutput: File? = null
+        var gallerySaved = false
         try {
             val secureDir = context.externalCacheDir?.let { ext ->
                 val dir = File(ext, "PowerCutExports")
@@ -112,8 +113,16 @@ class ExportManager @Inject constructor(
             // 3) Save the MP4 into the public Movies/PowerCut gallery.
             val galleryPath = saveToPublicGallery(context, tempOutput)
             _progress.value = 100
-            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
-            return galleryPath ?: tempOutput.absolutePath
+            if (galleryPath != null) {
+                gallerySaved = true
+                _exportState.value = Resource.Success(galleryPath)
+                return galleryPath
+            } else {
+                // Gallery save failed — keep the temp file as the result.
+                gallerySaved = false
+                _exportState.value = Resource.Success(tempOutput.absolutePath)
+                return tempOutput.absolutePath
+            }
         } catch (e: Exception) {
             Log.e(tag, "convertMp3ToMp4 exception", e)
             _exportState.value = Resource.Error("Conversion failed: ${e.message}", e)
@@ -121,8 +130,8 @@ class ExportManager @Inject constructor(
             return null
         } finally {
             tempAudio?.delete()
-            tempOutput?.delete()
-            // Reset progress after a short delay so the UI can show 100%.
+            // v5.0.0 FIX: Only delete temp output if the gallery save succeeded.
+            if (gallerySaved) tempOutput?.delete()
             kotlinx.coroutines.delay(600)
             _progress.value = -1
         }
@@ -143,6 +152,7 @@ class ExportManager @Inject constructor(
         _progress.value = 5
         var tempInput: File? = null
         var tempOutput: File? = null
+        var gallerySaved = false
         try {
             val secureDir = context.externalCacheDir?.let { ext ->
                 val dir = File(ext, "PowerCutExports"); if (!dir.exists()) dir.mkdirs(); dir
@@ -166,14 +176,22 @@ class ExportManager @Inject constructor(
             }
             val galleryPath = saveToPublicGallery(context, tempOutput)
             _progress.value = 100
-            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
-            return galleryPath ?: tempOutput.absolutePath
+            if (galleryPath != null) {
+                gallerySaved = true
+                _exportState.value = Resource.Success(galleryPath)
+                return galleryPath
+            } else {
+                gallerySaved = false
+                _exportState.value = Resource.Success(tempOutput.absolutePath)
+                return tempOutput.absolutePath
+            }
         } catch (e: Exception) {
             Log.e(tag, "compressVideo exception", e)
             _exportState.value = Resource.Error("Compression failed: ${e.message}", e)
             _progress.value = 0; return null
         } finally {
-            tempInput?.delete(); tempOutput?.delete()
+            tempInput?.delete()
+            if (gallerySaved) tempOutput?.delete()
             kotlinx.coroutines.delay(600); _progress.value = -1
         }
     }
@@ -192,6 +210,7 @@ class ExportManager @Inject constructor(
         _progress.value = 5
         val tempImages = mutableListOf<File>()
         var tempOutput: File? = null
+        var gallerySaved = false
         try {
             val secureDir = context.externalCacheDir?.let { ext ->
                 val dir = File(ext, "PowerCutExports"); if (!dir.exists()) dir.mkdirs(); dir
@@ -224,15 +243,22 @@ class ExportManager @Inject constructor(
             }
             val galleryPath = saveToPublicGallery(context, tempOutput)
             _progress.value = 100
-            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
-            return galleryPath ?: tempOutput.absolutePath
+            if (galleryPath != null) {
+                gallerySaved = true
+                _exportState.value = Resource.Success(galleryPath)
+                return galleryPath
+            } else {
+                gallerySaved = false
+                _exportState.value = Resource.Success(tempOutput.absolutePath)
+                return tempOutput.absolutePath
+            }
         } catch (e: Exception) {
             Log.e(tag, "createSlideshow exception", e)
             _exportState.value = Resource.Error("Slideshow failed: ${e.message}", e)
             _progress.value = 0; return null
         } finally {
             tempImages.forEach { it.delete() }
-            tempOutput?.delete()
+            if (gallerySaved) tempOutput?.delete()
             kotlinx.coroutines.delay(600); _progress.value = -1
         }
     }
@@ -247,6 +273,7 @@ class ExportManager @Inject constructor(
         _progress.value = 5
         var tempInput: File? = null
         var tempOutput: File? = null
+        var gallerySaved = false
         try {
             val secureDir = context.externalCacheDir?.let { ext ->
                 val dir = File(ext, "PowerCutExports"); if (!dir.exists()) dir.mkdirs(); dir
@@ -269,14 +296,22 @@ class ExportManager @Inject constructor(
             }
             val galleryPath = saveToPublicGallery(context, tempOutput)
             _progress.value = 100
-            _exportState.value = Resource.Success(galleryPath ?: tempOutput.absolutePath)
-            return galleryPath ?: tempOutput.absolutePath
+            if (galleryPath != null) {
+                gallerySaved = true
+                _exportState.value = Resource.Success(galleryPath)
+                return galleryPath
+            } else {
+                gallerySaved = false
+                _exportState.value = Resource.Success(tempOutput.absolutePath)
+                return tempOutput.absolutePath
+            }
         } catch (e: Exception) {
             Log.e(tag, "applyAiEdit exception", e)
             _exportState.value = Resource.Error("AI Edit failed: ${e.message}", e)
             _progress.value = 0; return null
         } finally {
-            tempInput?.delete(); tempOutput?.delete()
+            tempInput?.delete()
+            if (gallerySaved) tempOutput?.delete()
             kotlinx.coroutines.delay(600); _progress.value = -1
         }
     }
@@ -751,8 +786,10 @@ class ExportManager @Inject constructor(
 
     private fun saveToPublicGallery(context: Context, sourceFile: File): String? {
         val resolver = context.contentResolver
+        // v5.0.0 FIX: Capture the exact filename so the returned path matches the real file.
+        val fileName = "PowerCut_${System.currentTimeMillis()}.mp4"
         val contentValues = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, "PowerCut_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PowerCut")
@@ -769,50 +806,61 @@ class ExportManager @Inject constructor(
         return try {
             val uri = resolver.insert(collection, contentValues)
             if (uri != null) {
-                resolver.openOutputStream(uri)?.use { outStream ->
+                // v5.0.0 FIX: Verify the output stream actually opened and bytes were written.
+                var bytesWritten = 0L
+                val streamOk = resolver.openOutputStream(uri)?.use { outStream ->
                     sourceFile.inputStream().use { inStream ->
-                        // Use 1MB buffer for fast copy of large video files
                         val buffer = ByteArray(1024 * 1024)
                         var read: Int
                         while (inStream.read(buffer).also { read = it } != -1) {
                             outStream.write(buffer, 0, read)
+                            bytesWritten += read
                         }
                         outStream.flush()
                     }
+                    true
+                } ?: false
+
+                if (!streamOk || bytesWritten == 0L) {
+                    Log.e(tag, "saveToPublicGallery: output stream failed or wrote 0 bytes")
+                    try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+                    return null
                 }
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     contentValues.clear()
                     contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
                     resolver.update(uri, contentValues, null, null)
                 }
 
+                // v5.0.0 FIX: Return the path with the SAME filename we used for DISPLAY_NAME.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    "Movies/PowerCut/PowerCut_${System.currentTimeMillis()}.mp4"
+                    "Movies/PowerCut/$fileName"
                 } else {
-                    uri.path
+                    uri.path ?: "Movies/PowerCut/$fileName"
                 }
             } else {
                 // Fallback 1: Direct File Copy to Public Movies Directory
                 val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
                 val powerCutDir = File(publicDir, "PowerCut")
                 if (!powerCutDir.exists()) powerCutDir.mkdirs()
-                val targetFile = File(powerCutDir, "PowerCut_${System.currentTimeMillis()}.mp4")
+                val targetFile = File(powerCutDir, fileName)
                 sourceFile.copyTo(targetFile, overwrite = true)
                 targetFile.absolutePath
             }
         } catch (e: Exception) {
             Log.e(tag, "Failed to insert exported video into system Gallery database", e)
             try {
-                // Fallback 2: Local Application Sandbox Fallback Path (Guaranteed to succeed)
+                // Fallback 2: Local Application Sandbox Fallback Path
                 val externalFilesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
                 val powerCutDir = File(externalFilesDir, "PowerCut")
                 if (!powerCutDir.exists()) powerCutDir.mkdirs()
-                val targetFile = File(powerCutDir, "PowerCut_${System.currentTimeMillis()}.mp4")
+                val targetFile = File(powerCutDir, fileName)
                 sourceFile.copyTo(targetFile, overwrite = true)
                 targetFile.absolutePath
             } catch (innerEx: Exception) {
-                Log.e(tag, "Absolute fallback failed, returning sandboxed original path", innerEx)
-                sourceFile.absolutePath
+                Log.e(tag, "Absolute fallback failed, returning null", innerEx)
+                null
             }
         }
     }

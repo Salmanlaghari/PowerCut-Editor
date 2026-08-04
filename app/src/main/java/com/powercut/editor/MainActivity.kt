@@ -42,6 +42,9 @@ import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.google.android.gms.ads.AdError
+import com.google.android.gms.ads.FullScreenContentCallback
+import com.google.android.gms.ads.rewarded.OnUserEarnedRewardListener
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.AdConstants
 import com.powercut.editor.ui.editor.NextGenEditorScreen
@@ -191,7 +194,7 @@ class MainActivity : ComponentActivity() {
                                     language = language,
                                     onLanguageToggle = { viewModel.toggleLanguage() },
                                     onVideoSelected = { uri ->
-                                        viewModel.selectVideo(this@MainActivity, uri)
+                                        importVideoWithAd(uri)
                                     },
                                     activeTab = currentDashboardTab,
                                     onTabSelected = { tab ->
@@ -222,7 +225,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel.resumeDraft(draft)
                                     },
                                     onTemplateVideoSelected = { uri, tId, filt, trans, caps, speed ->
-                                        viewModel.selectVideo(this@MainActivity, uri, tId, filt, trans, caps, speed)
+                                        importVideoWithAd(uri, tId, filt, trans, caps, speed)
                                     },
                                     // v4.4.0 Premium FFmpeg Media Converter: MP3 -> MP4
                                     onConvertMp3ToMp4 = { audioUri ->
@@ -407,7 +410,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onBackToEditor = { viewModel.navigateToEditor() },
                                     onImportNewVideo = { uri ->
-                                        viewModel.selectVideo(this@MainActivity, uri)
+                                        importVideoWithAd(uri)
                                     },
                                     isWatermarkRemoved = isWatermarkRemoved,
                                     onRemoveWatermarkRequested = {
@@ -534,17 +537,104 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun showRewardedAd(onEarnedReward: () -> Unit) {
+    // ─────────────────────────────────────────────────────────────────────
+    //  v5.0.0 AD-BASED WATERMARK AT IMPORT TIME
+    //  User request: "import ke time agar user ads per click kare to remove
+    //  watermark video import ho, agar ads per click na kare to watermark ke
+    //  sath video import aaye."
+    //
+    //  Flow: When the user picks a video to import, we show a rewarded ad
+    //  FIRST. If they watch it (or the ad fails to load — graceful fallback),
+    //  isWatermarkRemoved = true → the export will have NO watermark. The ad
+    //  is always offered; the export pipeline reads isWatermarkRemoved when
+    //  the user eventually taps EXPORT.
+    // ─────────────────────────────────────────────────────────────────────
+    private fun importVideoWithAd(
+        uri: android.net.Uri,
+        templateId: String = "none",
+        filter: String = "none",
+        transition: String = "none",
+        captions: String = "off",
+        speed: Float = 1.0f
+    ) {
+        // v5.0.0 AD-BASED WATERMARK AT IMPORT TIME.
+        // Show a rewarded ad when the user picks a video to import.
+        // - If watched to completion (reward earned): mark watermark removed so
+        //   the eventual export has NO watermark, then import.
+        // - If skipped/closed early (no reward): watermark stays, then import.
+        // - If ad fails to load (fallback): grant reward (no watermark), import.
+        // The import ALWAYS proceeds; only the watermark decision changes.
+        showRewardedAd(
+            onEarnedReward = {
+                // User watched the ad (or fallback) — remove watermark.
+                isWatermarkRemoved = true
+                Toast.makeText(
+                    this,
+                    "Ad rewarded! Watermark removed for this video.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onAdDismissed = {
+                // Ad closed — import the video regardless of reward.
+                // isWatermarkRemoved was set to true above only if reward was earned.
+                viewModel.selectVideo(this, uri, templateId, filter, transition, captions, speed)
+            }
+        )
+    }
+
+    private fun showRewardedAd(
+        onEarnedReward: () -> Unit,
+        onAdDismissed: (() -> Unit)? = null
+    ) {
         rewardedAd?.let { ad ->
+            // v5.0.0: Track whether the user actually earned the reward so the
+            // dismiss callback can branch on it. OnUserEarnedRewardListener fires
+            // only when the ad is watched to completion; FullScreenContentCallback
+            // fires on ad dismissed/failed regardless.
+            var rewardEarned = false
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenAd() {
+                    // Ad closed (watched or skipped). OnUserEarnedRewardListener
+                    // already called onEarnedReward if the user watched to completion.
+                    when {
+                        // Reward earned AND a dismiss callback exists → call dismiss
+                        // (e.g. importVideoWithAd: watermark set above, now import).
+                        rewardEarned && onAdDismissed != null -> onAdDismissed!!.invoke()
+                        // Reward earned, no dismiss callback → onEarnedReward already
+                        // fired, nothing more to do (export watermark removal case).
+                        rewardEarned -> { /* already handled */ }
+                        // No reward (user skipped) AND dismiss callback exists →
+                        // proceed WITHOUT reward (import with watermark).
+                        onAdDismissed != null -> onAdDismissed!!.invoke()
+                        // No reward, no dismiss callback → fall back to onEarnedReward
+                        // so the flow still completes (backward compatible).
+                        else -> onEarnedReward()
+                    }
+                    rewardedAd = null
+                    loadRewardedAd()
+                }
+
+                override fun onAdFailedToShowFullScreenAd(adError: AdError) {
+                    // Ad failed to show — treat as fallback (grant reward so flow
+                    // continues), then fire dismiss so callers still proceed.
+                    onEarnedReward()
+                    onAdDismissed?.invoke()
+                    rewardedAd = null
+                    loadRewardedAd()
+                }
+            }
             ad.show(this) {
+                // OnUserEarnedRewardListener — user watched the ad to completion.
+                rewardEarned = true
                 onEarnedReward()
             }
-            rewardedAd = null
-            loadRewardedAd() // reload the ad unit
         } ?: run {
-            // Fallback reward if ad failed to load so user flows remain smooth
+            // Fallback: ad not loaded. Grant reward so user flows remain smooth,
+            // then fire the dismiss callback so callers like importVideoWithAd
+            // still proceed with the import.
             Toast.makeText(this, "Ad loading... Watermark unlocked instantly!", Toast.LENGTH_SHORT).show()
             onEarnedReward()
+            onAdDismissed?.invoke()
             loadRewardedAd()
         }
     }

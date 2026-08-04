@@ -125,6 +125,46 @@ class VideoProcessor @Inject constructor(
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  v5.0.0 WATERMARK ASSET EXTRACTION
+    //  Same pattern as the font extraction above: we bundle a transparent
+    //  PowerCut watermark PNG in assets/ and copy it to cacheDir on first use
+    //  so FFmpeg's overlay filter can read it as a real file.
+    // ─────────────────────────────────────────────────────────────────────
+    private var cachedWatermarkPath: String? = null
+
+    /**
+     * Returns the absolute path to the bundled PowerCut watermark PNG on disk,
+     * extracting it from assets to cacheDir on first call. Thread-safe.
+     * v5.0.0: Used by ExportManager / EditorViewModel when the user has NOT
+     * removed the watermark via rewarded ad.
+     */
+    @Synchronized
+    fun getWatermarkFile(): String? {
+        cachedWatermarkPath?.let { path ->
+            if (File(path).exists()) return path
+            cachedWatermarkPath = null
+        }
+        return try {
+            val dest = File(context.cacheDir, "powercut_watermark.png")
+            if (!dest.exists() || dest.length() == 0L) {
+                context.assets.open("watermark.png").use { input ->
+                    java.io.FileOutputStream(dest).use { output ->
+                        input.copyTo(output, bufferSize = 8192)
+                        output.flush()
+                    }
+                }
+            }
+            val path = dest.absolutePath
+            cachedWatermarkPath = path
+            Log.d(tag, "Watermark file ready for overlay: $path (${dest.length()} bytes)")
+            path
+        } catch (e: Exception) {
+            Log.e(tag, "Could not extract bundled watermark PNG", e)
+            null
+        }
+    }
+
     /**
      * Builds the `fontfile=<path>` clause for drawtext, or empty string if the
      * font could not be loaded (in which case the caller should skip drawtext
