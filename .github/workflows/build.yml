@@ -24,6 +24,15 @@ jobs:
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
+    - name: Read Version Name
+      id: version
+      run: |
+        VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        VERSION_CODE=$(grep 'versionCode' app/build.gradle.kts | head -1 | sed 's/[^0-9]*\([0-9]*\).*/\1/')
+        echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+        echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+        echo "Detected versionName=$VERSION_NAME versionCode=$VERSION_CODE"
+
     - name: Prepare Signing Key and Config
       run: |
         if [ -n "${{ secrets.POWERCUT_KEYSTORE_BASE64 }}" ]; then
@@ -34,8 +43,8 @@ jobs:
         fi
       shell: bash
 
-    - name: Build Debug & Release APK/AAB
-      run: ./gradlew assembleDebug assembleRelease bundleRelease --stacktrace
+    - name: Build Debug APK + Debug AAB + Release APK + Release AAB
+      run: ./gradlew assembleDebug assembleRelease bundleDebug bundleRelease --stacktrace
       env:
         POWERCUT_STORE_PASSWORD: ${{ secrets.POWERCUT_STORE_PASSWORD }}
         POWERCUT_KEY_ALIAS: ${{ secrets.POWERCUT_KEY_ALIAS }}
@@ -44,17 +53,27 @@ jobs:
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: PowerCut-Debug-APK
+        name: PowerCut-v${{ steps.version.outputs.version_name }}-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
+        if-no-files-found: warn
 
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
-        name: PowerCut-Release-APK
+        name: PowerCut-v${{ steps.version.outputs.version_name }}-Release-APK
         path: app/build/outputs/apk/release/*.apk
+        if-no-files-found: warn
+
+    - name: Upload Debug AAB (App Bundle)
+      uses: actions/upload-artifact@v4
+      with:
+        name: PowerCut-v${{ steps.version.outputs.version_name }}-Debug-AAB
+        path: app/build/outputs/bundle/debug/*.aab
+        if-no-files-found: warn
 
     - name: Upload Release AAB (App Bundle)
       uses: actions/upload-artifact@v4
       with:
-        name: PowerCut-Release-Bundle
+        name: PowerCut-v${{ steps.version.outputs.version_name }}-Release-AAB
         path: app/build/outputs/bundle/release/*.aab
+        if-no-files-found: warn
