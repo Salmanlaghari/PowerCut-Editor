@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -107,7 +108,7 @@ fun AiFeatureHubScreen(
                     glowWidth = 1.dp
                 )
                 .background(
-                    if (activeId == "none") SurfaceVariant else premiumAccentGradient,
+                    if (activeId == "none") Brush.linearGradient(listOf(SurfaceVariant, SurfaceVariant)) else premiumAccentGradient,
                     RoundedCornerShape(14.dp)
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp)

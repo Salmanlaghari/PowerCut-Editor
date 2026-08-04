@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,7 +109,7 @@ fun SocialPresetScreen(
                     glowWidth = 1.dp
                 )
                 .background(
-                    if (activeId == "none") SurfaceVariant else premiumAccentGradient,
+                    if (activeId == "none") Brush.linearGradient(listOf(SurfaceVariant, SurfaceVariant)) else premiumAccentGradient,
                     RoundedCornerShape(14.dp)
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -187,7 +188,7 @@ private fun SocialPresetCard(
                     .aspectRatio(previewAspectRatio)
                     .clip(RoundedCornerShape(8.dp))
                     .background(
-                        if (isActive) Color.White.copy(alpha = 0.3f) else
+                        if (isActive) Brush.linearGradient(listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.3f))) else
                             Brush.linearGradient(listOf(AccentSecondary.copy(alpha = 0.25f), AccentPrimary.copy(alpha = 0.25f)))
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp)),

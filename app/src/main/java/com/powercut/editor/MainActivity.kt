@@ -66,13 +66,11 @@ import com.powercut.editor.ui.theme.SurfaceVariant
 import com.powercut.editor.ui.theme.premiumAccentGradient
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
