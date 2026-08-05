@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PowerCut Pro 2027</string>
+    <string name="export_channel_name">Video Export</string>
+    <string name="export_channel_desc">Shows progress while exporting your video</string>
+    <string name="export_in_progress">Exporting video…</string>
+</resources>
