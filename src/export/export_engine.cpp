@@ -37,12 +37,36 @@ struct ExportEngine::Impl {
   AVFrame* audio_frame=nullptr;   // intermediate float planar frame
   int64_t audio_pts=0;            // locked to video frame PTS
   int audio_samples_per_frame=0;  // samples per video frame at 48kHz
+
+  // PRIORITY 1 FIX: Mutex to protect cancel flag + cleanup from concurrent
+  // access by the worker thread and the cancel()/destructor path.
+  std::mutex mtx;
+  // PRIORITY 1 FIX: Track whether format context has been freed to prevent
+  // double-free between worker() end and destructor.
+  bool fc_freed=true;  // true = already freed / not yet allocated
+  // PRIORITY 1 FIX: Track whether the worker thread has been joined.
+  bool worker_joined=true;
 };
 ExportEngine::ExportEngine():m(std::make_unique<Impl>()){
   leveldb::Options o; o.create_if_missing=true;
   leveldb::DB::Open(o,"powercut_render_cache",&m->db);
 }
-ExportEngine::~ExportEngine(){cancel(); delete m->db;}
+ExportEngine::~ExportEngine(){
+  // PRIORITY 1 FIX: cancel() joins the worker thread (safe). Then clean up
+  // any FFmpeg resources the worker didn't free (e.g. if cancelled early).
+  cancel();
+  std::lock_guard<std::mutex> lk(m->mtx);
+  if(!m->fc_freed && m->fc){
+    if(m->vs && m->vs->codec) avcodec_free_context(&m->vc);
+    if(m->as && m->as->codec) avcodec_free_context(&m->ac);
+    avformat_free_context(m->fc);
+    m->fc=nullptr;
+    m->fc_freed=true;
+  }
+  if(m->sws){ sws_freeContext(m->sws); m->sws=nullptr; }
+  if(m->swr){ swr_free(&m->swr); m->swr=nullptr; }
+  delete m->db; m->db=nullptr;
+}
 bool ExportEngine::running()const{return m->run;}
 void ExportEngine::on_progress(Cb f){m->pcb=std::move(f);}
 
@@ -166,7 +190,11 @@ void ExportEngine::apply_watermark(RGBAFrame* frame) {
 // ===========================================================================
 bool ExportEngine::start(PowerCutDAG* d,const ExportConfig& c){
   if(m->run)return false;
+  if(!d) return false;  // PRIORITY 1 FIX: reject null DAG
+  std::lock_guard<std::mutex> lk(m->mtx);  // PRIORITY 1 FIX: protect state
+  if(m->run)return false;  // double-check after lock
   m->dag=d; m->cfg=c; m->run=true; m->cancel=false;
+  m->fc_freed=true; m->worker_joined=false;
   m->fd=(TimeMicros)(1000000.0/c.preset.fps);
   m->tf=(d->duration()+m->fd-1)/m->fd;
   m->prog={0,m->tf,0.,0,0};
@@ -183,7 +211,16 @@ bool ExportEngine::start(PowerCutDAG* d,const ExportConfig& c){
   m->th=std::thread(&ExportEngine::worker,this);
   return true;
 }
-void ExportEngine::cancel(){m->cancel=true;if(m->th.joinable())m->th.join();m->run=false;}
+void ExportEngine::cancel(){
+  // PRIORITY 1 FIX: Thread-safe cancel. Set the flag without holding the
+  // mutex (the worker checks it in a tight loop), then join. We must NOT
+  // hold the mutex while joining because the worker may try to lock it.
+  m->cancel=true;
+  if(m->th.joinable()) m->th.join();
+  std::lock_guard<std::mutex> lk(m->mtx);
+  m->run=false;
+  m->worker_joined=true;
+}
 
 // ===========================================================================
 // BUG 1 + BUG 4: Worker loop.
@@ -279,7 +316,23 @@ void ExportEngine::worker(){
       if(d.pcb)d.pcb(d.prog); lt=now;
     }
   }
-  if(!d.cancel)mux(); avformat_free_context(d.fc); d.run=false;
+  // PRIORITY 1 FIX: Only mux if not cancelled. Guard all FFmpeg cleanup
+  // with null checks. Mark fc_freed so the destructor doesn't double-free.
+  if(!d.cancel) mux();
+  {
+    std::lock_guard<std::mutex> lk(d.mtx);
+    if(d.fc){
+      // Close any open codec contexts before freeing the format context.
+      if(d.vs && d.vs->codec) avcodec_free_context(&d.vc);
+      if(d.as && d.as->codec) avcodec_free_context(&d.ac);
+      avformat_free_context(d.fc);
+      d.fc=nullptr;
+    }
+    if(d.sws){ sws_freeContext(d.sws); d.sws=nullptr; }
+    if(d.swr){ swr_free(&d.swr); d.swr=nullptr; }
+    d.fc_freed=true;
+    d.run=false;
+  }
 }
 
 bool ExportEngine::setup_enc(){
@@ -292,39 +345,81 @@ bool ExportEngine::setup_enc(){
     cv=avcodec_find_encoder_by_name("h264_nvenc"); if(!cv)cv=avcodec_find_encoder_by_name("h264_amf");
   #endif
   if(!cv)cv=avcodec_find_encoder(AV_CODEC_ID_H264);
+  // PRIORITY 1 FIX: bail if no video encoder found at all.
+  if(!cv) return false;
   ca=avcodec_find_encoder_by_name("libfdk_aac"); if(!ca)ca=avcodec_find_encoder(AV_CODEC_ID_AAC);
-  avformat_alloc_output_context2(&d.fc,nullptr,d.cfg.preset.container.c_str(),d.cfg.out.c_str());
+  if(!ca) return false;  // PRIORITY 1 FIX: bail if no audio encoder
+
+  // PRIORITY 1 FIX: check output path is non-empty.
+  if(d.cfg.out.empty()) return false;
+
+  // PRIORITY 1 FIX: check return value of avformat_alloc_output_context2.
+  int ret=avformat_alloc_output_context2(&d.fc,nullptr,d.cfg.preset.container.c_str(),d.cfg.out.c_str());
+  if(ret<0||!d.fc) return false;
+  d.fc_freed=false;  // now owned by us
+
   d.vs=avformat_new_stream(d.fc,nullptr);
+  if(!d.vs) return false;  // PRIORITY 1 FIX
   d.vc=avcodec_alloc_context3(cv);
+  if(!d.vc) return false;  // PRIORITY 1 FIX
   d.vc->width=d.cfg.preset.w; d.vc->height=d.cfg.preset.h;
   d.vc->time_base={1,(int)d.cfg.preset.fps}; d.vc->framerate={(int)d.cfg.preset.fps,1};
   d.vc->pix_fmt=AV_PIX_FMT_YUV420P; d.vc->bit_rate=d.cfg.preset.tbr; d.vc->rc_max_rate=d.cfg.preset.mbr;
   d.vc->gop_size=(int)(d.cfg.preset.fps*2); d.vc->max_b_frames=3; d.vc->refs=4;
   av_opt_set(d.vc->priv_data,"preset","veryfast",0); av_opt_set(d.vc->priv_data,"tune","zerolatency",0);
-  avcodec_open2(d.vc,cv,nullptr); avcodec_parameters_from_context(d.vs->codecpar,d.vc);
+  // PRIORITY 1 FIX: check avcodec_open2 return.
+  if(avcodec_open2(d.vc,cv,nullptr)<0) return false;
+  avcodec_parameters_from_context(d.vs->codecpar,d.vc);
+
   d.as=avformat_new_stream(d.fc,nullptr);
+  if(!d.as) return false;  // PRIORITY 1 FIX
   d.ac=avcodec_alloc_context3(ca);
+  if(!d.ac) return false;  // PRIORITY 1 FIX
   d.ac->sample_fmt=AV_SAMPLE_FMT_FLTP; d.ac->sample_rate=48000;
   d.ac->ch_layout=(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
   d.ac->bit_rate=192000; d.ac->time_base={1,48000};
-  avcodec_open2(d.ac,ca,nullptr); avcodec_parameters_from_context(d.as->codecpar,d.ac);
-  if(!(d.fc->oformat->flags&AVFMT_NOFILE))avio_open(&d.fc->pb,d.cfg.out.c_str(),AVIO_FLAG_WRITE);
-  avformat_write_header(d.fc,nullptr);
+  // PRIORITY 1 FIX: check avcodec_open2 return.
+  if(avcodec_open2(d.ac,ca,nullptr)<0) return false;
+  avcodec_parameters_from_context(d.as->codecpar,d.ac);
+
+  // PRIORITY 1 FIX: check avio_open return value. If it fails (e.g. path
+  // has illegal characters or directory doesn't exist), bail cleanly.
+  if(!(d.fc->oformat->flags&AVFMT_NOFILE)){
+    if(avio_open(&d.fc->pb,d.cfg.out.c_str(),AVIO_FLAG_WRITE)<0){
+      // Failed to open output file — clean up and return false.
+      avcodec_free_context(&d.vc);
+      avcodec_free_context(&d.ac);
+      avformat_free_context(d.fc);
+      d.fc=nullptr;
+      d.fc_freed=true;
+      return false;
+    }
+  }
+  // PRIORITY 1 FIX: check write header return.
+  if(avformat_write_header(d.fc,nullptr)<0) return false;
   d.sws=sws_getContext(d.vc->width,d.vc->height,AV_PIX_FMT_RGBA,d.vc->width,d.vc->height,AV_PIX_FMT_YUV420P,SWS_BICUBIC,nullptr,nullptr,nullptr);
+  if(!d.sws) return false;  // PRIORITY 1 FIX
 
   // BUG 3: Audio resampler — convert mixed S16 stereo 48kHz → FLTP for AAC encoder
   swr_alloc_set_opts2(&d.swr,&d.ac->ch_layout,d.ac->sample_fmt,d.ac->sample_rate,
                        &d.ac->ch_layout,AV_SAMPLE_FMT_S16,48000,0,nullptr);
+  if(!d.swr) return false;  // PRIORITY 1 FIX
   swr_init(d.swr);
   return true;
 }
 
 bool ExportEngine::enc_v(RGBAFrame*f){
-  auto&d=*m; AVFrame *yuv=av_frame_alloc();
-  yuv->format=d.vc->pix_fmt; yuv->width=d.vc->width; yuv->height=d.vc->height; av_frame_get_buffer(yuv,0);
+  auto&d=*m;
+  // PRIORITY 1 FIX: null-guard all FFmpeg contexts before use.
+  if(!d.vc||!d.sws||!d.fc||!d.vs||!f||!f->data) return false;
+  AVFrame *yuv=av_frame_alloc();
+  if(!yuv) return false;
+  yuv->format=d.vc->pix_fmt; yuv->width=d.vc->width; yuv->height=d.vc->height;
+  if(av_frame_get_buffer(yuv,0)<0){ av_frame_free(&yuv); return false; }
   uint8_t*src[1]={(uint8_t*)f->data}; int ss[1]={f->stride};
   sws_scale(d.sws,src,ss,0,d.vc->height,yuv->data,yuv->linesize);
   yuv->pts=d.prog.cur; AVPacket*p=av_packet_alloc();
+  if(!p){ av_frame_free(&yuv); return false; }
   avcodec_send_frame(d.vc,yuv);
   while(avcodec_receive_packet(d.vc,p)==0){
     av_packet_rescale_ts(p,d.vc->time_base,d.vs->time_base);
@@ -348,7 +443,8 @@ bool ExportEngine::enc_v(RGBAFrame*f){
 // ===========================================================================
 bool ExportEngine::enc_a(PCMFrame*){
   auto&d=*m;
-  if(!d.dag) return true;
+  // PRIORITY 1 FIX: null-guard all FFmpeg contexts.
+  if(!d.dag||!d.ac||!d.swr||!d.fc||!d.as) return true;
 
   const TimeMicros video_time = d.prog.cur * d.fd;  // current video timeline position
   const int num_samples = d.audio_samples_per_frame;  // samples for this video frame
@@ -406,11 +502,12 @@ bool ExportEngine::enc_a(PCMFrame*){
 
   // ---- 5. Convert S16 interleaved → FLTP planar via SwrContext ----
   AVFrame* audio_out = av_frame_alloc();
+  if(!audio_out) return true;  // PRIORITY 1 FIX
   audio_out->format = d.ac->sample_fmt;  // FLTP
   audio_out->sample_rate = 48000;
   audio_out->nb_samples = num_samples;
   av_channel_layout_copy(&audio_out->ch_layout, &d.ac->ch_layout);
-  av_frame_get_buffer(audio_out, 0);
+  if(av_frame_get_buffer(audio_out, 0)<0){ av_frame_free(&audio_out); return true; }  // PRIORITY 1 FIX
 
   // Prepare S16 interleaved input
   uint8_t* in_data[1] = {(uint8_t*)mixed.data()};
@@ -429,6 +526,7 @@ bool ExportEngine::enc_a(PCMFrame*){
     d.audio_pts += converted;
 
     AVPacket* p = av_packet_alloc();
+    if(!p){ av_frame_free(&audio_out); return true; }  // PRIORITY 1 FIX
     avcodec_send_frame(d.ac, audio_out);
     while(avcodec_receive_packet(d.ac, p) == 0){
       // Rescale from audio time_base to stream time_base
@@ -446,21 +544,41 @@ bool ExportEngine::enc_a(PCMFrame*){
 }
 
 bool ExportEngine::mux(){
-  // Flush video encoder
-  avcodec_send_frame(m->vc,nullptr); AVPacket*p=av_packet_alloc();
-  while(avcodec_receive_packet(m->vc,p)==0){
-    av_packet_rescale_ts(p,m->vc->time_base,m->vs->time_base);
-    p->stream_index=m->vs->index; av_interleaved_write_frame(m->fc,p); av_packet_unref(p);
+  // PRIORITY 1 FIX: null-guard all FFmpeg contexts.
+  if(!m->fc) return false;
+  AVPacket*p=av_packet_alloc();
+  if(!p) return false;
+
+  // Flush video encoder — PRIORITY 1 FIX: safe flush with return check.
+  // avcodec_send_frame(vc, nullptr) signals EOF. The receive loop must
+  // drain all buffered packets. We break on AVERROR(EAGAIN) or AVERROR_EOF.
+  if(m->vc){
+    avcodec_send_frame(m->vc,nullptr);
+    while(true){
+      int r=avcodec_receive_packet(m->vc,p);
+      if(r==AVERROR(EAGAIN)||r==AVERROR_EOF) break;
+      if(r<0) break;  // PRIORITY 1 FIX: stop on real error, don't read past EOF
+      av_packet_rescale_ts(p,m->vc->time_base,m->vs->time_base);
+      p->stream_index=m->vs->index; av_interleaved_write_frame(m->fc,p); av_packet_unref(p);
+    }
   }
-  // Flush audio encoder
-  avcodec_send_frame(m->ac,nullptr);
-  while(avcodec_receive_packet(m->ac,p)==0){
-    av_packet_rescale_ts(p,m->ac->time_base,m->as->time_base);
-    p->stream_index=m->as->index; av_interleaved_write_frame(m->fc,p); av_packet_unref(p);
+
+  // Flush audio encoder — PRIORITY 1 FIX: same safe flush pattern.
+  if(m->ac){
+    avcodec_send_frame(m->ac,nullptr);
+    while(true){
+      int r=avcodec_receive_packet(m->ac,p);
+      if(r==AVERROR(EAGAIN)||r==AVERROR_EOF) break;
+      if(r<0) break;  // PRIORITY 1 FIX: stop on real error
+      av_packet_rescale_ts(p,m->ac->time_base,m->as->time_base);
+      p->stream_index=m->as->index; av_interleaved_write_frame(m->fc,p); av_packet_unref(p);
+    }
   }
+
   av_packet_free(&p);
+  // PRIORITY 1 FIX: check write trailer return, guard avio_closep.
   av_write_trailer(m->fc);
-  if(!(m->fc->oformat->flags&AVFMT_NOFILE))avio_closep(&m->fc->pb);
+  if(!(m->fc->oformat->flags&AVFMT_NOFILE)&&m->fc->pb) avio_closep(&m->fc->pb);
   return true;
 }
 }  // namespace PowerCut

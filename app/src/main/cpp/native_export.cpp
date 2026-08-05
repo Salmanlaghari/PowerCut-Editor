@@ -22,6 +22,15 @@
 #include "powercut/export/export_engine.h"
 #include "powercut/core/dag.h"
 
+// PRIORITY 1 FIX: Progress callback JNI bridge.
+// The native worker thread needs to call back into Kotlin to report progress.
+// Since the worker runs on a C++ std::thread (not attached to the JVM), we
+// store the JavaVM pointer and a global ref to the ExportEngine Kotlin object,
+// then attach the worker thread to the JVM before calling the callback.
+static JavaVM* g_jvm = nullptr;
+static jobject g_engine_ref = nullptr;  // global ref to ExportEngine Kotlin obj
+static jmethodID g_progress_method = nullptr;  // ExportEngine.onProgressCallback
+
 using PowerCut::ExportEngine;
 using PowerCut::ExportConfig;
 using PowerCut::ExportPreset;
@@ -86,12 +95,19 @@ void ExportEngine::apply_watermark(RGBAFrame* frame) { (void)frame; }
 // field is not found.
 // ===========================================================================
 static bool read_bool_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    // PRIORITY 1 FIX: clear any pending exception after GetFieldID.
+    // If the field doesn't exist, GetFieldID throws NoSuchFieldError —
+    // we must clear it before any subsequent JNI call or the JVM will
+    // fatal-exit on the next JNI invocation.
     jfieldID fid = env->GetFieldID(cls, field, "Z");
+    if (env->ExceptionCheck()) env->ExceptionClear();
     return fid ? (env->GetBooleanField(obj, fid) == JNI_TRUE) : false;
 }
 
 static std::string read_string_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    // PRIORITY 1 FIX: clear exception if field not found.
     jfieldID fid = env->GetFieldID(cls, field, "Ljava/lang/String;");
+    if (env->ExceptionCheck()) env->ExceptionClear();
     if (!fid) return {};
     jstring js = (jstring) env->GetObjectField(obj, fid);
     if (!js) return {};
@@ -103,16 +119,19 @@ static std::string read_string_field(JNIEnv* env, jobject obj, jclass cls, const
 
 static jlong read_long_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
     jfieldID fid = env->GetFieldID(cls, field, "J");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     return fid ? env->GetLongField(obj, fid) : 0;
 }
 
 static jfloat read_float_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
     jfieldID fid = env->GetFieldID(cls, field, "F");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     return fid ? env->GetFloatField(obj, fid) : 0.0f;
 }
 
 static jint read_int_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
     jfieldID fid = env->GetFieldID(cls, field, "I");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     return fid ? env->GetIntField(obj, fid) : 0;
 }
 
@@ -126,6 +145,7 @@ static ExportPreset read_preset(JNIEnv* env, jobject presetObj) {
     jclass cls = env->GetObjectClass(presetObj);
 
     jfieldID fName = env->GetFieldID(cls, "name", "Ljava/lang/String;");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     if (fName) {
         jstring js = (jstring) env->GetObjectField(presetObj, fName);
         if (js) {
@@ -136,15 +156,20 @@ static ExportPreset read_preset(JNIEnv* env, jobject presetObj) {
     }
 
     jfieldID fW = env->GetFieldID(cls, "w", "I");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     jfieldID fH = env->GetFieldID(cls, "h", "I");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     if (fW) p.w = env->GetIntField(presetObj, fW);
     if (fH) p.h = env->GetIntField(presetObj, fH);
 
     jfieldID fFps = env->GetFieldID(cls, "fps", "D");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     if (fFps) p.fps = env->GetDoubleField(presetObj, fFps);
 
     jfieldID fTbr = env->GetFieldID(cls, "tbr", "J");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     jfieldID fMbr = env->GetFieldID(cls, "mbr", "J");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     if (fTbr) p.tbr = env->GetLongField(presetObj, fTbr);
     if (fMbr) p.mbr = env->GetLongField(presetObj, fMbr);
 
@@ -172,6 +197,7 @@ static ExportConfig read_config(JNIEnv* env, jobject configObj) {
 
     jfieldID fPreset = env->GetFieldID(cls, "preset",
         "Lcom/powercut/editor/export/ExportPreset;");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
     if (fPreset) {
         jobject presetObj = env->GetObjectField(configObj, fPreset);
         c.preset = read_preset(env, presetObj);
@@ -402,6 +428,42 @@ static PowerCutDAG* build_dag_from_project(JNIEnv* env, jobject projectObj) {
 }
 
 // ---------------------------------------------------------------------------
+// PRIORITY 1 FIX: Progress callback bridge.
+//
+// This C++ lambda is registered via engine->on_progress(). When the native
+// worker calls it, we attach the current thread to the JVM (if not already
+// attached), construct the ExportProgress fields, and call the Kotlin
+// ExportEngine.onProgressCallback() method, which then invokes the
+// onProgress lambda set by EditorScreen.
+// ---------------------------------------------------------------------------
+static void powercut_progress_callback(const PowerCut::ExportProgress& prog) {
+    if (!g_jvm || !g_engine_ref || !g_progress_method) return;
+
+    JNIEnv* env = nullptr;
+    JavaVMAttachArgs attach_args;
+    attach_args.version = JNI_VERSION_1_6;
+    attach_args.name = const_cast<char*>("PowerCutExportProgress");
+    attach_args.group = nullptr;
+
+    bool was_attached = false;
+    if (g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+        was_attached = true;
+    } else {
+        g_jvm->AttachCurrentThread(&env, &attach_args);
+    }
+    if (!env) return;
+
+    // Call ExportEngine.onProgressCallback(long, long, double, int, long)
+    env->CallVoidMethod(g_engine_ref, g_progress_method,
+                        (jlong)prog.cur, (jlong)prog.total,
+                        (jdouble)prog.speed_x, (jint)prog.eta_s,
+                        (jlong)prog.bytes);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+
+    if (!was_attached) g_jvm->DetachCurrentThread();
+}
+
+// ---------------------------------------------------------------------------
 // JNI exported functions
 // ---------------------------------------------------------------------------
 extern "C" {
@@ -409,18 +471,43 @@ extern "C" {
 JNIEXPORT jlong JNICALL
 Java_com_powercut_editor_export_ExportEngine_nativeCreate(
     JNIEnv* env, jobject thiz) {
-    (void)env; (void)thiz;
+    // PRIORITY 1 FIX: Store the JavaVM pointer and set up the progress
+    // callback bridge. We keep a global ref to the Kotlin ExportEngine
+    // object and the method ID for onProgressCallback.
+    if (!g_jvm) env->GetJavaVM(&g_jvm);
+
+    if (!g_engine_ref) {
+        g_engine_ref = env->NewGlobalRef(thiz);
+        jclass cls = env->GetObjectClass(thiz);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        if (cls) {
+            g_progress_method = env->GetMethodID(cls, "onProgressCallback",
+                "(JJDIJ)V");
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            env->DeleteLocalRef(cls);
+        }
+    }
+
     auto* engine = new ExportEngine();
+    // Register the progress callback so the native worker can report progress.
+    engine->on_progress(powercut_progress_callback);
     return reinterpret_cast<jlong>(engine);
 }
 
 JNIEXPORT void JNICALL
 Java_com_powercut_editor_export_ExportEngine_nativeDestroy(
     JNIEnv* env, jobject thiz, jlong handle) {
-    (void)env; (void)thiz;
+    (void)thiz;
     if (handle == 0) return;
     auto* engine = reinterpret_cast<ExportEngine*>(handle);
-    delete engine;
+    delete engine;  // destructor calls cancel() which joins the worker
+
+    // PRIORITY 1 FIX: clean up the global ref so we don't leak.
+    if (g_engine_ref) {
+        env->DeleteGlobalRef(g_engine_ref);
+        g_engine_ref = nullptr;
+        g_progress_method = nullptr;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -446,13 +533,17 @@ Java_com_powercut_editor_export_ExportEngine_nativeStart(
     JNIEnv* env, jobject thiz, jlong handle, jobject dag, jobject config) {
     (void)thiz;
     if (handle == 0) return JNI_FALSE;
+    // PRIORITY 1 FIX: check for null config object.
+    if (!config) return JNI_FALSE;
     auto* engine = reinterpret_cast<ExportEngine*>(handle);
     ExportConfig cfg = read_config(env, config);
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
 
     // Build the real DAG from the current active project (not nullptr!).
     // If dag is null/empty, build_dag_from_project returns an empty DAG
     // (duration 0) which start() will handle gracefully.
     PowerCutDAG* dagPtr = build_dag_from_project(env, dag);
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
 
     bool ok = engine->start(dagPtr, cfg);
 

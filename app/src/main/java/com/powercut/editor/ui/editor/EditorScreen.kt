@@ -96,6 +96,7 @@ import android.os.Environment
 import com.powercut.editor.ui.editor.ExportBottomBar
 import com.powercut.editor.export.ExportEngine
 import com.powercut.editor.export.ExportConfig
+import com.powercut.editor.PowerCutPremiumLauncherBar
 
 private fun formatTime(ms: Long): String {
     val totalSecs = ms / 1000
@@ -177,7 +178,18 @@ fun EditorScreen(
     onUpdateOrientationMode: (String) -> Unit,
     onToggleVerticalSafeZone: () -> Unit,
     onToggleHorizontalLetterbox: () -> Unit,
-    onToggleAutoReframe: () -> Unit
+    onToggleAutoReframe: () -> Unit,
+
+    // v6.0.0 Premium launcher — top action row (AI Hub, Presets, Pro, Studio)
+    onAiHub: () -> Unit = {},
+    onSocialPresets: () -> Unit = {},
+    onProTier: () -> Unit = {},
+    onPremiumStudio: () -> Unit = {},
+
+    // v6.0.0 Effects & Stickers galleries — full-screen 3D glass browsers that
+    // drive REAL project state (selectedEffect / stickerType) into PowerCutDAG.
+    onOpenEffects: () -> Unit = {},
+    onOpenStickers: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -185,6 +197,20 @@ fun EditorScreen(
     var isExporting by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     val exportEngine = remember { ExportEngine() }
+
+    // PRIORITY 1 FIX: Cancel any running export when the editor screen is
+    // disposed (e.g. user navigates away, activity finishes). This prevents
+    // the native worker thread from touching freed memory.
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                exportEngine.cancel()
+                exportEngine.destroy()
+            } catch (e: Exception) {
+                // Safe to ignore — engine may already be destroyed.
+            }
+        }
+    }
 
 
     // Clip local Video Picker
@@ -390,6 +416,18 @@ fun EditorScreen(
                 }
             }
         }
+
+        // ─────────────────────────────────────────────────────────────
+        //  v6.0.0 PREMIUM ACTION ROW — fixed top bar below the header.
+        //  Drives REAL FFmpeg chains through EditorViewModel via the
+        //  existing premium overlay screens (AI Hub, Presets, Pro, Studio).
+        // ─────────────────────────────────────────────────────────────
+        PowerCutPremiumLauncherBar(
+            onAiHub = onAiHub,
+            onSocialPresets = onSocialPresets,
+            onProTier = onProTier,
+            onPremiumStudio = onPremiumStudio
+        )
 
         // 2. PREVIEW CONTAINER AREA (Strictly aspect-ratio bound dynamically)
         Box(
@@ -1335,6 +1373,14 @@ fun EditorScreen(
                 selectedBottomTool = "Crop"
                 activeCategory = "Edit"
             }
+            // v6.0.0 Effects gallery — opens the 3D glass effects browser.
+            BottomToolItem("✨", "Effects", selectedBottomTool == "Effects") {
+                onOpenEffects()
+            }
+            // v6.0.0 Stickers gallery — opens the 3D glass stickers browser.
+            BottomToolItem("😀", "Sticker", selectedBottomTool == "Sticker") {
+                onOpenStickers()
+            }
         }
 
         // ---- Export watermark dialog (Watch Ad -> clean / Export with watermark) ----
@@ -1343,7 +1389,19 @@ fun EditorScreen(
                 // ==== ADMOB REWARDED AD CALL HERE ====
                 // When the rewarded ad completes successfully, start a clean export
                 // (removeWatermark = true -> no PowerCut watermark on the output).
+                // PRIORITY 1 FIX: the progress callback is now dispatched to the
+                // main thread by ExportEngine.onProgressCallback(), so we just
+                // set the lambda directly. The export runs on the native worker
+                // thread; we DON'T destroy the engine immediately — we wait for
+                // completion in the coroutine, then clean up.
+                if (isExporting) return@ExportBottomBar  // PRIORITY 1 FIX: guard against double-start
                 isExporting = true
+                exportProgress = 0f
+                exportEngine.onProgress = { p ->
+                    // PRIORITY 1 FIX: ExportEngine already dispatches this to the
+                    // main thread via Handler.post, so we can update state directly.
+                    exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
+                }
                 scope.launch(Dispatchers.IO) {
                     val moviesDir = java.io.File(
                         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
@@ -1356,20 +1414,29 @@ fun EditorScreen(
                         out = outPath,
                         removeWatermark = true
                     )
-                    exportEngine.onProgress = { p ->
-                        scope.launch(Dispatchers.Main) {
-                            exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
+                    val started = exportEngine.start(project, cfg)
+                    if (started) {
+                        // PRIORITY 1 FIX: block until the export completes. The
+                        // native start() spawns a worker thread; we poll running()
+                        // until it finishes. This keeps the coroutine alive so the
+                        // DisposableEffect cleanup works correctly.
+                        while (exportEngine.running()) {
+                            Thread.sleep(100)
                         }
                     }
-                    exportEngine.start(project, cfg)
                     isExporting = false
-                    exportEngine.destroy()
                 }
             },
             onExportWithWatermark = {
                 // Export with the semi-transparent "PowerCut" watermark overlay
                 // (removeWatermark = false -> watermark auto-applied in the native engine).
+                // PRIORITY 1 FIX: same pattern as onWatchAd — don't destroy immediately.
+                if (isExporting) return@ExportBottomBar  // PRIORITY 1 FIX: guard against double-start
                 isExporting = true
+                exportProgress = 0f
+                exportEngine.onProgress = { p ->
+                    exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
+                }
                 scope.launch(Dispatchers.IO) {
                     val moviesDir = java.io.File(
                         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
@@ -1382,14 +1449,13 @@ fun EditorScreen(
                         out = outPath,
                         removeWatermark = false
                     )
-                    exportEngine.onProgress = { p ->
-                        scope.launch(Dispatchers.Main) {
-                            exportProgress = (p.cur * 100f) / maxOf(1L, p.total)
+                    val started = exportEngine.start(project, cfg)
+                    if (started) {
+                        while (exportEngine.running()) {
+                            Thread.sleep(100)
                         }
                     }
-                    exportEngine.start(project, cfg)
                     isExporting = false
-                    exportEngine.destroy()
                 }
             },
             triggerDialog = showExportDialog,
@@ -1398,18 +1464,47 @@ fun EditorScreen(
     }
 
     // ---- Full-screen export progress overlay ----
+    // PRIORITY 1 FIX: clean overlay with cancel button. The progress callback
+    // updates exportProgress on the main thread (via ExportEngine.onProgressCallback
+    // → Handler.post), so this is thread-safe.
     if (isExporting) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(progress = { exportProgress / 100f })
-                Spacer(modifier = Modifier.height(12.dp))
+                CircularProgressIndicator(
+                    progress = { exportProgress / 100f },
+                    modifier = Modifier.size(64.dp),
+                    color = NeonOrange,
+                    strokeWidth = 5.dp,
+                    trackColor = Color.White.copy(0.1f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Exporting: ${'$'}{exportProgress.toInt()}%",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
+                Spacer(modifier = Modifier.height(24.dp))
+                // PRIORITY 1 FIX: Cancel button — safe to call multiple times.
+                Box(
+                    modifier = Modifier
+                        .background(Color.DarkGray, RoundedCornerShape(12.dp))
+                        .clickable {
+                            exportEngine.cancel()
+                            isExporting = false
+                        }
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        "CANCEL",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
         }
     }

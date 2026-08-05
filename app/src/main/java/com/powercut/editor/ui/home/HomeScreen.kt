@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.R
 import com.powercut.editor.core.utils.LanguageHelper
-import com.powercut.editor.PowerCutPremiumLauncherBar
 import com.powercut.editor.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -92,11 +91,6 @@ fun HomeScreen(
     // v4.6.0: quick-tool export feedback (so the user SEES progress + result)
     quickToolState: com.powercut.editor.core.base.Resource<String> = com.powercut.editor.core.base.Resource.Idle,
     quickToolProgress: Int = -1,
-    // v6.0.0 Premium launcher callbacks — top bar buttons (AI Hub, Presets, Pro, Studio)
-    onAiHub: () -> Unit = {},
-    onSocialPresets: () -> Unit = {},
-    onProTier: () -> Unit = {},
-    onPremiumStudio: () -> Unit = {}
 ) {
     var isAppLoadingIntro by remember { mutableStateOf(true) }
     var activeClickedTemplate by remember { mutableStateOf<Template?>(null) }
@@ -212,18 +206,6 @@ fun HomeScreen(
                     .padding(bottom = 82.dp)
             ) {
                 // ──────────────────────────────────────────────────────────────
-                //  v6.0.0 PREMIUM LAUNCHER BAR — top row (AI Hub, Presets, Pro, Studio)
-                //  Placed ABOVE the "PowerCut Pro" header so it NEVER overlaps
-                //  dashboard content (New Project card, tools grid, etc.).
-                //  Bottom margin ensures clear separation from the header below.
-                // ──────────────────────────────────────────────────────────────
-                PowerCutPremiumLauncherBar(
-                    onAiHub = onAiHub,
-                    onSocialPresets = onSocialPresets,
-                    onProTier = onProTier,
-                    onPremiumStudio = onPremiumStudio
-                )
-
                 // TOP HEADER BAR
                 Row(
                     modifier = Modifier

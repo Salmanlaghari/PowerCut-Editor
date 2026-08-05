@@ -95,6 +95,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.powercut.editor.core.utils.UriHelper
+import com.powercut.editor.PowerCutPremiumLauncherBar
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.CyberCyan
@@ -335,7 +336,15 @@ fun NextGenEditorScreen(
     onToggleAudioDucking: () -> Unit = {},
     onUpdateBorderStyle: (String) -> Unit = {},
     onUpdateVignetteStyle: (String) -> Unit = {},
-    onUpdatePremiumLook: (String) -> Unit = {}
+    onUpdatePremiumLook: (String) -> Unit = {},
+    // v6.0.0 Premium launcher — top action row (AI Hub, Presets, Pro, Studio)
+    onAiHub: () -> Unit = {},
+    onSocialPresets: () -> Unit = {},
+    onProTier: () -> Unit = {},
+    onPremiumStudio: () -> Unit = {},
+    // v6.0.0 Effects & Stickers full-screen galleries
+    onOpenEffects: () -> Unit = {},
+    onOpenStickers: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -566,6 +575,14 @@ fun NextGenEditorScreen(
                 onDone = { isEditingComplete = true },
                 onUndo = { },
                 onRedo = { }
+            )
+
+            // ─── v6.0.0 PREMIUM LAUNCHER BAR (AI Hub · Presets · Pro · Studio) ───
+            PowerCutPremiumLauncherBar(
+                onAiHub = onAiHub,
+                onSocialPresets = onSocialPresets,
+                onProTier = onProTier,
+                onPremiumStudio = onPremiumStudio
             )
 
         // ─── 2. VIDEO PREVIEW ─────────────────────────────────
@@ -946,7 +963,14 @@ fun NextGenEditorScreen(
         CapCutToolBar(
             selectedTool = selectedTool,
             onToolSelected = { idx ->
-                if (selectedTool == idx) { isPanelExpanded = !isPanelExpanded } else { selectedTool = idx; isPanelExpanded = true }
+                // v6.0.0 — Effects (idx 7) & Stickers (idx 8) open full-screen galleries
+                when (idx) {
+                    7 -> onOpenEffects()
+                    8 -> onOpenStickers()
+                    else -> {
+                        if (selectedTool == idx) { isPanelExpanded = !isPanelExpanded } else { selectedTool = idx; isPanelExpanded = true }
+                    }
+                }
             }
         )
     }

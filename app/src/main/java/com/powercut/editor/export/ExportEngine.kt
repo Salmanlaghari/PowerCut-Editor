@@ -1,5 +1,8 @@
 package com.powercut.editor.export
 
+import android.os.Handler
+import android.os.Looper
+
 data class ExportPreset(
     val name: String,
     val w: Int,
@@ -61,6 +64,33 @@ class ExportEngine {
     /** Progress callback invoked from the native worker thread. */
     var onProgress: ((ExportProgress) -> Unit)? = null
 
+    // PRIORITY 1 FIX: Handler bound to the main looper so progress updates
+    // dispatched from the native worker thread are always posted to the UI
+    // thread. This prevents the race condition of updating Compose state
+    // from a non-UI thread.
+    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var isExporting = false
+
+    /**
+     * PRIORITY 1 FIX: JNI callback invoked from the native worker thread.
+     * The C++ progress bridge calls this method via CallVoidMethod after
+     * attaching the worker thread to the JVM. We construct an ExportProgress
+     * and dispatch it to the main thread via Handler.post so the onProgress
+     * lambda (which typically updates Compose state) always runs on the UI
+     * thread.
+     *
+     * Signature: (JJDIJ)V  →  (long cur, long total, double speedX, int etaSeconds, long bytes)
+     */
+    @Suppress("unused")  // called from JNI (native_export.cpp)
+    fun onProgressCallback(cur: Long, total: Long, speedX: Double, etaSeconds: Int, bytes: Long) {
+        val progress = ExportProgress(cur, total, speedX, etaSeconds, bytes)
+        val cb = onProgress
+        if (cb != null) {
+            // PRIORITY 1 FIX: post to the main thread to avoid race conditions.
+            mainHandler.post { cb(progress) }
+        }
+    }
+
     /**
      * Start an export on the native worker thread.
      *
@@ -82,19 +112,59 @@ class ExportEngine {
     fun start(dag: Any, config: ExportConfig): Boolean {
         return try {
             if (nativeHandle == 0L) nativeHandle = nativeCreate()
-            nativeStart(nativeHandle, dag, config)
+            // PRIORITY 1 FIX: sanitize the output path — replace characters
+            // that cause avio_open to fail silently (spaces, special chars).
+            val safeConfig = config.copy(out = sanitizePath(config.out))
+            val ok = nativeStart(nativeHandle, dag, safeConfig)
+            if (ok) isExporting = true
+            ok
         } catch (e: UnsatisfiedLinkError) {
+            false
+        } catch (e: Exception) {
+            // PRIORITY 1 FIX: catch any JNI exception to prevent app crash.
             false
         }
     }
 
-    /** Cancel a running export and join the worker thread. */
+    /**
+     * PRIORITY 1 FIX: Sanitize the output file path.
+     * Replaces spaces and other characters that cause avio_open to fail
+     * with underscores. Keeps path separators and valid filename chars.
+     */
+    private fun sanitizePath(path: String): String {
+        if (path.isEmpty()) return path
+        val lastSlash = path.lastIndexOf('/')
+        val dir = if (lastSlash >= 0) path.substring(0, lastSlash + 1) else ""
+        val file = if (lastSlash >= 0) path.substring(lastSlash + 1) else path
+        // Replace illegal filename characters with underscores.
+        val safeFile = file.replace(" ", "_")
+            .replace("\"", "_")
+            .replace("'", "_")
+            .replace("*", "_")
+            .replace("?", "_")
+            .replace("<", "_")
+            .replace(">", "_")
+            .replace("|", "_")
+            .replace(":", "_")
+            .replace(";", "_")
+            .replace("&", "_")
+        return dir + safeFile
+    }
+
+    /**
+     * Cancel a running export and join the worker thread.
+     * PRIORITY 1 FIX: Safe to call multiple times — the native cancel()
+     * is idempotent (sets the atomic flag and joins the thread).
+     */
     fun cancel() {
         try {
             if (nativeHandle != 0L) nativeCancel(nativeHandle)
         } catch (e: UnsatisfiedLinkError) {
             // no-op
+        } catch (e: Exception) {
+            // PRIORITY 1 FIX: catch any exception to prevent crash on cancel.
         }
+        isExporting = false
     }
 
     /** True while the native export worker is running. */
@@ -104,16 +174,25 @@ class ExportEngine {
         false
     }
 
-    /** Release native resources. Safe to call multiple times. */
+    /**
+     * Release native resources. Safe to call multiple times.
+     * PRIORITY 1 FIX: cancel() is called by the native destructor, but we
+     * also cancel() here first so the worker thread is joined before we
+     * destroy the handle. This prevents the destructor from blocking.
+     */
     fun destroy() {
         try {
             if (nativeHandle != 0L) {
+                cancel()  // PRIORITY 1 FIX: join worker thread first
                 nativeDestroy(nativeHandle)
                 nativeHandle = 0L
             }
         } catch (e: UnsatisfiedLinkError) {
             nativeHandle = 0L
+        } catch (e: Exception) {
+            nativeHandle = 0L
         }
+        isExporting = false
     }
 
     companion object {
