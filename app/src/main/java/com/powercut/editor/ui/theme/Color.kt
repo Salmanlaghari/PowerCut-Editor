@@ -77,6 +77,27 @@ val TextPrimary = OnPrimary
 val TextSecondary = OnSurfaceSecondary
 
 // ── Premium 2027 Status Colors ──────────────────────────────────────────────
+// ── 2027 8K Signature Gradient ───────────────────────────────────────────────
+// The PowerCut Pro 2027 8K identity: solar orange -> royal purple
+val SignatureOrange = Color(0xFFFF5A3C)
+val SignaturePurple = Color(0xFF9D4EDD)
+val SignatureDeep = Color(0xFF0F0F1A)
+
+// Primary brand gradient used on premium pills, headers, and accents
+val signatureGradient2027 = Brush.horizontalGradient(
+    colors = listOf(SignatureOrange, SignaturePurple)
+)
+
+// Vertical variant for cards and panels
+val signatureGradientVertical = Brush.verticalGradient(
+    colors = listOf(SignatureOrange, SignaturePurple)
+)
+
+// Radial glow variant for demo previews and hero elements
+val signatureGradientRadial = Brush.radialGradient(
+    colors = listOf(SignatureOrange, SignaturePurple, SignatureDeep)
+)
+
 val PremiumGold = Color(0xFFFFD166)
 val PremiumSuccess = Color(0xFF34D399)
 val PremiumError = Color(0xFFFF5470)
