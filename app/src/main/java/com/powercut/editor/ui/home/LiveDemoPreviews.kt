@@ -931,3 +931,421 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
         }
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ULTRA REDesign v2 — NEW dramatic feature showcase previews
+// These are LARGER, more visually striking animated Canvas demos that
+// represent the synced CapCut / VN / YouCut / KineMaster feature set.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * CapCut-style Templates Browser demo — animated template cards flipping through
+ * a carousel with gradient covers and play buttons.
+ */
+@Composable
+fun TemplatesBrowserDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        // background aurora
+        drawRect(
+            Brush.linearGradient(
+                listOf(SignaturePurple.copy(alpha = 0.15f), SignatureOrange.copy(alpha = 0.1f)),
+                Offset.Zero, Offset(w, h)
+            ), Offset.Zero, size
+        )
+        // 3 template cards in a row, animated slide
+        val cols = listOf(
+            listOf(SignatureOrange, AccentRose),
+            listOf(SignaturePurple, AccentCyan),
+            listOf(AccentGold, SignatureOrange)
+        )
+        for (i in 0..2) {
+            val cardW = w * 0.26f
+            val cardH = h * 0.62f
+            val xOff = w * 0.06f + i * (cardW + w * 0.04f) + kotlin.math.sin(pulse * 2f + i) * w * 0.015f
+            val yOff = h * 0.18f + kotlin.math.cos(pulse * 1.5f + i * 0.7f) * h * 0.03f
+            drawRoundRect(
+                Brush.verticalGradient(cols[i]),
+                Offset(xOff, yOff),
+                Size(cardW, cardH),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(cardW * 0.12f)
+            )
+            // play button circle
+            drawCircle(
+                Color.White.copy(alpha = 0.9f),
+                cardW * 0.14f,
+                center = Offset(xOff + cardW / 2f, yOff + cardH / 2f)
+            )
+            drawCircle(
+                Color.Black,
+                cardW * 0.1f,
+                center = Offset(xOff + cardW / 2f, yOff + cardH / 2f)
+            )
+        }
+        // bottom "Trending" label bar
+        drawRoundRect(
+            Color.White.copy(alpha = 0.08f),
+            Offset(w * 0.06f, h * 0.86f),
+            Size(w * 0.4f, h * 0.08f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.04f)
+        )
+    }
+}
+
+/**
+ * AI Tools Hub demo — shows AI auto-caption, bg-remove, beat-sync icons
+ * with animated scanning lines and pulsing neural network nodes.
+ */
+@Composable
+fun AiToolsHubDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        // gradient bg
+        drawRect(
+            Brush.radialGradient(
+                listOf(AccentCyan.copy(alpha = 0.2f), DeepBg),
+                center = Offset(w / 2f, h / 2f),
+                radius = w * 0.6f
+            ), Offset.Zero, size
+        )
+        // animated scanning line
+        val scanY = h * (0.2f + (pulse % 1f) * 0.6f)
+        drawRect(
+            AccentCyan.copy(alpha = 0.5f),
+            Offset(w * 0.1f, scanY),
+            Size(w * 0.8f, 2f)
+        )
+        // 3 AI feature icons — circles with pulse
+        val icons = listOf(SignatureOrange, SignaturePurple, AccentCyan)
+        val labels = listOf("AI", "BG", "SYNC")
+        for (i in icons.indices) {
+            val cx = w * (0.22f + i * 0.28f)
+            val cy = h * 0.45f
+            val r = w * 0.08f + kotlin.math.sin(pulse * 3f + i) * w * 0.01f
+            drawCircle(icons[i].copy(alpha = 0.3f), r * 1.4f, center = Offset(cx, cy))
+            drawCircle(icons[i], r, center = Offset(cx, cy))
+            drawCircle(Color.White, r * 0.3f, center = Offset(cx, cy))
+        }
+        // neural network connection lines
+        for (i in 0..2) {
+            val x1 = w * (0.22f + i * 0.28f)
+            val y1 = h * 0.45f
+            if (i < 2) {
+                val x2 = w * (0.22f + (i + 1) * 0.28f)
+                drawLine(
+                    Color.White.copy(alpha = 0.2f),
+                    Offset(x1, y1),
+                    Offset(x2, y1),
+                    strokeWidth = 1.5f
+                )
+            }
+        }
+    }
+}
+
+/**
+ * KineMaster-style Multi-Track Timeline demo — shows multiple layers
+ * (video, audio, text, sticker) with colored clips and a moving playhead.
+ */
+@Composable
+fun MultiTrackTimelineDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        // 4 tracks: video (orange), audio (cyan), text (purple), sticker (rose)
+        val tracks = listOf(
+            Triple(SignatureOrange, 0.12f, 0.7f),
+            Triple(AccentCyan, 0.30f, 0.55f),
+            Triple(SignaturePurple, 0.48f, 0.4f),
+            Triple(AccentRose, 0.66f, 0.85f)
+        )
+        for ((idx, t) in tracks.withIndex()) {
+            val (col, yStart, clipFrac) = t
+            val yOff = h * yStart
+            val trackH = h * 0.14f
+            // track background
+            drawRoundRect(
+                Color.White.copy(alpha = 0.05f),
+                Offset(w * 0.02f, yOff),
+                Size(w * 0.96f, trackH),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackH * 0.3f)
+            )
+            // clips on track
+            val numClips = 2 + idx
+            val clipW = w * clipFrac / numClips * 0.9f
+            for (c in 0 until numClips) {
+                val cx = w * 0.05f + c * (clipW + w * 0.02f)
+                drawRoundRect(
+                    Brush.horizontalGradient(listOf(col, col.copy(alpha = 0.6f))),
+                    Offset(cx, yOff + trackH * 0.1f),
+                    Size(clipW, trackH * 0.8f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackH * 0.15f)
+                )
+            }
+        }
+        // moving playhead
+        val playX = w * (0.1f + (pulse * 0.5f % 1f) * 0.8f)
+        drawRect(SignatureOrange, Offset(playX, h * 0.1f), Size(2f, h * 0.8f))
+        drawCircle(SignatureOrange, h * 0.03f, center = Offset(playX, h * 0.08f))
+    }
+}
+
+/**
+ * YouCut-style Speed Dial demo — circular speed control with pointer
+ * sweeping from 0.25x to 4x, showing speed multiplier.
+ */
+@Composable
+fun SpeedDialDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        val cx = w / 2f
+        val cy = h * 0.55f
+        val r = w * 0.32f
+        // outer ring
+        drawCircle(Color.White.copy(alpha = 0.1f), r, center = Offset(cx, cy))
+        drawCircle(SignatureOrange.copy(alpha = 0.3f), r * 0.92f, center = Offset(cx, cy))
+        // speed segments
+        val speeds = listOf("0.25", "0.5", "1x", "2x", "4x")
+        for (i in speeds.indices) {
+            val angle = -90f + i * (180f / (speeds.size - 1)) - 90f
+            val rad = kotlin.math.PI.toFloat() * angle / 180f
+            val sx = cx + kotlin.math.cos(rad) * r * 0.7f
+            val sy = cy + kotlin.math.sin(rad) * r * 0.7f
+            drawCircle(SignaturePurple.copy(alpha = 0.4f), w * 0.025f, center = Offset(sx, sy))
+        }
+        // animated pointer
+        val ptrAngle = -180f + (pulse * 0.5f % 1f) * 180f
+        val ptrRad = kotlin.math.PI.toFloat() * ptrAngle / 180f
+        drawLine(
+            SignatureOrange,
+            Offset(cx, cy),
+            Offset(cx + kotlin.math.cos(ptrRad) * r * 0.75f, cy + kotlin.math.sin(ptrRad) * r * 0.75f),
+            strokeWidth = 3f
+        )
+        drawCircle(SignatureOrange, w * 0.04f, center = Offset(cx, cy))
+        drawCircle(Color.White, w * 0.015f, center = Offset(cx, cy))
+    }
+}
+
+/**
+ * Keyframe Animation demo (KineMaster) — diamond keyframe markers on a
+ * timeline with animated position/scale/rotation interpolation.
+ */
+@Composable
+fun KeyframeAnimationDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        // animated curve path
+        val path = Path()
+        path.moveTo(w * 0.05f, h * 0.75f)
+        path.cubicTo(w * 0.3f, h * 0.2f, w * 0.7f, h * 0.8f, w * 0.95f, h * 0.25f)
+        drawPath(
+            path,
+            Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple)),
+            style = Stroke(width = 3f)
+        )
+        // keyframe diamonds at fixed positions
+        val keyframes = listOf(0.05f, 0.3f, 0.55f, 0.8f, 0.95f)
+        for (kf in keyframes) {
+            val kx = w * kf
+            val ky = h * (0.75f - kotlin.math.sin(kf * kotlin.math.PI.toFloat()) * 0.5f)
+            // diamond shape
+            val ds = w * 0.03f
+            drawLine(SignatureOrange, Offset(kx, ky - ds), Offset(kx + ds, ky), strokeWidth = 2f)
+            drawLine(SignatureOrange, Offset(kx + ds, ky), Offset(kx, ky + ds), strokeWidth = 2f)
+            drawLine(SignatureOrange, Offset(kx, ky + ds), Offset(kx - ds, ky), strokeWidth = 2f)
+            drawLine(SignatureOrange, Offset(kx - ds, ky), Offset(kx, ky - ds), strokeWidth = 2f)
+        }
+        // moving interpolation point
+        val t = pulse * 0.5f % 1f
+        val px = w * (0.05f + t * 0.9f)
+        val py = h * (0.75f - kotlin.math.sin(t * kotlin.math.PI.toFloat()) * 0.5f)
+        drawCircle(AccentCyan, w * 0.035f, center = Offset(px, py))
+        drawCircle(Color.White, w * 0.015f, center = Offset(px, py))
+    }
+}
+
+/**
+ * Blend Modes demo (KineMaster) — two overlapping circles with
+ * animated blend mode transitions.
+ */
+@Composable
+fun BlendModesDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        val t = kotlin.math.sin(pulse * 2f) * 0.5f + 0.5f
+        // circle 1 — orange
+        drawCircle(
+            SignatureOrange.copy(alpha = 0.7f),
+            w * 0.18f,
+            center = Offset(w * (0.38f - t * 0.08f), h * 0.45f)
+        )
+        // circle 2 — purple (overlapping)
+        drawCircle(
+            SignaturePurple.copy(alpha = 0.7f),
+            w * 0.18f,
+            center = Offset(w * (0.62f + t * 0.08f), h * 0.45f)
+        )
+        // overlap glow
+        drawCircle(
+            AccentCyan.copy(alpha = 0.5f * t),
+            w * 0.08f,
+            center = Offset(w * 0.5f, h * 0.45f)
+        )
+    }
+}
+
+/**
+ * Aspect Ratio Switch demo (YouCut) — animated frame that morphs between
+ * 16:9, 9:16, and 1:1 aspect ratios.
+ */
+@Composable
+fun AspectRatioDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        val t = pulse * 0.33f % 1f
+        // 3 aspect ratios cycling
+        val aspect = when {
+            t < 0.33f -> 1.78f // 16:9
+            t < 0.66f -> 0.56f // 9:16
+            else -> 1.0f       // 1:1
+        }
+        val frameH = h * 0.7f
+        val frameW = frameH * aspect
+        val fx = (w - frameW) / 2f
+        val fy = h * 0.15f
+        drawRoundRect(
+            Brush.verticalGradient(listOf(SignatureOrange, SignaturePurple)),
+            Offset(fx, fy),
+            Size(frameW, frameH),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(frameW * 0.05f)
+        )
+        // grid lines
+        drawLine(Color.White.copy(alpha = 0.2f), Offset(fx + frameW / 3f, fy), Offset(fx + frameW / 3f, fy + frameH), strokeWidth = 1f)
+        drawLine(Color.White.copy(alpha = 0.2f), Offset(fx + frameW * 2f / 3f, fy), Offset(fx + frameW * 2f / 3f, fy + frameH), strokeWidth = 1f)
+        drawLine(Color.White.copy(alpha = 0.2f), Offset(fx, fy + frameH / 3f), Offset(fx + frameW, fy + frameH / 3f), strokeWidth = 1f)
+        // ratio label
+        val ratioText = when {
+            t < 0.33f -> "16:9"
+            t < 0.66f -> "9:16"
+            else -> "1:1"
+        }
+        // small badge
+        drawRoundRect(
+            Color.Black.copy(alpha = 0.6f),
+            Offset(w * 0.35f, h * 0.88f),
+            Size(w * 0.3f, h * 0.08f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.04f)
+        )
+    }
+}
+
+/**
+ * Social Media Share demo (CapCut) — platform icons with animated
+ * share pulse radiating outward.
+ */
+@Composable
+fun SocialShareDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        val cx = w / 2f
+        val cy = h / 2f
+        // radiating share pulse
+        for (i in 0..3) {
+            val t = (pulse + i * 0.25f) % 1f
+            drawCircle(
+                SignatureOrange.copy(alpha = (1f - t) * 0.3f),
+                w * (0.1f + t * 0.35f),
+                center = Offset(cx, cy)
+            )
+        }
+        // 5 platform circles
+        val platforms = listOf(SignatureOrange, SignaturePurple, AccentCyan, AccentRose, AccentGold)
+        for (i in platforms.indices) {
+            val angle = -90f + i * (360f / platforms.size)
+            val rad = kotlin.math.PI.toFloat() * angle / 180f
+            val px = cx + kotlin.math.cos(rad) * w * 0.28f
+            val py = cy + kotlin.math.sin(rad) * w * 0.28f
+            drawCircle(platforms[i].copy(alpha = 0.3f), w * 0.06f, center = Offset(px, py))
+            drawCircle(platforms[i], w * 0.04f, center = Offset(px, py))
+        }
+        // center share icon
+        drawCircle(SignatureOrange, w * 0.05f, center = Offset(cx, cy))
+        drawCircle(Color.White, w * 0.02f, center = Offset(cx, cy))
+    }
+}
+
+/**
+ * Export Pipeline demo — animated progress showing the export process
+ * with FFmpeg pipeline visualization.
+ */
+@Composable
+fun ExportPipelineDemoPreview(modifier: Modifier = Modifier) {
+    val pulse = rememberPulse()
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(DeepBg, Offset.Zero, size)
+        // progress bar
+        val progress = pulse * 0.5f % 1f
+        drawRoundRect(
+            Color.White.copy(alpha = 0.08f),
+            Offset(w * 0.08f, h * 0.35f),
+            Size(w * 0.84f, h * 0.1f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.05f)
+        )
+        drawRoundRect(
+            Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple)),
+            Offset(w * 0.08f, h * 0.35f),
+            Size(w * 0.84f * progress, h * 0.1f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.05f)
+        )
+        // pipeline nodes
+        val nodes = listOf("FX", "TXT", "MIX", "MP4")
+        for (i in nodes.indices) {
+            val nx = w * (0.15f + i * 0.235f)
+            val ny = h * 0.65f
+            val active = progress * 4f > i
+            val col = if (active) SignatureOrange else Color.White.copy(alpha = 0.2f)
+            drawCircle(col, w * 0.035f, center = Offset(nx, ny))
+            if (i < 3) {
+                drawLine(
+                    if (active) SignatureOrange.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.1f),
+                    Offset(nx + w * 0.035f, ny),
+                    Offset(nx + w * 0.2f, ny),
+                    strokeWidth = 2f
+                )
+            }
+        }
+        // 8K badge
+        drawRoundRect(
+            Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple)),
+            Offset(w * 0.35f, h * 0.82f),
+            Size(w * 0.3f, h * 0.1f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.05f)
+        )
+    }
+}

@@ -506,7 +506,7 @@ fun DashboardView(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            android.widget.Toast.makeText(context, "Compressing video\u2026", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Compressing video…", android.widget.Toast.LENGTH_SHORT).show()
             onCompressVideo(uri)
         }
     }
@@ -516,7 +516,7 @@ fun DashboardView(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            android.widget.Toast.makeText(context, "Applying AI Edit\u2026", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Applying AI Edit…", android.widget.Toast.LENGTH_SHORT).show()
             onApplyAiEdit(uri)
         }
     }
@@ -526,7 +526,7 @@ fun DashboardView(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (uris.isNotEmpty()) {
-            android.widget.Toast.makeText(context, "Creating slideshow from ${uris.size} images\u2026", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Creating slideshow from ${uris.size} images…", android.widget.Toast.LENGTH_SHORT).show()
             onCreateSlideshow(uris)
         }
     }
@@ -569,10 +569,8 @@ fun DashboardView(
         }
     }
 
-    // ★ NextGen 2027: staggered entrance animation state
+    // ★ Ultra Redesign v2 — staggered entrance animation state
     var selectedQuickTool by remember { mutableStateOf<String?>(null) }
-    // contentVisible triggers the staggered slide-in/scale-in animations for a
-    // smooth, premium app-open feel (60fps springs).
     var contentVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(80)
@@ -582,18 +580,22 @@ fun DashboardView(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 16.dp)
     ) {
-        // ★ v4.6.0 QUICK-TOOL EXPORT FEEDBACK CARD — progress / success / error
-        // so the user actually SEES that MP3→MP4 / Slideshow / Compress / AI Edit ran.
+        // ═══════════════════════════════════════════════════════════════════
+        // ULTRA REDESIGN v2 — ANIMATED HERO HEADER (completely new, dramatic)
+        // Full-width glass card with aurora background, 8K branding, pulse glow
+        // ═══════════════════════════════════════════════════════════════════
         item {
+            Spacer(modifier = Modifier.height(8.dp))
+            // Quick-tool export feedback card (kept from v4.6.0)
             when (val s = quickToolState) {
                 is com.powercut.editor.core.base.Resource.Loading -> {
                     val pct = if (quickToolProgress in 0..100) quickToolProgress else 0
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp)
+                            .padding(bottom = 8.dp)
                             .glassCard3D(
                                 shape = RoundedCornerShape(14.dp),
                                 glowColor = CyberCyan,
@@ -610,28 +612,16 @@ fun DashboardView(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Processing\u2026",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                Text("Processing…", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 androidx.compose.material3.LinearProgressIndicator(
                                     progress = { pct / 100f },
                                     color = CyberCyan,
                                     trackColor = Color.White.copy(alpha = 0.1f),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp))
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "$pct%  \u2022  saving to Movies/PowerCut",
-                                    fontSize = 9.sp,
-                                    color = Color.White.copy(alpha = 0.6f)
-                                )
+                                Text("$pct%  •  saving to Movies/PowerCut", fontSize = 9.sp, color = Color.White.copy(alpha = 0.6f))
                             }
                         }
                     }
@@ -640,31 +630,18 @@ fun DashboardView(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp)
-                            .glassCard3D(
-                                shape = RoundedCornerShape(14.dp),
-                                glowColor = Color(0xFF2DD4BF),
-                                backColor = GlassBackground
-                            )
+                            .padding(bottom = 8.dp)
+                            .glassCard3D(shape = RoundedCornerShape(14.dp), glowColor = Color(0xFF2DD4BF), backColor = GlassBackground)
                             .border(1.dp, Color(0xFF2DD4BF).copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                             .padding(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("\u2705", fontSize = 20.sp)
+                            Text("✅", fontSize = 20.sp)
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Done! Saved to Movies/PowerCut",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2DD4BF)
-                                )
+                                Text("Done! Saved to Movies/PowerCut", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2DD4BF))
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    "Your file is ready in the gallery.",
-                                    fontSize = 9.sp,
-                                    color = Color.White.copy(alpha = 0.6f)
-                                )
+                                Text("Your file is ready in the gallery.", fontSize = 9.sp, color = Color.White.copy(alpha = 0.6f))
                             }
                         }
                     }
@@ -673,118 +650,127 @@ fun DashboardView(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 4.dp)
-                            .glassCard3D(
-                                shape = RoundedCornerShape(14.dp),
-                                glowColor = Color(0xFFFF5252),
-                                backColor = GlassBackground
-                            )
+                            .padding(bottom = 8.dp)
+                            .glassCard3D(shape = RoundedCornerShape(14.dp), glowColor = Color(0xFFFF5252), backColor = GlassBackground)
                             .border(1.dp, Color(0xFFFF5252).copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                             .padding(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("\u26a0\ufe0f", fontSize = 20.sp)
+                            Text("⚠️", fontSize = 20.sp)
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Something went wrong",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFF5252)
-                                )
+                                Text("Something went wrong", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF5252))
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    s.message,
-                                    fontSize = 9.sp,
-                                    color = Color.White.copy(alpha = 0.6f)
-                                )
+                                Text(s.message, fontSize = 9.sp, color = Color.White.copy(alpha = 0.6f))
                             }
                         }
                     }
                 }
-                else -> { /* Idle \u2014 nothing to show */ }
+                else -> {}
             }
-        }
-        // ★ NextGen 2027 PRO badge row
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .slideInUp(contentVisible, delayMs = 0),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "POWERCUT PRO",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black,
-                    color = AccentTertiary,
-                    letterSpacing = 3.sp
-                )
-                Box(
-                    modifier = Modifier
-                        .background(
-                            Brush.horizontalGradient(listOf(AccentPrimary, AccentSecondary)),
-                            RoundedCornerShape(20.dp)
-                        )
-                        .border(1.dp, Color.White.copy(0.25f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 10.dp, vertical = 3.dp)
-                ) {
-                    Text("2027", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color.White)
-                }
-            }
-        }
 
-        // ★ LARGE NEW PROJECT BUTTON — 3D GLASS CARD with entrance animation
-        item {
-            Spacer(modifier = Modifier.height(10.dp))
+            // ══ NEW: ANIMATED HERO HEADER ══
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(118.dp)
-                    .scaleIn(contentVisible, delayMs = 60)
-                    .neonGlow(color = NeonOrange, shape = RoundedCornerShape(24.dp))
-                    .background(
-                        premiumAccentGradient,
-                        shape = RoundedCornerShape(24.dp)
+                    .height(170.dp)
+                    .scaleIn(contentVisible, delayMs = 0)
+                    .glassCard3D(
+                        shape = RoundedCornerShape(28.dp),
+                        glowColor = SignatureOrange,
+                        backColor = Color(0xFF1A0F1E).copy(alpha = 0.85f)
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
-                    .tactileClick { checkPermissionAndPick() },
-                contentAlignment = Alignment.Center
+                    .auroraBackground(shape = RoundedCornerShape(28.dp))
+                    .border(
+                        1.5.dp,
+                        Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple)),
+                        RoundedCornerShape(28.dp)
+                    )
             ) {
-                Row(
+                // Radial glow overlay
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "New",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
+                        .fillMaxSize()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(SignatureOrange.copy(alpha = 0.15f), Color.Transparent),
+                                radius = 400f
+                            )
                         )
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 8K badge
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple)),
+                                    RoundedCornerShape(20.dp)
+                                )
+                                .border(1.dp, Color.White.copy(0.3f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 5.dp)
+                        ) {
+                            Text("8K • 2027", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 2.sp)
+                        }
+                        // PRO badge with shimmer
+                        Box(
+                            modifier = Modifier
+                                .background(PremiumGold.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
+                                .border(1.dp, PremiumGold.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                .shimmerOverlay(shape = RoundedCornerShape(20.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("⭐ PRO", fontSize = 10.sp, fontWeight = FontWeight.Black, color = PremiumGold)
+                        }
                     }
                     Column {
                         Text(
-                            text = LanguageHelper.getString(R.string.new_project, language),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            text = "PowerCut Pro",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = (-1).sp
                         )
                         Text(
-                            text = "Import video & start editing — ad unlocks no-watermark",
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.85f),
+                            text = "8K Ultra Editor",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            style = TextStyle(
+                                brush = Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple))
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Feature pills
+                            val pills = listOf("🎬 CapCut Sync", "🎨 VN FX", "⚡ YouCut Speed", "🎯 KineMaster Layers")
+                            pills.forEachIndexed { idx, pill ->
+                                if (idx < 2) {
+                                    Text(
+                                        text = pill,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                    if (idx < 1) Text("•", fontSize = 9.sp, color = Color.White.copy(alpha = 0.3f))
+                                }
+                            }
+                        }
+                        Text(
+                            text = "CapCut • VN • YouCut • KineMaster features synced",
+                            fontSize = 9.sp,
+                            color = Color.White.copy(alpha = 0.5f),
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -792,30 +778,259 @@ fun DashboardView(
             }
         }
 
-        // ★ v5.1.0 MOBILE QUICK TOOLS GRID — 8 tools in 4×2 glass grid
+        // ═══════════════════════════════════════════════════════════════════
+        // NEW PROJECT — GIANT CTA with stronger glow and 8K branding
+        // ═══════════════════════════════════════════════════════════════════
         item {
-            Spacer(modifier = Modifier.height(20.dp))
-            // 4×2 grid of 8 mobile-first quick tools
-            Column(
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .slideInUp(contentVisible, delayMs = 140),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .height(140.dp)
+                    .scaleIn(contentVisible, delayMs = 80)
+                    .neonGlow(color = SignatureOrange, shape = RoundedCornerShape(28.dp), glowWidth = 2.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(SignatureOrange, SignaturePurple, AccentPrimary)
+                        ),
+                        shape = RoundedCornerShape(28.dp)
+                    )
+                    .border(1.5.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(28.dp))
+                    .tactileClick { checkPermissionAndPick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, "New", tint = Color.White, modifier = Modifier.size(28.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = LanguageHelper.getString(R.string.new_project, language),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Import video & start 8K editing",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "✦ No watermark • 4K/8K export • AI tools",
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Icon(Icons.Default.PlayArrow, "Start", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(32.dp))
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // FEATURE SHOWCASE — CapCut/VN/YouCut/KineMaster synced features
+        // 2 big 3D glass cards with dramatic live demos (200dp tall)
+        // ═══════════════════════════════════════════════════════════════════
+        item {
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 120),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "★ Synced Pro Features",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Text(
+                    text = "LIVE 3D →",
+                    fontSize = 11.sp,
+                    color = SignatureOrange,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // Feature showcase row 1: Templates Browser + AI Tools Hub
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 160),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FeatureShowcaseCard(
+                    title = "Templates",
+                    subtitle = "CapCut-style browser",
+                    badge = "🎬 NEW",
+                    accent = SignatureOrange,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = { /* Could open templates tab */ }
+                ) {
+                    TemplatesBrowserDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+                FeatureShowcaseCard(
+                    title = "AI Hub",
+                    subtitle = "Auto-caption • BG remove",
+                    badge = "🤖 AI",
+                    accent = AccentTertiary,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    AiToolsHubDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        // Feature showcase row 2: Multi-Track Timeline + Speed Dial
+        item {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 200),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FeatureShowcaseCard(
+                    title = "Multi-Track",
+                    subtitle = "KineMaster layers",
+                    badge = "🎯 PRO",
+                    accent = SignaturePurple,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    MultiTrackTimelineDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+                FeatureShowcaseCard(
+                    title = "Speed Dial",
+                    subtitle = "YouCut 0.25x–4x",
+                    badge = "⚡ FAST",
+                    accent = AccentRose,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    SpeedDialDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        // Feature showcase row 3: Keyframe Animation + Aspect Ratio
+        item {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 240),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FeatureShowcaseCard(
+                    title = "Keyframes",
+                    subtitle = "KineMaster animation",
+                    badge = "🎯 PRO",
+                    accent = SignatureOrange,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    KeyframeAnimationDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+                FeatureShowcaseCard(
+                    title = "Aspect Ratio",
+                    subtitle = "YouCut quick-switch",
+                    badge = "📐 16:9",
+                    accent = AccentTertiary,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    AspectRatioDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        // Feature showcase row 4: Blend Modes + Export Pipeline
+        item {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 280),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FeatureShowcaseCard(
+                    title = "Blend Modes",
+                    subtitle = "24 modes • KineMaster",
+                    badge = "🎨 FX",
+                    accent = SignaturePurple,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    BlendModesDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+                FeatureShowcaseCard(
+                    title = "8K Export",
+                    subtitle = "FFmpeg pipeline",
+                    badge = "📤 8K",
+                    accent = SignatureOrange,
+                    modifier = Modifier.weight(1f),
+                    onTemplateSelected = {}
+                ) {
+                    ExportPipelineDemoPreview(modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // QUICK TOOLS GRID — 8 tools, BIGGER cards (160dp) with live previews
+        // ═══════════════════════════════════════════════════════════════════
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 320),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Quick Tools",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                Text(
+                    text = "LIVE →",
+                    fontSize = 11.sp,
+                    color = AccentTertiary,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 360),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val tools = listOf(
                     QuickTool("✂️", "Trim & Cut", "trim", AccentRose),
                     QuickTool("🎵", "MP3→Video", "convert_mp3", CyberCyan),
-                    QuickTool("✂", "Crop", "crop", AccentPrimary),
+                    QuickTool("🔲", "Crop", "crop", AccentPrimary),
                     QuickTool("🗜️", "Compress", "compress", NeonOrange),
-                    QuickTool("↺️", "Reverse", "reverse", AccentTertiary),
+                    QuickTool("🔄", "Reverse", "reverse", AccentTertiary),
                     QuickTool("⏱️", "Slow-Mo", "slowmo", AccentRose),
                     QuickTool("🖼️", "Slideshow", "slideshow", AccentPrimary),
                     QuickTool("🎧", "Add Music", "addmusic", CyberCyan)
                 )
-                // Row 1: first 4 tools
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     tools.take(4).forEach { tool ->
                         QuickToolCard(
@@ -827,10 +1042,9 @@ fun DashboardView(
                         }
                     }
                 }
-                // Row 2: last 4 tools
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     tools.drop(4).forEach { tool ->
                         QuickToolCard(
@@ -863,16 +1077,12 @@ fun DashboardView(
                             color = CyberCyan
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        // \u2550 v4.5.0: ALL FOUR quick tools are now WORKABLE \u2550
-                        // Each tool shows a real description + launches a real
-                        // picker that runs an actual FFmpeg pipeline via the
-                        // ViewModel -> ExportManager -> VideoProcessor chain.
                         val toolDesc = when (selectedQuickTool) {
                             "trim" -> "✂️ Pick a video — trim and cut precise segments with frame accuracy, saved to Movies/PowerCut."
                             "convert_mp3" -> "🎵 Pick an audio file — converted to MP4 with a PowerCut visualizer, saved to Movies/PowerCut."
-                            "crop" -> "✂ Pick a video — crop to 1:1, 9:16, or 16:9 aspect ratios, saved to Movies/PowerCut."
+                            "crop" -> "🔲 Pick a video — crop to 1:1, 9:16, or 16:9 aspect ratios, saved to Movies/PowerCut."
                             "compress" -> "🗜️ Pick a video — it is re-encoded to a smaller MP4 (CRF quality control), saved to Movies/PowerCut."
-                            "reverse" -> "↺️ Pick a video — reverse playback for creative rewind effects, saved to Movies/PowerCut."
+                            "reverse" -> "🔄 Pick a video — reverse playback for creative rewind effects, saved to Movies/PowerCut."
                             "slowmo" -> "⏱️ Pick a video — apply slow-motion or speed-ramp effects, saved to Movies/PowerCut."
                             "slideshow" -> "🖼️ Pick images — they are stitched into a video slideshow with Ken-Burns zoom + fades, saved to Movies/PowerCut."
                             "addmusic" -> "🎧 Pick a video — overlay background music with fade in/out, saved to Movies/PowerCut."
@@ -886,7 +1096,6 @@ fun DashboardView(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Tool-specific preset labels + actions.
                             val presets = when (selectedQuickTool) {
                                 "trim" -> listOf("Start Trim", "End Trim", "Split")
                                 "convert_mp3" -> listOf("Ultra Quality", "Fast Mode", "Default")
@@ -905,7 +1114,6 @@ fun DashboardView(
                                         .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
                                         .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
                                         .clickable {
-                                            // \u2500 Launch the REAL picker + pipeline for each tool \u2500
                                             when (selectedQuickTool) {
                                                 "trim" -> pickerLauncher.launch("video/*")
                                                 "convert_mp3" -> audioPickerLauncher.launch("audio/*")
@@ -930,20 +1138,20 @@ fun DashboardView(
             }
         }
 
-        // ★ TRENDING TEMPLATES CAROUSEL — with entrance animation
+        // ═══════════════════════════════════════════════════════════════════
+        // TRENDING TEMPLATES CAROUSEL — enhanced with 8K badge overlays
+        // ═══════════════════════════════════════════════════════════════════
         item {
             Spacer(modifier = Modifier.height(24.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .slideInUp(contentVisible, delayMs = 220),
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 400),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Trending Studio Templates",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
                     color = Color.White
                 )
                 Text(
@@ -957,7 +1165,6 @@ fun DashboardView(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // The 5 requested image-backed templates for the home screen dashboard
             val dashboardTemplates = listOf(
                 Template("Cinema Classic", "Cinematic Film Grade", "Cinematic", R.drawable.template_cinema, listOf(Color(0xFF2C3E50), Color(0xFFFD746C)), "spark", "sepia", "crossfade"),
                 Template("Urdu Poetry Flow", "Teal Lyric Aesthetic", "Urdu Status", R.drawable.template_urdu_poetry, listOf(Color(0xFF004FF9), Color(0xFFFFF94C)), "poetry", "none", "crossfade", "ur"),
@@ -967,27 +1174,24 @@ fun DashboardView(
             )
 
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp)
             ) {
                 items(dashboardTemplates) { template ->
                     Box(
                         modifier = Modifier
-                            .size(118.dp, 168.dp)
-                            .scaleIn(contentVisible, delayMs = 300)
+                            .size(130.dp, 180.dp)
+                            .scaleIn(contentVisible, delayMs = 460)
                             .clip(RoundedCornerShape(24.dp))
                             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
                             .tactileClick { onTemplateSelected(template) },
                         contentAlignment = Alignment.BottomStart
                     ) {
-                        // Fallback background gradient
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(Brush.horizontalGradient(template.gradient))
                         )
-
-                        // Render actual JPEG Template image
                         if (template.imageRes != 0) {
                             Image(
                                 painter = painterResource(id = template.imageRes),
@@ -996,65 +1200,54 @@ fun DashboardView(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
-
+                        // 8K badge top-right
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .background(
+                                    Brush.horizontalGradient(listOf(SignatureOrange, SignaturePurple)),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("8K", fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color.White)
+                        }
                         // Transparent black scrim at bottom
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(60.dp)
+                                .height(70.dp)
                                 .background(
                                     Brush.verticalGradient(
-                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
                                     )
                                 )
                         )
-
-                        // Title and subtitle overlay at bottom-left
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(10.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Text(
-                                text = template.title,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = template.subtitle,
-                                fontSize = 8.sp,
-                                color = Color.LightGray
-                            )
+                            Text(text = template.title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text(text = template.subtitle, fontSize = 8.sp, color = Color.LightGray)
                         }
                     }
                 }
             }
         }
 
-        // ★ RECENT PROJECTS LIST — 3D glass cards with entrance
+        // ═══════════════════════════════════════════════════════════════════
+        // RECENT PROJECTS — enhanced 3D glass cards
+        // ═══════════════════════════════════════════════════════════════════
         item {
             Spacer(modifier = Modifier.height(24.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .slideInUp(contentVisible, delayMs = 380),
+                modifier = Modifier.fillMaxWidth().slideInUp(contentVisible, delayMs = 500),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Recent Projects",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "2 projects",
-                    fontSize = 11.sp,
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Medium
-                )
+                Text(text = "Recent Projects", fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Text(text = "2 projects", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -1068,51 +1261,38 @@ fun DashboardView(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp)
-                    .slideInUp(contentVisible, delayMs = 440)
-                    .glassCard3D(shape = RoundedCornerShape(14.dp), glowColor = if (status == "Draft") AccentSecondary else AccentPrimary)
-                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
+                    .padding(bottom = 12.dp)
+                    .slideInUp(contentVisible, delayMs = 560)
+                    .glassCard3D(
+                        shape = RoundedCornerShape(16.dp),
+                        glowColor = if (status == "Draft") AccentSecondary else AccentPrimary
+                    )
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
                     .tactileClick { /* Open project */ }
-                    .padding(12.dp)
+                    .padding(14.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(64.dp)
                             .background(
                                 if (status == "Draft") {
                                     Brush.linearGradient(colors = listOf(Color(0xFF1F1F30), Color(0xFF2E2E4A)))
                                 } else {
                                     Brush.linearGradient(colors = listOf(Color(0xFF3A1F1F), Color(0xFF5A2E2E)))
                                 },
-                                RoundedCornerShape(10.dp)
+                                RoundedCornerShape(12.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play icon",
-                            tint = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(Icons.Default.PlayArrow, "Play icon", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
                     }
-
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = desc,
-                            fontSize = 10.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
+                        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = desc, fontSize = 10.sp, color = Color.Gray, modifier = Modifier.padding(top = 2.dp))
                         Box(
                             modifier = Modifier
                                 .padding(top = 4.dp)
@@ -1122,30 +1302,100 @@ fun DashboardView(
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Text(
-                                text = status,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (status == "Draft") NeonOrange else CyberCyan
-                            )
+                            Text(text = status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (status == "Draft") NeonOrange else CyberCyan)
                         }
                     }
-
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = "Folder",
-                        tint = Color.White.copy(alpha = 0.15f),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Default.Folder, "Folder", tint = Color.White.copy(alpha = 0.15f), modifier = Modifier.size(20.dp))
                 }
             }
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
+
+/**
+ * Ultra Redesign v2 — Feature Showcase Card
+ * A large 3D glass card (200dp) with a dramatic live animated Canvas preview,
+ * title, subtitle, and a colored badge. Used for the CapCut/VN/YouCut/KineMaster
+ * synced feature showcase on the home dashboard.
+ */
+@Composable
+private fun FeatureShowcaseCard(
+    title: String,
+    subtitle: String,
+    badge: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onTemplateSelected: (Template) -> Unit = {},
+    preview: @Composable () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .height(200.dp)
+            .glassCard3D(
+                shape = RoundedCornerShape(20.dp),
+                glowColor = accent,
+                backColor = GlassBackground
+            )
+            .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+            .padding(6.dp)
+    ) {
+        // LIVE DEMO PREVIEW — takes most of the card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(14.dp))
+        ) {
+            preview()
+            // Badge top-left
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .background(accent.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(badge, fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
+            // LIVE indicator top-right
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(5.dp).background(AccentTertiary, CircleShape))
+                    Spacer(Modifier.width(3.dp))
+                    Text("LIVE", fontSize = 7.sp, fontWeight = FontWeight.Black, color = AccentTertiary)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        // Title + subtitle
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            color = accent,
+            modifier = Modifier.padding(horizontal = 6.dp)
+        )
+        Text(
+            text = subtitle,
+            fontSize = 9.sp,
+            color = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+
 
 @Composable
 fun TemplatesView(
@@ -1991,24 +2241,25 @@ private fun QuickToolCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    // 2027 8K — Premium 3D Glass Card with LIVE DEMO PREVIEW
-    // Each card now shows an animated Canvas preview of what the tool does,
+    // Ultra Redesign v2 — BIGGER Premium 3D Glass Card with LIVE DEMO PREVIEW
+    // 160dp height (was 120dp) for more prominent, clearly visible live demos.
+    // Each card shows an animated Canvas preview of what the tool does,
     // matching CapCut/VN/KineMaster's real-time filter thumbnail previews.
     Column(
         modifier = modifier
-            .height(120.dp)
+            .height(160.dp)
             .glassCard3D(
-                shape = RoundedCornerShape(18.dp),
-                glowColor = if (isSelected) tool.accent else tool.accent.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(20.dp),
+                glowColor = if (isSelected) tool.accent else tool.accent.copy(alpha = 0.4f),
                 backColor = GlassBackground
             )
             .border(
                 if (isSelected) 2.dp else 1.dp,
                 if (isSelected) tool.accent else Color.White.copy(alpha = 0.1f),
-                RoundedCornerShape(18.dp)
+                RoundedCornerShape(20.dp)
             )
             .tactileClick { onClick() }
-            .padding(4.dp),
+            .padding(5.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // LIVE DEMO PREVIEW — animated Canvas showing the tool in action
