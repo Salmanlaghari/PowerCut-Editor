@@ -45,6 +45,8 @@ import com.powercut.editor.ui.theme.OnPrimary
 import com.powercut.editor.ui.theme.OnSurfaceSecondary
 import com.powercut.editor.ui.theme.Surface
 import com.powercut.editor.ui.theme.SurfaceVariant
+import com.powercut.editor.ui.theme.SignatureOrange
+import com.powercut.editor.ui.theme.glassCard3D
 import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.premiumAccentGradient
@@ -266,29 +268,24 @@ private fun EffectGlassCard(
 ) {
     val accent = if (effect.isPro) NeonOrange else CyberCyan
 
+    // 2027 8K — Premium 3D Glass Card with perspective tilt
     Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(16.dp))
-            // 3D glass base: layered translucent surface for depth.
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Surface.copy(alpha = 0.95f),
-                        SurfaceVariant.copy(alpha = 0.85f)
-                    )
-                )
+            .glassCard3D(
+                shape = RoundedCornerShape(16.dp),
+                glowColor = if (isSelected) SignatureOrange else accent.copy(alpha = 0.25f),
+                backColor = Surface
             )
-            // Selected state: gradient border (neon glow) + accent ring.
             .neonGlow(
                 color = if (isSelected) accent else Color.Transparent,
                 shape = RoundedCornerShape(16.dp),
                 glowWidth = if (isSelected) 2.dp else 0.dp
             )
             .border(
-                width = if (isSelected) 1.6.dp else 0.8.dp,
+                width = if (isSelected) 2.dp else 1.dp,
                 brush = if (isSelected) premiumAccentGradient
-                else Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), Color.Transparent)),
+                else Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.12f), Color.Transparent)),
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)

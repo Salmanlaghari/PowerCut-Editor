@@ -253,6 +253,9 @@ class MainActivity : ComponentActivity() {
                                     onDraftSelected = { draft ->
                                         viewModel.resumeDraft(draft)
                                     },
+                                    onDeleteDraft = { draft ->
+                                        viewModel.deleteDraft(this@MainActivity, draft)
+                                    },
                                     onTemplateVideoSelected = { uri, tId, filt, trans, caps, speed ->
                                         importVideoDirect(uri, tId, filt, trans, caps, speed)
                                     },

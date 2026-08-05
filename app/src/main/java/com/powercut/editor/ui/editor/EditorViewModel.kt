@@ -160,6 +160,39 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun deleteDraft(context: Context, draft: DraftItem) {
+        viewModelScope.launch {
+            try {
+                val draftsDir = File(context.filesDir, "drafts")
+                val draftFile = File(draftsDir, "${draft.id}.json")
+                if (draftFile.exists()) {
+                    draftFile.delete()
+                }
+                val files = draftsDir.listFiles() ?: emptyArray()
+                val list = mutableListOf<DraftItem>()
+                for (file in files) {
+                    if (file.name.endsWith(".json")) {
+                        try {
+                            val content = file.readText()
+                            val json = JSONObject(content)
+                            val videoPath = json.getString("videoPath")
+                            val projName = videoPath.substringAfterLast("/")
+                            val lastEdited = json.optLong("lastEditedTime", file.lastModified())
+                            val duration = json.optLong("durationMs", 0L)
+                            list.add(DraftItem(file.nameWithoutExtension, projName, lastEdited, duration, content))
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+                _drafts.value = list.sortedByDescending { it.lastEditedTime }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+
     private fun serializeProject(project: VideoProject, clipsList: List<Clip>): String {
         val json = JSONObject()
         json.put("videoPath", project.videoPath)

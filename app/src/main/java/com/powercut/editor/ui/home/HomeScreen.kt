@@ -80,6 +80,7 @@ fun HomeScreen(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
     draftsList: List<DraftItem>,
+    onDeleteDraft: (DraftItem) -> Unit = {},
     onDraftSelected: (DraftItem) -> Unit,
     onTemplateVideoSelected: (android.net.Uri, String, String, String, String, Float) -> Unit,
     // v4.4.0 Premium FFmpeg Media Converter: MP3 -> MP4 (workable, not fake)
@@ -322,7 +323,7 @@ fun HomeScreen(
                                 templateVideoLauncher.launch("video/*")
                             }
                         )
-                        "drafts" -> com.powercut.editor.ui.drafts.DraftsScreen(draftsList, onDraftSelected, language)
+                        "drafts" -> com.powercut.editor.ui.drafts.DraftsScreen(draftsList, onDraftSelected, language, onDeleteDraft)
                         "exports" -> ExportsView(language)
                         "settings" -> SettingsView(
                             language,
@@ -1990,45 +1991,74 @@ private fun QuickToolCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Box(
+    // 2027 8K — Premium 3D Glass Card with LIVE DEMO PREVIEW
+    // Each card now shows an animated Canvas preview of what the tool does,
+    // matching CapCut/VN/KineMaster's real-time filter thumbnail previews.
+    Column(
         modifier = modifier
-            .height(88.dp)
+            .height(120.dp)
             .glassCard3D(
-                shape = RoundedCornerShape(16.dp),
-                glowColor = if (isSelected) tool.accent else tool.accent.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(18.dp),
+                glowColor = if (isSelected) tool.accent else tool.accent.copy(alpha = 0.35f),
                 backColor = GlassBackground
             )
             .border(
-                if (isSelected) 1.5.dp else 1.dp,
-                if (isSelected) tool.accent else Color.White.copy(alpha = 0.08f),
-                RoundedCornerShape(16.dp)
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) tool.accent else Color.White.copy(alpha = 0.1f),
+                RoundedCornerShape(18.dp)
             )
             .tactileClick { onClick() }
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
+            .padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // PRO badge top-right corner
+        // LIVE DEMO PREVIEW — animated Canvas showing the tool in action
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 4.dp, top = 3.dp)
-                .background(tool.accent.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 1.dp)
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
         ) {
-            Text("PRO", fontSize = 6.sp, fontWeight = FontWeight.Black, color = tool.accent)
-        }
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(tool.emoji, fontSize = 22.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = tool.label,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isSelected) tool.accent else Color.White
+            QuickToolDemoPreview(
+                toolId = tool.id,
+                modifier = Modifier.fillMaxSize()
             )
+            // PRO badge top-right corner over the preview
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 3.dp, top = 3.dp)
+                    .background(tool.accent.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            ) {
+                Text("PRO", fontSize = 7.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
+            // Live demo indicator — pulsing dot
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 4.dp, top = 4.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 3.dp, vertical = 1.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(4.dp)
+                            .background(AccentTertiary, CircleShape)
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Text("LIVE", fontSize = 6.sp, fontWeight = FontWeight.Black, color = AccentTertiary)
+                }
+            }
         }
+        Spacer(modifier = Modifier.height(3.dp))
+        // Tool label
+        Text(
+            text = tool.label,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) tool.accent else Color.White,
+            maxLines = 1
+        )
     }
 }

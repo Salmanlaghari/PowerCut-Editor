@@ -44,7 +44,12 @@ import com.powercut.editor.ui.theme.OnPrimary
 import com.powercut.editor.ui.theme.OnSurfaceSecondary
 import com.powercut.editor.ui.theme.Surface
 import com.powercut.editor.ui.theme.SurfaceVariant
+import com.powercut.editor.ui.theme.SignatureOrange
+import com.powercut.editor.ui.theme.SignaturePurple
+import com.powercut.editor.ui.theme.glassCard3D
 import com.powercut.editor.ui.theme.glassmorphic
+import com.powercut.editor.ui.home.AiFeatureDemoPreview
+import androidx.compose.foundation.Canvas
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.premiumAccentGradient
 import com.powercut.editor.ui.theme.tactileClick
@@ -174,37 +179,47 @@ private fun AiFeatureRow(
     val hasChain = feature.videoChain.isNotBlank() || feature.audioChain.isNotBlank()
     val accent = if (feature.isPro) NeonOrange else if (hasChain) CyberCyan else OnSurfaceSecondary
 
+    // 2027 8K — Premium 3D Glass Card
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (isActive) premiumAccentGradient else Brush.verticalGradient(listOf(SurfaceVariant, Surface))
+            .glassCard3D(
+                shape = RoundedCornerShape(16.dp),
+                glowColor = if (isActive) SignatureOrange else accent.copy(alpha = 0.3f),
+                backColor = if (isActive) SurfaceVariant else Surface
             )
             .border(
-                width = if (isActive) 0.dp else 1.dp,
-                color = if (hasChain) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.03f),
-                shape = RoundedCornerShape(14.dp)
+                width = if (isActive) 2.dp else 1.dp,
+                color = if (isActive) SignatureOrange else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(16.dp)
             )
             .clickable(enabled = hasChain, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Emoji icon tile
+            // 2027 8K LIVE DEMO PREVIEW — animated Canvas showing the AI feature
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(56.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.linearGradient(listOf(AccentSecondary.copy(alpha = 0.18f), AccentPrimary.copy(alpha = 0.18f)))
-                    ),
-                contentAlignment = Alignment.Center
             ) {
-                Text(feature.emoji, fontSize = 20.sp)
+                AiFeatureDemoPreview(
+                    featureId = feature.id,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(2.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 2.dp, vertical = 1.dp)
+                ) {
+                    Text("LIVE", fontSize = 5.sp, fontWeight = FontWeight.Black, color = AccentTertiary)
+                }
             }
 
             Column(modifier = Modifier.weight(1f)) {

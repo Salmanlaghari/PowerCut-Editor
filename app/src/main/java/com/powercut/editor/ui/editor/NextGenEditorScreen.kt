@@ -107,6 +107,12 @@ import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.premiumAccentGradient
 import com.powercut.editor.ui.theme.tactileClick
+import com.powercut.editor.ui.theme.glassCard3D
+import com.powercut.editor.ui.home.TransitionDemoPreview
+import com.powercut.editor.ui.home.AnimationDemoPreview
+import com.powercut.editor.ui.theme.GlassBackground
+import com.powercut.editor.ui.theme.SignatureOrange
+import com.powercut.editor.ui.theme.SignaturePurple
 import java.util.Locale
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -3150,8 +3156,13 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
 @Composable
 private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TRANSITIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("TRANSITIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            Box(Modifier.background(NeonOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✦ 3D GLASS • LIVE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+            }
+        }
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(
                 "None", "fade", "fade_out", "fade_in_out", "crossfade", "dissolve",
                 "glitch", "zoom_in", "zoom_out", "zoom_burst", "spin", "wipe",
@@ -3170,10 +3181,26 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
             ).forEach { t ->
                 val display = t.replace("_", " ").replaceFirstChar { it.uppercase() }
                 val sel = project.transitionType.lowercase() == t.lowercase()
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
-                    .clickable { onUpdateTransition(if (sel) "none" else t) }
-                    .padding(horizontal = 5.dp, vertical = 3.dp)) {
-                    Text(display, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                Column(
+                    modifier = Modifier.width(58.dp).height(74.dp)
+                        .glassCard3D(shape = RoundedCornerShape(12.dp), glowColor = if (sel) NeonOrange else SignaturePurple.copy(0.3f), backColor = GlassBackground)
+                        .border(if (sel) 2.dp else 0.5.dp, if (sel) NeonOrange else Color.White.copy(0.08f), RoundedCornerShape(12.dp))
+                        .tactileClick { onUpdateTransition(if (sel) "none" else t) }
+                        .padding(3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))) {
+                        TransitionDemoPreview(transitionId = t, modifier = Modifier.fillMaxSize())
+                        if (sel) {
+                            Box(modifier = Modifier.align(Alignment.TopEnd).padding(1.dp)
+                                .background(NeonOrange, CircleShape).size(6.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(display, fontSize = 6.sp, fontWeight = FontWeight.Bold,
+                        color = if (sel) NeonOrange else Color.White.copy(0.85f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }
@@ -3189,10 +3216,10 @@ private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Uni
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("TEXT ANIMATIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
-                Text("✓ Live Preview + FFmpeg", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Text("✦ 3D GLASS • LIVE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             }
         }
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(
                 "none", "fade", "fade_out", "fade_in_out", "typewriter", "typewriter_fast",
                 "bounce", "slide_left", "slide_right", "slide_up", "slide_down",
@@ -3204,10 +3231,26 @@ private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Uni
             ).forEach { a ->
                 val display = a.replace("_", " ").replaceFirstChar { it.uppercase() }
                 val sel = project.textAnimationType.lowercase() == a.lowercase()
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
-                    .clickable { onUpdateAnim(if (sel) "none" else a) }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    Text(display, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                Column(
+                    modifier = Modifier.width(58.dp).height(74.dp)
+                        .glassCard3D(shape = RoundedCornerShape(12.dp), glowColor = if (sel) CyberCyan else SignaturePurple.copy(0.3f), backColor = GlassBackground)
+                        .border(if (sel) 2.dp else 0.5.dp, if (sel) CyberCyan else Color.White.copy(0.08f), RoundedCornerShape(12.dp))
+                        .tactileClick { onUpdateAnim(if (sel) "none" else a) }
+                        .padding(3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))) {
+                        AnimationDemoPreview(animId = a, modifier = Modifier.fillMaxSize())
+                        if (sel) {
+                            Box(modifier = Modifier.align(Alignment.TopEnd).padding(1.dp)
+                                .background(CyberCyan, CircleShape).size(6.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(display, fontSize = 6.sp, fontWeight = FontWeight.Bold,
+                        color = if (sel) CyberCyan else Color.White.copy(0.85f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }

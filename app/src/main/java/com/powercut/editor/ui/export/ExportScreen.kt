@@ -62,6 +62,14 @@ import com.powercut.editor.ui.theme.NeonOrange
 import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.tactileClick
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
+import com.powercut.editor.ui.theme.SignatureOrange
+import com.powercut.editor.ui.theme.SignaturePurple
+import com.powercut.editor.ui.theme.glassCard3D
+import com.powercut.editor.ui.theme.GlassBackground
+import java.io.File
 
 @Composable
 fun ExportScreen(
@@ -420,6 +428,183 @@ fun ExportScreen(
                     }
                 }
 
+                // SOCIAL MEDIA SHARING (Premium 3D Glass)
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val exportedFilePath = exportState.data
+
+                // Resolves the exported path (content URI / absolute file path / relative Movies path)
+                // into a shareable content:// Uri for social sharing.
+                fun resolveShareUri(pathStr: String): Uri? {
+                    return try {
+                        if (pathStr.startsWith("content://")) {
+                            Uri.parse(pathStr)
+                        } else if (pathStr.startsWith("/") && java.io.File(pathStr).exists()) {
+                            FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", java.io.File(pathStr))
+                        } else {
+                            // Relative path like "Movies/PowerCut/xxx.mp4" -> query MediaStore
+                            val fileName = pathStr.substringAfterLast("/")
+                            val projection = arrayOf(android.provider.MediaStore.Video.Media._ID, android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                            val cursor = ctx.contentResolver.query(
+                                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                arrayOf(android.provider.MediaStore.Video.Media._ID),
+                                "${android.provider.MediaStore.Video.Media.DISPLAY_NAME} = ?",
+                                arrayOf(fileName),
+                                null
+                            )
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    val id = it.getLong(it.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID))
+                                    return Uri.withAppendedPath(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id.toString())
+                                }
+                            }
+                            null
+                        }
+                    } catch (e: Exception) {
+                        try {
+                            val file = java.io.File(pathStr)
+                            if (file.exists()) FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file) else null
+                        } catch (e2: Exception) { null }
+                    }
+                }
+
+                @androidx.compose.runtime.Composable
+                fun SocialShareRow() {
+                    val socialPlatforms = listOf(
+                        SocialShareTarget("Instagram", "com.instagram.android"),
+                        SocialShareTarget("TikTok", "com.zhiliaoapp.musically"),
+                        SocialShareTarget("WhatsApp", "com.whatsapp"),
+                        SocialShareTarget("YouTube", "com.google.android.youtube"),
+                        SocialShareTarget("More", "")
+                    )
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("\u2605 SHARE TO SOCIAL", fontSize = 12.sp, fontWeight = FontWeight.Black, color = SignatureOrange, letterSpacing = 0.5.sp)
+                            Box(Modifier.background(SignatureOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                Text("1-TAP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = SignatureOrange)
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            socialPlatforms.forEach { platform ->
+                                val gradient = when (platform.name) {
+                                    "Instagram" -> Brush.verticalGradient(listOf(SignatureOrange, SignaturePurple))
+                                    "TikTok" -> Brush.verticalGradient(listOf(Color(0xFF25F4EE), Color(0xFFFE2C55)))
+                                    "WhatsApp" -> Brush.verticalGradient(listOf(Color(0xFF25D366), Color(0xFF128C7E)))
+                                    "YouTube" -> Brush.verticalGradient(listOf(Color(0xFFFF0000), Color(0xFFCC0000)))
+                                    else -> Brush.verticalGradient(listOf(SignaturePurple, CyberCyan))
+                                }
+                                val emoji = when (platform.name) {
+                                    "Instagram" -> "\ud83d\udcf7"
+                                    "TikTok" -> "\ud83c\udfa5"
+                                    "WhatsApp" -> "\ud83d\udcac"
+                                    "YouTube" -> "\u25b6\ufe0f"
+                                    else -> "\ud83d\udce7"
+                                }
+                                Column(
+                                    modifier = Modifier.weight(1f).height(58.dp)
+                                        .glassCard3D(shape = RoundedCornerShape(12.dp), glowColor = SignatureOrange.copy(0.2f), backColor = GlassBackground)
+                                        .border(0.5.dp, Color.White.copy(0.08f), RoundedCornerShape(12.dp))
+                                        .tactileClick {
+                                            try {
+                                                val uri = resolveShareUri(exportedFilePath)
+                                                if (uri != null) {
+                                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                                        type = "video/*"
+                                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        if (platform.packageName.isNotEmpty()) {
+                                                            setPackage(platform.packageName)
+                                                        }
+                                                    }
+                                                    ctx.startActivity(Intent.createChooser(intent, "Share video to ${platform.name}"))
+                                                }
+                                            } catch (e: Exception) {
+                                                try {
+                                                    val uri = resolveShareUri(exportedFilePath)
+                                                    if (uri != null) {
+                                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                                            type = "video/*"
+                                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        }
+                                                        ctx.startActivity(Intent.createChooser(intent, "Share video"))
+                                                    }
+                                                } catch (e2: Exception) { e2.printStackTrace() }
+                                            }
+                                        },
+                                    horizontalAlignment = Alignment.CenterVertically,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(24.dp).clip(CircleShape).background(gradient),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(emoji, fontSize = 12.sp)
+                                    }
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(platform.name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier.weight(1f).height(42.dp)
+                                    .glassCard3D(shape = RoundedCornerShape(12.dp), glowColor = CyberCyan.copy(0.2f), backColor = GlassBackground)
+                                    .border(0.5.dp, CyberCyan.copy(0.4f), RoundedCornerShape(12.dp))
+                                    .tactileClick {
+                                        try {
+                                            val uri = resolveShareUri(exportedFilePath)
+                                            if (uri != null) {
+                                                val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE).apply {
+                                                    setDataAndType(uri, "video/*")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                ctx.sendBroadcast(intent)
+                                            }
+                                        } catch (e: Exception) { e.printStackTrace() }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Download, "Save", tint = CyberCyan, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("SAVE TO GALLERY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                                }
+                            }
+                            Box(
+                                modifier = Modifier.weight(1f).height(42.dp)
+                                    .glassCard3D(shape = RoundedCornerShape(12.dp), glowColor = SignaturePurple.copy(0.2f), backColor = GlassBackground)
+                                    .border(0.5.dp, SignaturePurple.copy(0.4f), RoundedCornerShape(12.dp))
+                                    .tactileClick {
+                                        try {
+                                            val uri = resolveShareUri(exportedFilePath)
+                                            if (uri != null) {
+                                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                    setDataAndType(uri, "video/*")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                ctx.startActivity(Intent.createChooser(intent, "Play video"))
+                                            }
+                                        } catch (e: Exception) { e.printStackTrace() }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.PlayArrow, "Play", tint = SignaturePurple, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("PLAY PREVIEW", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SignaturePurple)
+                                }
+                            }
+                        }
+                    }
+                }
+                SocialShareRow()
+
                 // STICKY IMPORT + DONE
                 Box(
                     modifier = Modifier.fillMaxWidth()
@@ -500,3 +685,5 @@ fun ExportScreen(
         }
     }
 }
+
+data class SocialShareTarget(val name: String, val packageName: String)

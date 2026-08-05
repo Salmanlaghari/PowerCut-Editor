@@ -1079,11 +1079,18 @@ class VideoProcessor @Inject constructor(
                 fcParts.add("[$currentLabel]format=yuv420p[vfinalout]")
                 videoOutLabel = "[vfinalout]"
             } else {
-                // No video filter_complex needed — use -vf for video filters
+                // FIX: When audio filter_complex is needed but video filter_complex
+                // is NOT (no image overlay/green screen/watermark), we MUST put the
+                // video filters INTO the filter_complex chain too — NOT use `-vf`.
+                // FFmpeg ignores `-vf` when `-filter_complex` is present, so using
+                // both would silently DROP all video filters (color grades, effects,
+                // text overlays, stickers, transitions) from the exported video.
+                // This was the root cause of "edited elements dont appear in export".
                 if (vfFilters.isNotEmpty()) {
-                    args.addAll(listOf("-vf", vfFilters.joinToString(",")))
+                    fcParts.add("[0:v]${vfFilters.joinToString(",")},format=yuv420p[vfinalout]")
+                    videoOutLabel = "[vfinalout]"
                 }
-                // videoOutLabel stays "0:v"
+                // If no vfFilters either, videoOutLabel stays "0:v" (raw passthrough)
             }
 
             // ── AUDIO CHAIN ──

@@ -46,6 +46,7 @@ import com.powercut.editor.ui.theme.OnPrimary
 import com.powercut.editor.ui.theme.OnSurfaceSecondary
 import com.powercut.editor.ui.theme.Surface
 import com.powercut.editor.ui.theme.SurfaceVariant
+import com.powercut.editor.ui.theme.glassCard3D
 import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.premiumAccentGradient
@@ -165,16 +166,18 @@ private fun SocialPresetCard(
     // Derive a visual aspect ratio preview from the preset id.
     val previewAspectRatio = aspectRatioForId(preset.id)
 
+    // 2027 8K — Premium 3D Glass Card
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                if (isActive) premiumAccentGradient else Brush.verticalGradient(listOf(SurfaceVariant, Surface))
+            .glassCard3D(
+                shape = RoundedCornerShape(16.dp),
+                glowColor = if (isActive) SignatureOrange else AccentPrimary.copy(alpha = 0.3f),
+                backColor = if (isActive) SurfaceVariant else Surface
             )
             .border(
-                width = if (isActive) 0.dp else 1.dp,
-                color = Color.White.copy(alpha = 0.08f),
+                width = if (isActive) 2.dp else 1.dp,
+                color = if (isActive) SignatureOrange else Color.White.copy(alpha = 0.08f),
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)
