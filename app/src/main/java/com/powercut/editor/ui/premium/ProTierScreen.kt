@@ -42,6 +42,8 @@ import com.powercut.editor.ui.theme.OnSurfaceSecondary
 import com.powercut.editor.ui.theme.PremiumGold
 import com.powercut.editor.ui.theme.Surface
 import com.powercut.editor.ui.theme.SurfaceVariant
+import com.powercut.editor.ui.theme.SignatureOrange
+import com.powercut.editor.ui.theme.glassCard3D
 import com.powercut.editor.ui.theme.glassmorphic
 import com.powercut.editor.ui.theme.neonGlow
 import com.powercut.editor.ui.theme.premiumAccentGradient
@@ -148,14 +150,18 @@ fun ProTierScreen(
 private fun ProFeatureRow(feature: PremiumFeature, isProActive: Boolean) {
     val hasChain = feature.videoChain.isNotBlank() || feature.audioChain.isNotBlank()
 
+    // 2027 8K — Premium 3D Glass Card
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Brush.verticalGradient(listOf(SurfaceVariant, Surface)))
+            .glassCard3D(
+                shape = RoundedCornerShape(14.dp),
+                glowColor = if (isProActive) PremiumGold else SignatureOrange.copy(alpha = 0.2f),
+                backColor = Surface
+            )
             .border(
-                width = 1.dp,
-                color = if (isProActive) PremiumGold.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.06f),
+                width = if (isProActive) 2.dp else 1.dp,
+                color = if (isProActive) PremiumGold.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.06f),
                 shape = RoundedCornerShape(14.dp)
             )
             .padding(horizontal = 14.dp, vertical = 12.dp)
