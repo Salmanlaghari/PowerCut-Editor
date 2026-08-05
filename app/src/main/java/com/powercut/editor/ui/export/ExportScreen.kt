@@ -536,7 +536,7 @@ fun ExportScreen(
                                                 } catch (e2: Exception) { e2.printStackTrace() }
                                             }
                                         },
-                                    horizontalAlignment = Alignment.CenterVertically,
+                                    horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
                                     Box(

@@ -120,7 +120,7 @@ fun Mp3ToMp4DemoPreview(modifier: Modifier = Modifier) {
         val startX = w * 0.08f
         val spacing = w * 0.06f
         for (i in 0 until barCount) {
-            val barH = h * (0.2f + 0.5f * kotlin.math.sin((i + pulse * 3f) * 0.8f).absolute())
+            val barH = h * (0.2f + 0.5f * kotlin.math.sin((i + pulse * 3f) * 0.8f).absoluteValue)
             drawRect(
                 color = AccentCyan.copy(alpha = waveAlpha),
                 topLeft = Offset(startX + i * spacing, (h - barH) / 2f),
@@ -227,7 +227,7 @@ fun CompressDemoPreview(modifier: Modifier = Modifier) {
         val bigSize = w * (0.6f - pulse * 0.1f)
         val smallSize = w * (0.25f + pulse * 0.05f)
         // Big file
-        drawRect(
+        drawRoundRect(
             brush = Brush.linearGradient(listOf(SignatureOrange.copy(alpha = 0.7f), SignaturePurple.copy(alpha = 0.7f))),
             topLeft = Offset((w - bigSize) / 2f, h * 0.08f),
             size = Size(bigSize, bigSize * 0.6f),
@@ -251,7 +251,7 @@ fun CompressDemoPreview(modifier: Modifier = Modifier) {
             )
         }
         // Small compressed file
-        drawRect(
+        drawRoundRect(
             brush = Brush.linearGradient(listOf(AccentCyan, AccentCyan.copy(alpha = 0.5f))),
             topLeft = Offset((w - smallSize) / 2f, h * 0.7f),
             size = Size(smallSize, smallSize * 0.6f),
@@ -279,7 +279,7 @@ fun ReverseDemoPreview(modifier: Modifier = Modifier) {
             // Numbered frames in reverse order (4,3,2,1)
             val num = frameCount - i
             val alpha = if (num == (frameCount - (pulse * frameCount).toInt().coerceIn(0, frameCount - 1))) 1f else 0.4f
-            drawRect(
+            drawRoundRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         SignatureOrange.copy(alpha = alpha),
@@ -389,7 +389,7 @@ fun SlideshowDemoPreview(modifier: Modifier = Modifier) {
             val offsetX = w * 0.1f + i * w * 0.08f
             val offsetY = h * 0.15f + i * h * 0.06f
             val slideOffset = if (i == 0) pulse * w * 0.2f else 0f
-            drawRect(
+            drawRoundRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(colors[i].copy(alpha = 0.8f), colors[i].copy(alpha = 0.4f))
                 ),
@@ -538,7 +538,7 @@ fun AiHubDemoPreview(modifier: Modifier = Modifier) {
         }
         // Draw nodes (pulsing)
         nodes.forEachIndexed { i, node ->
-            val nodePulse = (kotlin.math.sin((i + pulse * 3f) * 1.5f).absolute() + 1f) / 2f
+            val nodePulse = (kotlin.math.sin((i + pulse * 3f) * 1.5f).absoluteValue + 1f) / 2f
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(SignatureOrange, SignaturePurple),
@@ -579,7 +579,7 @@ fun PresetsDemoPreview(modifier: Modifier = Modifier) {
             val x = startX + col * (swatchW + gapX)
             val y = startY + row * (swatchH + gapY)
             val glowAlpha = if (i == (pulse * swatchColors.size).toInt() % swatchColors.size) 1f else 0.5f
-            drawRect(
+            drawRoundRect(
                 brush = Brush.linearGradient(
                     colors = listOf(swatchColors[i].copy(alpha = glowAlpha), swatchColors[i].copy(alpha = glowAlpha * 0.4f))
                 ),
@@ -648,7 +648,7 @@ fun StudioDemoPreview(modifier: Modifier = Modifier) {
         val camY = h * 0.3f
         val camW = w * 0.4f
         val camH = h * 0.35f
-        drawRect(
+        drawRoundRect(
             brush = Brush.linearGradient(listOf(SignatureOrange.copy(alpha = 0.6f), SignaturePurple.copy(alpha = 0.6f))),
             topLeft = Offset(camX, camY),
             size = Size(camW, camH),
@@ -727,8 +727,8 @@ fun AiFeatureDemoPreview(featureId: String, modifier: Modifier = Modifier) {
                 )
                 // Caption bars at bottom
                 val captionAlpha = 0.6f + pulse * 0.4f
-                drawRect(Color.White.copy(alpha = captionAlpha), Offset(w * 0.1f, h * 0.72f), Size(w * 0.5f, h * 0.06f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
-                drawRect(Color.White.copy(alpha = captionAlpha * 0.7f), Offset(w * 0.1f, h * 0.82f), Size(w * 0.35f, h * 0.06f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(Color.White.copy(alpha = captionAlpha), Offset(w * 0.1f, h * 0.72f), Size(w * 0.5f, h * 0.06f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(Color.White.copy(alpha = captionAlpha * 0.7f), Offset(w * 0.1f, h * 0.82f), Size(w * 0.35f, h * 0.06f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             "ai_bg_remove", "bg_remove" -> {
                 // Person silhouette with background being removed
@@ -741,12 +741,12 @@ fun AiFeatureDemoPreview(featureId: String, modifier: Modifier = Modifier) {
                 )
                 // Person silhouette
                 drawCircle(SignatureOrange.copy(alpha = 0.8f), w * 0.08f, Offset(w * 0.5f, h * 0.3f))
-                drawRect(SignatureOrange.copy(alpha = 0.8f), Offset(w * 0.4f, h * 0.4f), Size(w * 0.2f, h * 0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.03f))
+                drawRoundRect(SignatureOrange.copy(alpha = 0.8f), Offset(w * 0.4f, h * 0.4f), Size(w * 0.2f, h * 0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.03f))
             }
             "ai_enhance", "ai_upscale", "upscale" -> {
                 // Resolution upgrade arrows
-                drawRect(Brush.verticalGradient(listOf(SignatureOrange.copy(0.3f), SignaturePurple.copy(0.3f))), Offset(w * 0.1f, h * 0.1f), Size(w * 0.3f, h * 0.25f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
-                drawRect(Brush.verticalGradient(listOf(SignatureOrange, SignaturePurple)), Offset(w * 0.5f, h * 0.15f), Size(w * (0.35f + pulse * 0.1f), h * (0.3f + pulse * 0.1f)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(Brush.verticalGradient(listOf(SignatureOrange.copy(0.3f), SignaturePurple.copy(0.3f))), Offset(w * 0.1f, h * 0.1f), Size(w * 0.3f, h * 0.25f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(Brush.verticalGradient(listOf(SignatureOrange, SignaturePurple)), Offset(w * 0.5f, h * 0.15f), Size(w * (0.35f + pulse * 0.1f), h * (0.3f + pulse * 0.1f)), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
                 // Arrow
                 drawLine(AccentCyan, Offset(w * 0.42f, h * 0.5f), Offset(w * 0.48f, h * 0.5f), w * 0.02f)
                 // Quality stars
@@ -773,7 +773,7 @@ fun AiFeatureDemoPreview(featureId: String, modifier: Modifier = Modifier) {
                     drawCircle(Color.White.copy(alpha = (1f - pulse) * 0.4f), w * 0.015f, Offset(x, y))
                 }
                 // Clean result
-                drawRect(Brush.verticalGradient(listOf(SignatureOrange.copy(0.5f), SignaturePurple.copy(0.5f))), Offset(w * 0.2f, h * 0.2f), Size(w * 0.6f, h * 0.6f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.03f))
+                drawRoundRect(Brush.verticalGradient(listOf(SignatureOrange.copy(0.5f), SignaturePurple.copy(0.5f))), Offset(w * 0.2f, h * 0.2f), Size(w * 0.6f, h * 0.6f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.03f))
             }
             else -> {
                 // Default: AI brain nodes
@@ -876,31 +876,31 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
         val baseAlpha = 0.9f
         when {
             p.contains("fade") || p == "none" -> {
-                drawRect(textCol.copy(alpha = baseAlpha * pulse), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol.copy(alpha = baseAlpha * pulse), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             p.contains("typewriter") || p.contains("marquee") || p.contains("scroll") -> {
                 val cw = w * 0.6f * pulse
-                drawRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(cw, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(cw, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
                 if (pulse > 0.9f) drawRect(Color.White, Offset(w * 0.2f + cw, h * 0.4f), Size(w * 0.02f, h * 0.2f))
             }
             p.contains("zoom") || p.contains("pop") || p.contains("explode") || p.contains("implode") -> {
                 val s = if (p.contains("implode")) (1f - pulse) else pulse
                 val ww = w * 0.6f * s; val hh = h * 0.2f * s
-                drawRect(textCol, Offset(w * 0.5f - ww / 2f, h * 0.5f - hh / 2f), Size(ww, hh), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.5f - ww / 2f, h * 0.5f - hh / 2f), Size(ww, hh), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             p.contains("slide") -> {
                 val dir = if (p.contains("right") || p.contains("down")) -1f else 1f
                 val off = (1f - pulse) * w * dir
-                drawRect(textCol, Offset(w * 0.2f + off, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.2f + off, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             p.contains("rotate") || p.contains("flip") || p.contains("spin") -> {
                 rotate(pulse * 360f, pivot = Offset(w * 0.5f, h * 0.5f)) {
-                    drawRect(textCol, Offset(w * 0.25f, h * 0.4f), Size(w * 0.5f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                    drawRoundRect(textCol, Offset(w * 0.25f, h * 0.4f), Size(w * 0.5f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
                 }
             }
             p.contains("bounce") || p.contains("elastic") || p.contains("spring") || p.contains("rubber") || p.contains("swing") -> {
                 val oy = kotlin.math.sin(pulse * 6.28f) * h * 0.2f
-                drawRect(textCol, Offset(w * 0.2f, h * 0.4f + oy), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.2f, h * 0.4f + oy), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             p.contains("shake") || p.contains("glitch") || p.contains("flicker") -> {
                 val ox = kotlin.math.sin(pulse * 20f) * w * 0.05f
@@ -908,7 +908,7 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
                 drawRect(AccentCyan, Offset(w * 0.2f - ox, h * 0.5f), Size(w * 0.6f, h * 0.08f))
             }
             p.contains("pulse") || p.contains("blink") || p.contains("neon") || p.contains("glow") -> {
-                drawRect(textCol.copy(alpha = 0.3f + pulse * 0.7f), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol.copy(alpha = 0.3f + pulse * 0.7f), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
                 drawRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), style = Stroke(w * 0.01f * (1f + pulse)))
             }
             p.contains("wave") -> {
@@ -923,10 +923,10 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
             }
             p.contains("frozen") || p.contains("metallic") || p.contains("gold") -> {
                 val c = if (p.contains("gold")) AccentGold else AccentCyan
-                drawRect(Brush.horizontalGradient(listOf(c.copy(0.5f), Color.White, c.copy(0.5f))), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(Brush.horizontalGradient(listOf(c.copy(0.5f), Color.White, c.copy(0.5f))), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             else -> {
-                drawRect(textCol.copy(alpha = baseAlpha * pulse), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol.copy(alpha = baseAlpha * pulse), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
         }
     }
