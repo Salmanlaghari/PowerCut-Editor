@@ -16,6 +16,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset as GeomOffset
+import androidx.compose.ui.geometry.Size as GeomSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -77,6 +80,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -95,7 +99,6 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.powercut.editor.core.utils.UriHelper
-import com.powercut.editor.PowerCutPremiumLauncherBar
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.CyberCyan
@@ -577,13 +580,8 @@ fun NextGenEditorScreen(
                 onRedo = { }
             )
 
-            // ─── v6.0.0 PREMIUM LAUNCHER BAR (AI Hub · Presets · Pro · Studio) ───
-            PowerCutPremiumLauncherBar(
-                onAiHub = onAiHub,
-                onSocialPresets = onSocialPresets,
-                onProTier = onProTier,
-                onPremiumStudio = onPremiumStudio
-            )
+            // 2027 8K: Premium launcher moved to bottom toolbar (gradient pills)
+            // Top floating buttons removed — AI Hub, Presets, Pro, Studio now in bottom toolbar.
 
         // ─── 2. VIDEO PREVIEW ─────────────────────────────────
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).weight(1.4f), contentAlignment = Alignment.Center) {
@@ -747,18 +745,7 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // v5.2.0 — LIVE PREVIEW badge (top-center)
-                Box(
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp)
-                        .background(Brush.horizontalGradient(listOf(NeonOrange, CyberCyan)), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Box(Modifier.size(6.dp).background(Color.White, CircleShape))
-                        Text("LIVE PREVIEW", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-
+                // 2027 8K: LIVE PREVIEW badge removed — cleaner pure black preview
                 // v5.2.0 — Tap-to-edit overlay on text
                 if (project.activeTextOverlay != null && layerTextVisible) {
                     Box(
@@ -962,6 +949,10 @@ fun NextGenEditorScreen(
         // ─── 6. CAPCUT TOOL BAR (no import button) ────────────
         CapCutToolBar(
             selectedTool = selectedTool,
+            onAiHub = onAiHub,
+            onSocialPresets = onSocialPresets,
+            onProTier = onProTier,
+            onPremiumStudio = onPremiumStudio,
             onToolSelected = { idx ->
                 // v6.0.0 — Effects (idx 7) & Stickers (idx 8) open full-screen galleries
                 when (idx) {
@@ -1570,7 +1561,11 @@ private fun TimelineTrackRow(
 @Composable
 private fun CapCutToolBar(
     selectedTool: Int,
-    onToolSelected: (Int) -> Unit
+    onToolSelected: (Int) -> Unit,
+    onAiHub: () -> Unit = {},
+    onSocialPresets: () -> Unit = {},
+    onProTier: () -> Unit = {},
+    onPremiumStudio: () -> Unit = {}
 ) {
     val tools = listOf(
         "✂️" to "Edit", "📑" to "Layers", "⚡" to "Speed", "📐" to "Crop",
@@ -1581,7 +1576,10 @@ private fun CapCutToolBar(
         "🌈" to "Blend", "↺️" to "Reverse", "💉" to "ColorFX",
         "🎧" to "AudioFX", "🎤" to "Voice", "🎉" to "Borders",
         "✨" to "Vignette", "❄️" to "Freeze", "📷" to "Looks",
-        "🖍️" to "Canvas"
+        "🖍️" to "Canvas",
+        // 2027 8K: Premium tools merged into bottom toolbar as gradient pills
+        "🤖" to "AI Hub", "📱" to "Presets",
+        "👑" to "Pro", "✨" to "Studio"
     )
     Row(
         modifier = Modifier.fillMaxWidth().height(62.dp)
@@ -1594,16 +1592,40 @@ private fun CapCutToolBar(
     ) {
         tools.forEachIndexed { idx, (emoji, name) ->
             val isActive = selectedTool == idx
+            // 2027 8K: Premium tools (last 4) get gradient pill styling
+            val isPremium = idx >= tools.size - 4
             Box(
                 modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                    .background(if (isActive) NeonOrange.copy(0.18f) else Color.Transparent)
-                    .clickable { onToolSelected(idx) }
+                    .background(
+                        if (isPremium) {
+                            if (isActive) Brush.horizontalGradient(listOf(Color(0xFFFF5A3C), Color(0xFF9D4EDD)))
+                            else Brush.horizontalGradient(listOf(Color(0xFFFF5A3C).copy(alpha = 0.25f), Color(0xFF9D4EDD).copy(alpha = 0.25f)))
+                        } else {
+                            Brush.horizontalGradient(listOf(
+                                if (isActive) Color(0xFFFF5A3C).copy(alpha = 0.3f) else Color.Transparent,
+                                if (isActive) Color(0xFF9D4EDD).copy(alpha = 0.15f) else Color.Transparent
+                            ))
+                        }
+                    )
+                    .clickable {
+                        // 2027 8K: Premium tools open their respective screens
+                        when (name) {
+                            "AI Hub" -> onAiHub()
+                            "Presets" -> onSocialPresets()
+                            "Pro" -> onProTier()
+                            "Studio" -> onPremiumStudio()
+                            else -> onToolSelected(idx)
+                        }
+                    }
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(emoji, fontSize = 14.sp)
-                    Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isActive) NeonOrange else Color.Gray)
+                    Text(
+                        name, fontSize = 7.sp, fontWeight = FontWeight.Bold,
+                        color = if (isPremium) Color.White else if (isActive) Color(0xFFFF5A3C) else Color.Gray
+                    )
                 }
             }
         }
@@ -2513,10 +2535,93 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
             )
             allFilters.filter { filterCategory == "all" || it.third == filterCategory }.forEach { (id, name, cat) ->
                 val sel = project.selectedFilter.lowercase() == id
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
-                    .clickable { onUpdateFilter(if (sel) "none" else id) }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                // 2027 8K: Real Canvas demo thumbnail with filter color preview
+                Box(
+                    Modifier
+                        .width(52.dp)
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) Color(0xFFFF5A3C).copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                        .border(if (sel) 2.dp else 1.dp, if (sel) Color(0xFFFF5A3C) else Color.White.copy(0.08f), RoundedCornerShape(8.dp))
+                        .clickable { onUpdateFilter(if (sel) "none" else id) }
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                        // Draw a mini scene with the filter color applied
+                        val baseColor = when (id) {
+                            "none" -> Color(0xFF4A6FA5)
+                            "grayscale", "monochrome" -> Color(0xFF888888)
+                            "sepia", "sepia_warm" -> Color(0xFFA0703D)
+                            "sepia_cool" -> Color(0xFF8A8070)
+                            "invert", "negative" -> Color(0xFFBB5544)
+                            "warm", "sunset", "golden", "amber" -> Color(0xFFE8A040)
+                            "cool", "arctic", "winter" -> Color(0xFF5090D0)
+                            "vintage", "lomo", "polaroid", "holga", "diana", "analog" -> Color(0xFFB89968)
+                            "dramatic", "noir" -> Color(0xFF333344)
+                            "cinematic", "tokyo", "nyc", "paris" -> Color(0xFF5566AA)
+                            "teal" -> Color(0xFF008080)
+                            "orange" -> Color(0xFFFF8040)
+                            "film", "super8", "kodak", "fuji", "agfa" -> Color(0xFFCC8855)
+                            "ilford", "portra" -> Color(0xFF998877)
+                            "velvia" -> Color(0xFF22AA66)
+                            "provia" -> Color(0xFF4488CC)
+                            "astia" -> Color(0xFFDD99AA)
+                            "high_contrast" -> Color(0xFF222222)
+                            "low_contrast" -> Color(0xFFCCCCCC)
+                            "high_saturation" -> Color(0xFFFF0066)
+                            "low_saturation" -> Color(0xFF999999)
+                            "bright" -> Color(0xFFFFEECC)
+                            "dark" -> Color(0xFF221133)
+                            "soft", "dreamy", "glow" -> Color(0xFFE0D0F0)
+                            "sharp" -> Color(0xFF334455)
+                            "haze" -> Color(0xFFB0C0D0)
+                            "matte" -> Color(0xFF807060)
+                            "litho" -> Color(0xFF554433)
+                            "red_boost", "ruby" -> Color(0xFFDD2233)
+                            "blue_boost", "sapphire" -> Color(0xFF2255DD)
+                            "green_boost", "emerald" -> Color(0xFF22AA44)
+                            "purple_haze" -> Color(0xFF9944CC)
+                            "pink_dream" -> Color(0xFFFF66BB)
+                            "bronze" -> Color(0xFFCD7F32)
+                            "platinum" -> Color(0xFFE5E4E2)
+                            "neon_city", "miami" -> Color(0xFFFF00FF)
+                            "retro_wave", "synthwave" -> Color(0xFFFF0080)
+                            "desert" -> Color(0xFFDDBB88)
+                            "ocean" -> Color(0xFF0066BB)
+                            "autumn" -> Color(0xFFDD6622)
+                            "spring" -> Color(0xFF88DD44)
+                            "summer" -> Color(0xFFFFDD44)
+                            else -> Color(0xFF4A6FA5)
+                        }
+                        // Draw gradient sky
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(baseColor, baseColor.copy(alpha = 0.4f))
+                            )
+                        )
+                        // Draw sun/circle
+                        drawCircle(
+                            color = baseColor.copy(alpha = 0.9f).compositeOver(Color.White.copy(alpha = 0.3f)),
+                            radius = size.minDimension * 0.15f,
+                            center = androidx.compose.ui.geometry.Offset(size.width * 0.65f, size.height * 0.3f)
+                        )
+                        // Draw ground/horizon
+                        drawRect(
+                            color = baseColor.copy(alpha = 0.6f).compositeOver(Color.Black.copy(alpha = 0.3f)),
+                            topLeft = androidx.compose.ui.geometry.Offset(0f, size.height * 0.65f),
+                            size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.35f)
+                        )
+                    }
+                    // Label at bottom
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Text(
+                            name, fontSize = 6.sp, fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
                 }
             }
         }
@@ -2626,10 +2731,186 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
             )
             allEffects.filter { effectCategory == "all" || it.category == effectCategory }.forEach { (name, effectId, filterId, category) ->
                 val sel = project.selectedEffect == effectId
-                Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
-                    if (sel) { onUpdateEffect("none"); onUpdateFilter("none"); android.widget.Toast.makeText(ctx, "Effect removed!", android.widget.Toast.LENGTH_SHORT).show() }
-                    else { onUpdateEffect(effectId); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "$name applied!", android.widget.Toast.LENGTH_SHORT).show() }
-                }.padding(horizontal = 5.dp, vertical = 3.dp)) { Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White) }
+                // 2027 8K: Real Canvas demo preview with effect-specific visual rendering
+                Box(
+                    Modifier
+                        .width(56.dp)
+                        .height(76.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) Color(0xFFFF5A3C).copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                        .border(if (sel) 2.dp else 1.dp, if (sel) Color(0xFFFF5A3C) else Color.White.copy(0.08f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            if (sel) { onUpdateEffect("none"); onUpdateFilter("none"); android.widget.Toast.makeText(ctx, "Effect removed!", android.widget.Toast.LENGTH_SHORT).show() }
+                            else { onUpdateEffect(effectId); onUpdateFilter(filterId); android.widget.Toast.makeText(ctx, "$name applied!", android.widget.Toast.LENGTH_SHORT).show() }
+                        }
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize().padding(3.dp)) {
+                        // Draw effect-specific visual demo
+                        val w = size.width
+                        val h = size.height
+                        when (effectId) {
+                            "glitch", "rgb_glitch", "rgb_split" -> {
+                                // RGB split glitch: three offset rectangles
+                                drawRect(color = Color(0xFFFF0044).copy(alpha = 0.6f), topLeft = GeomOffset(-2f, 0f), size = GeomSize(w, h))
+                                drawRect(color = Color(0xFF00FF88).copy(alpha = 0.5f), topLeft = GeomOffset(2f, 0f), size = GeomSize(w, h))
+                                drawRect(color = Color(0xFF4444FF).copy(alpha = 0.4f), topLeft = GeomOffset(0f, 2f), size = GeomSize(w, h))
+                            }
+                            "vhs", "scanline", "crt", "old_film", "film_strip" -> {
+                                // VHS/retro: scanlines with tint
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF2A1A0A), Color(0xFF6A5A3A))))
+                                for (i in 0..8) {
+                                    drawRect(color = Color.Black.copy(alpha = 0.3f), topLeft = GeomOffset(0f, h * i / 8f), size = GeomSize(w, h * 0.05f))
+                                }
+                            }
+                            "chromatic" -> {
+                                drawRect(color = Color(0xFF220033))
+                                drawCircle(color = Color(0xFFFF0066).copy(alpha = 0.5f), radius = w * 0.2f, center = GeomOffset(w * 0.35f, h * 0.4f))
+                                drawCircle(color = Color(0xFF0066FF).copy(alpha = 0.5f), radius = w * 0.2f, center = GeomOffset(w * 0.65f, h * 0.4f))
+                            }
+                            "lens_flare", "light_leak", "bloom", "starburst" -> {
+                                // Light flare: radial gradient
+                                drawRect(color = Color(0xFF110022))
+                                drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0xFFFFEEAA), Color.Transparent), center = GeomOffset(w * 0.5f, h * 0.35f), radius = w * 0.5f), center = GeomOffset(w * 0.5f, h * 0.35f), radius = w * 0.5f)
+                            }
+                            "snow", "frost", "dust", "sparkle", "particles", "bokeh" -> {
+                                // Particle effect: dots scattered
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF113355), Color(0xFF224477))))
+                                val dots = listOf(0.2f to 0.3f, 0.5f to 0.2f, 0.8f to 0.4f, 0.3f to 0.6f, 0.7f to 0.7f, 0.1f to 0.8f, 0.6f to 0.5f, 0.9f to 0.6f)
+                                dots.forEach { (x, y) -> drawCircle(color = Color.White.copy(alpha = 0.8f), radius = w * 0.04f, center = GeomOffset(w * x, h * y)) }
+                            }
+                            "rain" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF223344), Color(0xFF445566))))
+                                for (i in 0..10) { drawLine(color = Color.White.copy(alpha = 0.4f), start = GeomOffset(w * (i * 0.1f), 0f), end = GeomOffset(w * (i * 0.1f + 0.05f), h * 0.3f), strokeWidth = 1f) }
+                            }
+                            "fire", "flame", "explosion" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFFFF4400), Color(0xFF880000), Color(0xFF220000))))
+                                drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0xFFFFEE00), Color.Transparent), center = GeomOffset(w * 0.5f, h * 0.7f), radius = w * 0.4f), center = GeomOffset(w * 0.5f, h * 0.7f), radius = w * 0.4f)
+                            }
+                            "motion_blur", "shake", "zoom_pulse", "wave_distort", "tidal", "magic_shake", "magic_wave", "magic_zoom_pulse" -> {
+                                // Motion: blurred horizontal lines
+                                drawRect(color = Color(0xFF1A1A2A))
+                                for (i in 0..5) { drawRect(color = Color(0xFF7C5CFF).copy(alpha = 0.3f - i * 0.04f), topLeft = GeomOffset(w * 0.1f + i * 3f, h * (0.2f + i * 0.12f)), size = GeomSize(w * 0.8f, h * 0.08f)) }
+                            }
+                            "flash", "strobe", "magic_flicker" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color.White, Color(0xFFEEEEFF))))
+                                drawRect(color = Color(0xFFFFDD00).copy(alpha = 0.3f))
+                            }
+                            "neon_glow", "magic_neon_flow", "vaporwave", "disco", "concert", "party", "neon_city", "miami", "retro_wave", "synthwave" -> {
+                                // Neon: bright gradient with glow circles
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF1A0033), Color(0xFF003366), Color(0xFFFF0080))))
+                                drawCircle(color = Color(0xFF00FFFF).copy(alpha = 0.6f), radius = w * 0.15f, center = GeomOffset(w * 0.3f, h * 0.35f))
+                                drawCircle(color = Color(0xFFFF00FF).copy(alpha = 0.6f), radius = w * 0.15f, center = GeomOffset(w * 0.7f, h * 0.5f))
+                            }
+                            "vignette" -> {
+                                drawRect(brush = Brush.radialGradient(colors = listOf(Color.Transparent, Color.Black), center = GeomOffset(w * 0.5f, h * 0.5f), radius = w * 0.7f))
+                                drawRect(color = Color(0xFF334455).copy(alpha = 0.3f))
+                            }
+                            "rainbow", "magic_hue_cycle", "magic_rainbow_flow" -> {
+                                drawRect(brush = Brush.horizontalGradient(colors = listOf(Color(0xFFFF0000), Color(0xFFFF8800), Color(0xFFFFFF00), Color(0xFF00FF00), Color(0xFF0088FF), Color(0xFF8800FF))))
+                            }
+                            "film_grain", "lofi" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF5A4A3A), Color(0xFF3A2A1A))))
+                                for (i in 0..20) {
+                                    val rx = (i * 37) % 100 / 100f
+                                    val ry = (i * 53) % 100 / 100f
+                                    drawCircle(color = Color.White.copy(alpha = 0.15f), radius = 1f, center = GeomOffset(w * rx, h * ry))
+                                }
+                            }
+                            "magic_pulse", "magic_color_flow", "magic_brightness_flow", "magic_breath" -> {
+                                drawRect(brush = Brush.radialGradient(colors = listOf(Color(0xFF9D4EDD), Color(0xFFFF5A3C), Color(0xFF1A0A2A)), center = GeomOffset(w * 0.5f, h * 0.5f), radius = w * 0.6f))
+                            }
+                            "magic_glitch_flow" -> {
+                                drawRect(color = Color(0xFF1A0A2A))
+                                drawRect(color = Color(0xFFFF0044).copy(alpha = 0.5f), topLeft = GeomOffset(0f, h * 0.3f), size = GeomSize(w, h * 0.1f))
+                                drawRect(color = Color(0xFF00FF88).copy(alpha = 0.5f), topLeft = GeomOffset(0f, h * 0.5f), size = GeomSize(w, h * 0.08f))
+                                drawRect(color = Color(0xFF4444FF).copy(alpha = 0.5f), topLeft = GeomOffset(0f, h * 0.7f), size = GeomSize(w, h * 0.06f))
+                            }
+                            "night_vision", "thermal" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF003300), Color(0xFF00FF44))))
+                                drawCircle(color = Color(0xFF00FF00).copy(alpha = 0.5f), radius = w * 0.2f, center = GeomOffset(w * 0.5f, h * 0.4f))
+                            }
+                            "pencil", "sketch" -> {
+                                drawRect(color = Color(0xFFF0F0F0))
+                                for (i in 0..6) { drawLine(color = Color(0xFF333333).copy(alpha = 0.5f), start = GeomOffset(w * 0.1f, h * (0.2f + i * 0.1f)), end = GeomOffset(w * 0.9f, h * (0.15f + i * 0.1f)), strokeWidth = 1f) }
+                            }
+                            "cartoon", "watercolor", "oil_paint" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFFFF8866), Color(0xFFFFCC44), Color(0xFF66AADD))))
+                                drawCircle(color = Color(0xFF44AA66).copy(alpha = 0.6f), radius = w * 0.2f, center = GeomOffset(w * 0.3f, h * 0.6f))
+                            }
+                            "pixel", "mosaic", "8bit" -> {
+                                // Pixelated grid
+                                drawRect(color = Color(0xFF1A1A2A))
+                                val cellSize = w / 6f
+                                val grid = listOf(0xFF7C5CFF, 0xFFFF6B35, 0xFF4488CC, 0xFF22AA66, 0xFFFFDD44, 0xFFDD44AA)
+                                for (row in 0..7) {
+                                    for (col in 0..5) {
+                                        drawRect(color = Color(grid[(row + col) % grid.size]).copy(alpha = 0.7f), topLeft = GeomOffset(col * cellSize, row * cellSize), size = GeomSize(cellSize, cellSize))
+                                    }
+                                }
+                            }
+                            "emboss", "sharpen_strong" -> {
+                                drawRect(color = Color(0xFF888899))
+                                drawRect(color = Color.White.copy(alpha = 0.3f), topLeft = GeomOffset(0f, 0f), size = GeomSize(w, h * 0.5f))
+                                drawRect(color = Color.Black.copy(alpha = 0.3f), topLeft = GeomOffset(0f, h * 0.5f), size = GeomSize(w, h * 0.5f))
+                            }
+                            "tilt_shift" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFF88AA66), Color(0xFF446688))))
+                                drawRect(color = Color.White.copy(alpha = 0.3f), topLeft = GeomOffset(0f, h * 0.4f), size = GeomSize(w, h * 0.15f))
+                            }
+                            "kaleidoscope" -> {
+                                drawRect(color = Color(0xFF1A0A2A))
+                                for (i in 0..5) {
+                                    drawRect(color = Color(0xFF9D4EDD).copy(alpha = 0.3f), topLeft = GeomOffset(w * i * 0.15f, h * 0.3f), size = GeomSize(w * 0.2f, h * 0.4f))
+                                }
+                            }
+                            "color_splash" -> {
+                                drawRect(color = Color(0xFF222222))
+                                drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0xFFFF5A3C), Color.Transparent), center = GeomOffset(w * 0.5f, h * 0.5f), radius = w * 0.3f), center = GeomOffset(w * 0.5f, h * 0.5f), radius = w * 0.3f)
+                            }
+                            "electric" -> {
+                                drawRect(color = Color(0xFF000022))
+                                drawLine(color = Color(0xFF00FFFF), start = GeomOffset(w * 0.2f, 0f), end = GeomOffset(w * 0.5f, h * 0.3f), strokeWidth = 2f)
+                                drawLine(color = Color(0xFF00FFFF), start = GeomOffset(w * 0.5f, h * 0.3f), end = GeomOffset(w * 0.3f, h * 0.6f), strokeWidth = 2f)
+                                drawLine(color = Color(0xFF00FFFF), start = GeomOffset(w * 0.3f, h * 0.6f), end = GeomOffset(w * 0.7f, h * 1f), strokeWidth = 2f)
+                            }
+                            "swirl" -> {
+                                drawRect(color = Color(0xFF1A0A2A))
+                                drawCircle(brush = Brush.sweepGradient(colors = listOf(Color(0xFFFF5A3C), Color(0xFF9D4EDD), Color(0xFFFF5A3C))), center = GeomOffset(w * 0.5f, h * 0.5f), radius = w * 0.35f)
+                            }
+                            "face_blur" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFFDDBB99), Color(0xFF886655))))
+                                drawCircle(color = Color(0xFF886655).copy(alpha = 0.7f), radius = w * 0.25f, center = GeomOffset(w * 0.5f, h * 0.4f))
+                            }
+                            "hdr", "aesthetic", "dream", "soft" -> {
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(Color(0xFFFFDDEE), Color(0xFFDDEEFF), Color(0xFFEEDDFF))))
+                            }
+                            else -> {
+                                // Default: gradient with category color
+                                val catColor = when (category) {
+                                    "vfx" -> Color(0xFF7C5CFF)
+                                    "color" -> Color(0xFF22AA66)
+                                    "motion" -> Color(0xFF4488CC)
+                                    "retro" -> Color(0xFFCC8855)
+                                    "neon" -> Color(0xFFFF00FF)
+                                    "magic" -> Color(0xFF9D4EDD)
+                                    else -> Color(0xFFFF6B35)
+                                }
+                                drawRect(brush = Brush.verticalGradient(colors = listOf(catColor, catColor.copy(alpha = 0.3f))))
+                            }
+                        }
+                    }
+                    // Label at bottom
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Text(
+                            name, fontSize = 6.sp, fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -3012,20 +3293,74 @@ private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
             }
             allMasks.filter { threeDCategory == "all" || it.category == threeDCategory }.forEach { (emoji, name, id, cat) ->
                 val sel = project.active3DShapeMask == id
-                Box(Modifier
-                    .background(if (sel) NeonOrange.copy(0.22f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
-                    .border(if (sel) 1.dp else 0.dp, if (sel) CyberCyan else Color.Transparent, RoundedCornerShape(8.dp))
-                    .clickable {
-                        val newId = if (sel) "none" else id
-                        onUpdate3D(newId)
-                        val msg = if (sel) "3D mask removed" else "$name applied ✓"
-                        android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                // 2027 8K: Real Canvas demo preview with shape mask rendering
+                Box(
+                    Modifier
+                        .width(56.dp)
+                        .height(76.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) Color(0xFFFF5A3C).copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
+                        .border(if (sel) 2.dp else 1.dp, if (sel) Color(0xFFFF5A3C) else Color.White.copy(0.08f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            val newId = if (sel) "none" else id
+                            onUpdate3D(newId)
+                            val msg = if (sel) "3D mask removed" else "$name applied ✓"
+                            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                        val w = size.width
+                        val h = size.height
+                        val cx = w / 2f
+                        val cy = h / 2f
+                        // Background scene
+                        drawRect(brush = Brush.verticalGradient(
+                            colors = listOf(Color(0xFF1a1a2e), Color(0xFF0F0F1A))
+                        ))
+                        // Draw the 3D shape mask
+                        when (id) {
+                            "circle", "oval" -> drawCircle(
+                                color = Color(0xFF9D4EDD).copy(alpha = 0.7f),
+                                radius = w * 0.28f,
+                                center = androidx.compose.ui.geometry.Offset(cx, cy * 0.75f)
+                            )
+                            "heart" -> {
+                                drawCircle(color = Color(0xFFFF3D7F).copy(alpha = 0.7f), radius = w * 0.15f, center = androidx.compose.ui.geometry.Offset(cx - w * 0.1f, cy * 0.65f))
+                                drawCircle(color = Color(0xFFFF3D7F).copy(alpha = 0.7f), radius = w * 0.15f, center = androidx.compose.ui.geometry.Offset(cx + w * 0.1f, cy * 0.65f))
+                                drawRect(color = Color(0xFFFF3D7F).copy(alpha = 0.7f), topLeft = androidx.compose.ui.geometry.Offset(cx - w * 0.18f, cy * 0.7f), size = androidx.compose.ui.geometry.Size(w * 0.36f, h * 0.2f))
+                            }
+                            "star" -> drawCircle(color = Color(0xFFFFD700).copy(alpha = 0.7f), radius = w * 0.25f, center = androidx.compose.ui.geometry.Offset(cx, cy * 0.75f))
+                            "hexagon", "diamond" -> {
+                                drawRect(color = Color(0xFF2DD4BF).copy(alpha = 0.6f), topLeft = androidx.compose.ui.geometry.Offset(cx - w * 0.2f, cy * 0.55f), size = androidx.compose.ui.geometry.Size(w * 0.4f, h * 0.3f))
+                            }
+                            "triangle" -> drawRect(color = Color(0xFFFF6B35).copy(alpha = 0.6f), topLeft = androidx.compose.ui.geometry.Offset(cx - w * 0.15f, cy * 0.5f), size = androidx.compose.ui.geometry.Size(w * 0.3f, h * 0.35f))
+                            "square", "frame" -> drawRect(color = Color(0xFF7C5CFF).copy(alpha = 0.6f), topLeft = androidx.compose.ui.geometry.Offset(cx - w * 0.22f, cy * 0.5f), size = androidx.compose.ui.geometry.Size(w * 0.44f, h * 0.35f))
+                            "arch" -> drawCircle(color = Color(0xFF60A5FA).copy(alpha = 0.6f), radius = w * 0.3f, center = androidx.compose.ui.geometry.Offset(cx, cy * 0.85f))
+                            "spotlight", "vignette" -> drawCircle(color = Color(0xFFFFD166).copy(alpha = 0.5f), radius = w * 0.2f, center = androidx.compose.ui.geometry.Offset(cx, cy * 0.75f))
+                            "cinematic_bars", "anamorphic" -> {
+                                drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(w, h * 0.15f))
+                                drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.85f), size = androidx.compose.ui.geometry.Size(w, h * 0.15f))
+                            }
+                            "color_splash" -> drawCircle(color = Color(0xFFFF00FF).copy(alpha = 0.5f), radius = w * 0.25f, center = androidx.compose.ui.geometry.Offset(cx, cy * 0.75f))
+                            "film_burn", "fire" -> drawRect(brush = Brush.verticalGradient(listOf(Color(0xFFFF4400), Color(0xFFFFAA00).copy(alpha = 0.3f))), topLeft = androidx.compose.ui.geometry.Offset(0f, cy * 0.5f), size = androidx.compose.ui.geometry.Size(w, h * 0.5f))
+                            "light_leak" -> drawRect(brush = Brush.linearGradient(listOf(Color(0xFFFFD700).copy(alpha = 0.5f), Color.Transparent)), topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(w, h))
+                            "lens_flare" -> drawCircle(color = Color(0xFFFFEEAA).copy(alpha = 0.6f), radius = w * 0.35f, center = androidx.compose.ui.geometry.Offset(cx, cy * 0.75f))
+                            "smoke", "water", "particles", "bokeh" -> {
+                                repeat(5) { i ->
+                                    drawCircle(color = Color.White.copy(alpha = 0.15f), radius = w * 0.05f, center = androidx.compose.ui.geometry.Offset((i * 0.2f + 0.1f) * w, cy * (0.5f + i * 0.1f)))
+                                }
+                            }
+                            "glitch_3d", "chromatic" -> {
+                                drawRect(color = Color(0xFFFF0044).copy(alpha = 0.3f), topLeft = androidx.compose.ui.geometry.Offset(0f, cy * 0.4f), size = androidx.compose.ui.geometry.Size(w, h * 0.1f))
+                                drawRect(color = Color(0xFF00FFFF).copy(alpha = 0.3f), topLeft = androidx.compose.ui.geometry.Offset(0f, cy * 0.55f), size = androidx.compose.ui.geometry.Size(w, h * 0.1f))
+                            }
+                            else -> drawCircle(color = Color(0xFF9D4EDD).copy(alpha = 0.5f), radius = w * 0.2f, center = androidx.compose.ui.geometry.Offset(cx, cy * 0.75f))
+                        }
                     }
-                    .padding(horizontal = 6.dp, vertical = 5.dp)) {
-                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
-                        Text(emoji, fontSize = 14.sp)
-                        Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold,
-                            color = if (sel) NeonOrange else Color.White)
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        Text(name, fontSize = 6.sp, fontWeight = FontWeight.Bold,
+                            color = if (sel) Color(0xFFFF5A3C) else Color.White,
+                            modifier = Modifier.padding(bottom = 2.dp))
                     }
                 }
             }
