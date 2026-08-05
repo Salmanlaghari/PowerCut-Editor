@@ -27,6 +27,11 @@ data class VideoProject(
     val speedCurve: String = "constant",
     val activeTextOverlay: String? = null,
     val textAnimationType: String = "fade",
+    val textStyleId: String = "classic",
+    val textPositionX: Float = 0.5f,
+    val textPositionY: Float = 0.85f,
+    val textColorHex: String = "#FFFFFF",
+    val textFontSize: Float = 24f,
     val stickerType: String = "none",
 
     // Advanced Exclusive features

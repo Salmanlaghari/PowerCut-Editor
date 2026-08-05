@@ -1910,51 +1910,71 @@ class VideoProcessor @Inject constructor(
     /**
      * Builds a drawtext filter with animation for text overlays (37 animations).
      */
-    private fun buildTextOverlay(text: String, animation: String, duration: Double): String {
+    private fun buildTextOverlay(
+        text: String,
+        animation: String,
+        duration: Double,
+        posX: Float = 0.5f,
+        posY: Float = 0.85f,
+        colorHex: String = "#FFFFFF",
+        fontSize: Float = 42f
+    ): String {
         val safeText = text.replace("'", "\\'").replace(":", "\\:")
         val anim = animation.lowercase().replace(" ", "_")
-        val base = "drawtext=text='$safeText':fontsize=42:fontcolor=white:box=1:boxcolor=black@0.5${fontFileClause()}"
+        // Convert hex color (#RRGGBB) to FFmpeg format (0xRRGGBB)
+        val fcHex = colorHex.removePrefix("#").let { h ->
+            when (h.length) {
+                6 -> h
+                3 -> "${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}"
+                else -> "FFFFFF"
+            }
+        }
+        val fontColor = "0x$fcHex"
+        val xExpr = "w*${String.format("%.3f", posX)}-text_w/2"
+        val yExpr = "h*${String.format("%.3f", posY)}-text_h/2"
+        val fs = fontSize.toInt().coerceIn(8, 200)
+        val base = "drawtext=text='$safeText':fontsize=$fs:fontcolor=$fontColor:box=1:boxcolor=black@0.5:x=($xExpr):y=($yExpr)${fontFileClause()}"
         return when (anim) {
-            "none", "fade_in", "fade" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(lt(t,1)\\,t\\,1)'"
-            "fade_out" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(gt(t,${duration - 1})\\,${duration}-t\\,1)'"
-            "fade_in_out" -> "$base:x=(w-text_w)/2:y=h-100:alpha='if(lt(t,1)\\,t\\,if(gt(t,${duration - 1})\\,${duration}-t\\,1))'"
-            "typewriter" -> "$base:x=(w-text_w)/2:y=h-100:alpha='1':text='$safeText%{eif\\:trunc(t*8)\\:d}'"
-            "bounce" -> "$base:x=(w-text_w)/2:y='h-100+20*abs(sin(t*4))'"
+            "none", "fade_in", "fade" -> "$base:alpha='if(lt(t,1)\\,t\\,1)'"
+            "fade_out" -> "$base:alpha='if(gt(t,${duration - 1})\\,${duration}-t\\,1)'"
+            "fade_in_out" -> "$base:alpha='if(lt(t,1)\\,t\\,if(gt(t,${duration - 1})\\,${duration}-t\\,1))'"
+            "typewriter" -> "$base:alpha='1':text='$safeText%{eif\\:trunc(t*8)\\:d}'"
+            "bounce" -> "$base:y='($yExpr)+20*abs(sin(t*4))'"
             "slide_left" -> "$base:x='w-text_w-(w-text_w)*min(1\\,t/0.5)':y=h-100"
             "slide_right" -> "$base:x='(w-text_w)*min(1\\,t/0.5)':y=h-100"
             "slide_up" -> "$base:x=(w-text_w)/2:y='h-(h-100)*min(1\\,t/0.5)'"
             "slide_down" -> "$base:x=(w-text_w)/2:y='(h-100)*min(1\\,t/0.5)'"
-            "zoom_in" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42*min(1\\,t/0.5)'"
-            "zoom_out" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42*max(0.1\\,1-t/${duration})'"
+            "zoom_in" -> "$base:fontsize='${fs}*min(1\\,t/0.5)'"
+            "zoom_out" -> "$base:fontsize='${fs}*max(0.1\\,1-t/${duration})'"
             "rotate" -> "$base:x='(w-text_w)/2+10*sin(t*2)':y=h-100"
             "wave" -> "$base:x='(w-text_w)/2+20*sin(t*3)':y='h-100+10*cos(t*3)'"
             "glitch_in" -> "$base:x='(w-text_w)/2+5*sin(t*30)':y='h-100+3*cos(t*30)':alpha='min(1\\,t*2)'"
-            "neon_pulse" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0x7C5CFF@'0.7+0.3*sin(t*6)'"
-            "pop" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42*(1+0.3*exp(-t*4))'"
+            "neon_pulse" -> "$base:fontcolor=0x7C5CFF@'0.7+0.3*sin(t*6)'"
+            "pop" -> "$base:fontsize='${fs}*(1+0.3*exp(-t*4))'"
             "flip" -> "$base:x=(w-text_w)/2:y=h-100:alpha='min(1\\,t*2)'"
-            "elastic" -> "$base:x=(w-text_w)/2:y='h-100+30*exp(-t*2)*sin(t*10)'"
-            "spring" -> "$base:x=(w-text_w)/2:y='h-100+20*exp(-t*3)*cos(t*8)'"
-            "rubber" -> "$base:x=(w-text_w)/2:y='h-100+15*exp(-t*2)*sin(t*6)'"
+            "elastic" -> "$base:y='($yExpr)+30*exp(-t*2)*sin(t*10)'"
+            "spring" -> "$base:y='($yExpr)+20*exp(-t*3)*cos(t*8)'"
+            "rubber" -> "$base:y='($yExpr)+15*exp(-t*2)*sin(t*6)'"
             "swing" -> "$base:x='(w-text_w)/2+30*sin(t*2)':y=h-100"
-            "typewriter_fast" -> "$base:x=(w-text_w)/2:y=h-100:alpha='1':text='$safeText%{eif\\:trunc(t*16)\\:d}'"
+            "typewriter_fast" -> "$base:alpha='1':text='$safeText%{eif\\:trunc(t*16)\\:d}'"
             "shake" -> "$base:x='(w-text_w)/2+5*sin(t*20)':y='h-100+3*cos(t*20)'"
-            "blink" -> "$base:x=(w-text_w)/2:y=h-100:alpha='0.5+0.5*sin(t*8)'"
-            "pulse" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42*(1+0.1*sin(t*5))'"
-            "color_cycle" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0xFFFFFF@'0.5+0.5*sin(t*3)'"
-            "neon_flicker" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0x00ffff@'0.5+0.5*sin(t*15)'"
+            "blink" -> "$base:alpha='0.5+0.5*sin(t*8)'"
+            "pulse" -> "$base:fontsize='${fs}*(1+0.1*sin(t*5))'"
+            "color_cycle" -> "$base:fontcolor=0xFFFFFF@'0.5+0.5*sin(t*3)'"
+            "neon_flicker" -> "$base:fontcolor=0x00ffff@'0.5+0.5*sin(t*15)'"
             "slide_in_3d" -> "$base:x='(w-text_w)/2+100*exp(-t*3)':y=h-100:alpha='min(1\\,t*3)'"
-            "explode_in" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42*2*exp(-t*3)+42'"
-            "implode" -> "$base:x=(w-text_w)/2:y=h-100:fontsize='42+100*exp(-t*4)'"
+            "explode_in" -> "$base:fontsize='${fs}*2*exp(-t*3)+${fs}'"
+            "implode" -> "$base:fontsize='${fs}+100*exp(-t*4)'"
             "marquee" -> "$base:x='w-w*t':y=h-100"
             "scroll_up" -> "$base:x=(w-text_w)/2:y='ih-t*200':alpha='1'"
             "scroll_down" -> "$base:x=(w-text_w)/2:y='-text_w+t*200':alpha='1'"
-            "glow" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0xffff00@'0.7+0.3*sin(t*4)'"
-            "rainbow" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0xFF0000@'0.5+0.5*sin(t*2+0)'"
-            "frozen" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0x88ccff"
-            "fire" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0xff6600@'0.7+0.3*sin(t*6)'"
-            "metallic" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0xc0c0c0"
-            "gold" -> "$base:x=(w-text_w)/2:y=h-100:fontcolor=0xffd700"
-            else -> "$base:x=(w-text_w)/2:y=h-100"
+            "glow" -> "$base:fontcolor=0xffff00@'0.7+0.3*sin(t*4)'"
+            "rainbow" -> "$base:fontcolor=0xFF0000@'0.5+0.5*sin(t*2+0)'"
+            "frozen" -> "$base:fontcolor=0x88ccff"
+            "fire" -> "$base:fontcolor=0xff6600@'0.7+0.3*sin(t*6)'"
+            "metallic" -> "$base:fontcolor=0xc0c0c0"
+            "gold" -> "$base:fontcolor=0xffd700"
+            else -> "$base"
         }
     }
 

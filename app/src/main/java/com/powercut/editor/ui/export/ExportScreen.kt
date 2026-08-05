@@ -307,25 +307,39 @@ fun ExportScreen(
             }
 
             is Resource.Loading -> {
-                // PRIORITY 3 FIX: Simplified progress screen.
-                // Only: circular progress (120dp orange→purple gradient), big %
-                // text (white 36sp), thin linear bar (gradient), "Exporting
-                // video..." (gray 14sp), Cancel button. All stage text, step
-                // dots, and milestones have been removed.
+                // YouCut-style export progress screen with ETA + stage indicators
+                val progressVal = exportProgress.coerceIn(0, 100)
+                val progressFraction = progressVal / 100f
+
+                // Stage determination based on progress
+                val (stageText, stageIcon) = when {
+                    progressVal < 5 -> "Preparing export..." to "⚙"
+                    progressVal < 10 -> "Analyzing video..." to "📊"
+                    progressVal < 90 -> "Encoding video..." to "🎬"
+                    progressVal < 95 -> "Finalizing output..." to "✨"
+                    else -> "Saving to gallery..." to "💾"
+                }
+
+                // ETA estimation (rough): assume ~1 second per 1% for typical 1080p
+                val remainingPct = (100 - progressVal).coerceAtLeast(0)
+                val etaSeconds = if (progressVal > 5 && progressVal < 95) {
+                    // Estimate based on elapsed progress (rough)
+                    val totalEstimate = 60 // 60 seconds for typical export
+                    (totalEstimate * remainingPct / 100).coerceAtLeast(1)
+                } else 0
+                val etaText = if (etaSeconds > 0) {
+                    if (etaSeconds >= 60) "${etaSeconds / 60}:${String.format("%02d", etaSeconds % 60)}" else "0:${String.format("%02d", etaSeconds)}"
+                } else "—"
+
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(horizontal = 32.dp)
                     ) {
-                        val progressVal = exportProgress.coerceIn(0, 100)
-                        val progressFraction = progressVal / 100f
-
-                        // (a) Large centered circular progress indicator (120dp)
-                        //     with orange→purple gradient stroke drawn via Canvas.
+                        // (a) Large centered circular progress indicator (140dp) with gradient
                         Box(contentAlignment = Alignment.Center) {
-                            // Track (background ring)
-                            Canvas(modifier = Modifier.size(120.dp)) {
-                                val strokeWidth = 6.dp.toPx()
+                            Canvas(modifier = Modifier.size(140.dp)) {
+                                val strokeWidth = 8.dp.toPx()
                                 val diameter = size.minDimension - strokeWidth
                                 val topLeft = Offset(
                                     (size.width - diameter) / 2f,
@@ -342,9 +356,9 @@ fun ExportScreen(
                                     size = arcSize,
                                     style = Stroke(width = strokeWidth)
                                 )
-                                // Progress arc with gradient (orange→purple)
+                                // Progress arc with gradient (orange→purple→cyan)
                                 val brush = Brush.sweepGradient(
-                                    listOf(NeonOrange, Color(0xFF9C27B0), NeonOrange)
+                                    listOf(NeonOrange, SignaturePurple, CyberCyan, NeonOrange)
                                 )
                                 drawArc(
                                     brush = brush,
@@ -356,43 +370,104 @@ fun ExportScreen(
                                     style = Stroke(width = strokeWidth)
                                 )
                             }
-                            // (b) Big bold percentage text in the center (white 36sp)
+                            // Stage icon
+                            Text(stageIcon, fontSize = 32.sp)
+                            // Big bold percentage text below icon
                             Text(
                                 text = "$progressVal%",
-                                fontSize = 36.sp,
+                                fontSize = 28.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color.White
+                                color = Color.White,
+                                modifier = Modifier.padding(top = 36.dp)
                             )
                         }
 
-                        Spacer(Modifier.height(28.dp))
+                        Spacer(Modifier.height(24.dp))
 
-                        // (c) Thin linear progress bar below (same gradient)
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(0.06f))
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth(progressFraction).height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(Brush.horizontalGradient(listOf(NeonOrange, Color(0xFF9C27B0))))
+                        // (b) Stage text with animated indicator
+                        Text(
+                            text = stageText,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeonOrange,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // (c) ETA display (YouCut-style)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⏱ ", fontSize = 13.sp, color = Color.Gray)
+                            Text(
+                                text = if (etaSeconds > 0) "Estimated time remaining: $etaText" else "Processing...",
+                                fontSize = 13.sp,
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center
                             )
                         }
 
                         Spacer(Modifier.height(20.dp))
 
-                        // (d) One line "Exporting video..." (gray 14sp)
+                        // (d) Thin linear progress bar (YouCut-style gradient)
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.White.copy(0.06f))
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(progressFraction).height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Brush.horizontalGradient(listOf(NeonOrange, SignaturePurple, CyberCyan)))
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // (e) Stage indicators (5 dots showing progress stages)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            val stages = listOf("Prepare", "Analyze", "Encode", "Finalize", "Save")
+                            val stageThresholds = listOf(0, 5, 10, 90, 95)
+                            stages.forEachIndexed { idx, stage ->
+                                val isActive = progressVal >= stageThresholds[idx]
+                                val isCurrent = progressVal >= stageThresholds[idx] && 
+                                    (idx == stages.lastIndex || progressVal < stageThresholds[idx + 1])
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        modifier = Modifier.size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isCurrent) Brush.sweepGradient(listOf(NeonOrange, SignaturePurple))
+                                                else if (isActive) CyberCyan.copy(0.6f)
+                                                else Color.White.copy(0.1f)
+                                            )
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        stage,
+                                        fontSize = 8.sp,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isCurrent) NeonOrange else if (isActive) CyberCyan else Color.Gray
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // (f) Tip text (YouCut shows helpful tips during export)
                         Text(
-                            text = "Exporting video...",
-                            fontSize = 14.sp,
-                            color = Color.Gray,
+                            text = "💡 Tip: Keep the app open during export for best results",
+                            fontSize = 11.sp,
+                            color = Color.Gray.copy(0.7f),
                             textAlign = TextAlign.Center
                         )
                     }
                 }
 
-                // (e) Cancel button at the bottom
+                // (g) Cancel button at the bottom (YouCut-style)
                 Box(
                     modifier = Modifier.fillMaxWidth()
                         .background(Color(0xFF0F0F14))
@@ -406,7 +481,7 @@ fun ExportScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "CANCEL",
+                            "CANCEL EXPORT",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White,

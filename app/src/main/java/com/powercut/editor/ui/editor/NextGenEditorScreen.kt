@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.EaseInOutSine
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -112,6 +113,7 @@ import com.powercut.editor.ui.home.TransitionDemoPreview
 import com.powercut.editor.ui.home.AnimationDemoPreview
 import com.powercut.editor.ui.theme.GlassBackground
 import com.powercut.editor.ui.theme.SignatureOrange
+import com.powercut.editor.ui.theme.PremiumGold
 import com.powercut.editor.ui.theme.SignaturePurple
 import java.util.Locale
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -287,6 +289,11 @@ fun NextGenEditorScreen(
     onUpdateSpeedCurve: (String) -> Unit,
     onUpdateTextOverlay: (String?) -> Unit,
     onUpdateTextAnimation: (String) -> Unit,
+    onUpdateTextStyle: (String) -> Unit = {},
+    onUpdateTextPositionX: (Float) -> Unit = {},
+    onUpdateTextPositionY: (Float) -> Unit = {},
+    onUpdateTextColor: (String) -> Unit = {},
+    onUpdateTextFontSize: (Float) -> Unit = {},
     onUpdateStickerType: (String) -> Unit,
     onUpdateTemplate: (String) -> Unit,
     onUpdateVisualizerStyle: (String) -> Unit,
@@ -298,6 +305,9 @@ fun NextGenEditorScreen(
     onUpdateImageOverlay: (String?) -> Unit = {},
     onUpdateImageOverlayOpacity: (Float) -> Unit = {},
     onUpdateImageOverlayScale: (Float) -> Unit = {},
+    onUpdateImageOverlayX: (Float) -> Unit = {},
+    onUpdateImageOverlayY: (Float) -> Unit = {},
+    onUpdateImageOverlayCrop: (String) -> Unit = {},
     onUpdateSelectedEffect: (String) -> Unit = {},
     onAddLayer: (String) -> Unit = {},
     onRemoveLayer: (String) -> Unit = {},
@@ -348,6 +358,9 @@ fun NextGenEditorScreen(
     onUpdatePremiumLook: (String) -> Unit = {},
     // KineMaster-style keyframe animation
     onUpdateKeyframeAnim: (String) -> Unit = {},
+    // In-editor premium panels (AI Hub, Presets) — v6.2.0
+    onUpdateAiFeature: (String) -> Unit = {},
+    onUpdateSocialPreset: (String) -> Unit = {},
     // v6.0.0 Premium launcher — top action row (AI Hub, Presets, Pro, Studio)
     onAiHub: () -> Unit = {},
     onSocialPresets: () -> Unit = {},
@@ -919,6 +932,11 @@ fun NextGenEditorScreen(
                 onUpdateTransition = onUpdateTransition,
                 onUpdateTextOverlay = onUpdateTextOverlay,
                 onUpdateTextAnimation = onUpdateTextAnimation,
+                onUpdateTextStyle = onUpdateTextStyle,
+                onUpdateTextPositionX = onUpdateTextPositionX,
+                onUpdateTextPositionY = onUpdateTextPositionY,
+                onUpdateTextColor = onUpdateTextColor,
+                onUpdateTextFontSize = onUpdateTextFontSize,
                 onUpdateStickerType = onUpdateStickerType,
                 onUpdate3DShapeMask = onUpdate3DShapeMask,
                 onUpdateTemplate = onUpdateTemplate,
@@ -940,6 +958,10 @@ fun NextGenEditorScreen(
                 onUpdateSelectedEffect = onUpdateSelectedEffect,
                 onUpdateImageOverlay = onUpdateImageOverlay,
                 onUpdateImageOverlayOpacity = onUpdateImageOverlayOpacity,
+                onUpdateImageOverlayScale = onUpdateImageOverlayScale,
+                onUpdateImageOverlayX = onUpdateImageOverlayX,
+                onUpdateImageOverlayY = onUpdateImageOverlayY,
+                onUpdateImageOverlayCrop = onUpdateImageOverlayCrop,
                 imagePicker = imagePicker,
                 musicPicker = musicPicker,
                 onCollapse = { isPanelExpanded = false },
@@ -985,7 +1007,9 @@ fun NextGenEditorScreen(
                 onUpdateBorderStyle = onUpdateBorderStyle,
                 onUpdateVignetteStyle = onUpdateVignetteStyle,
                 onUpdatePremiumLook = onUpdatePremiumLook,
-                onUpdateKeyframeAnim = onUpdateKeyframeAnim
+                onUpdateKeyframeAnim = onUpdateKeyframeAnim,
+                onUpdateAiFeature = onUpdateAiFeature,
+                onUpdateSocialPreset = onUpdateSocialPreset
             )
         }
 
@@ -1658,13 +1682,7 @@ private fun CapCutToolBar(
                         RoundedCornerShape(12.dp)
                     )
                     .clickable {
-                        when (name) {
-                            "AI Hub" -> onAiHub()
-                            "Presets" -> onSocialPresets()
-                            "Pro" -> onProTier()
-                            "Studio" -> onPremiumStudio()
-                            else -> onToolSelected(idx)
-                        }
+                        onToolSelected(idx)
                     }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center
@@ -1705,6 +1723,11 @@ private fun CapCutToolPanel(
     onUpdateTransition: (String) -> Unit,
     onUpdateTextOverlay: (String?) -> Unit,
     onUpdateTextAnimation: (String) -> Unit,
+    onUpdateTextStyle: (String) -> Unit = {},
+    onUpdateTextPositionX: (Float) -> Unit = {},
+    onUpdateTextPositionY: (Float) -> Unit = {},
+    onUpdateTextColor: (String) -> Unit = {},
+    onUpdateTextFontSize: (Float) -> Unit = {},
     onUpdateStickerType: (String) -> Unit,
     onUpdate3DShapeMask: (String) -> Unit,
     onUpdateTemplate: (String) -> Unit,
@@ -1726,6 +1749,10 @@ private fun CapCutToolPanel(
     onUpdateSelectedEffect: (String) -> Unit,
     onUpdateImageOverlay: (String?) -> Unit,
     onUpdateImageOverlayOpacity: (Float) -> Unit,
+    onUpdateImageOverlayScale: (Float) -> Unit = {},
+    onUpdateImageOverlayX: (Float) -> Unit = {},
+    onUpdateImageOverlayY: (Float) -> Unit = {},
+    onUpdateImageOverlayCrop: (String) -> Unit = {},
     imagePicker: androidx.activity.result.ActivityResultLauncher<String>,
     musicPicker: androidx.activity.result.ActivityResultLauncher<String>,
     onCollapse: () -> Unit,
@@ -1777,7 +1804,9 @@ private fun CapCutToolPanel(
     onUpdateBorderStyle: (String) -> Unit = {},
     onUpdateVignetteStyle: (String) -> Unit = {},
     onUpdatePremiumLook: (String) -> Unit = {},
-    onUpdateKeyframeAnim: (String) -> Unit = {}
+    onUpdateKeyframeAnim: (String) -> Unit = {},
+    onUpdateAiFeature: (String) -> Unit = {},
+    onUpdateSocialPreset: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1790,15 +1819,15 @@ private fun CapCutToolPanel(
                 1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
-                4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker)
-                5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation)
+                4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) })
+                5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation, onUpdateTextStyle, onUpdateTextPositionX, onUpdateTextPositionY, onUpdateTextColor, onUpdateTextFontSize)
                 6 -> FiltersPanel(project, onUpdateFilter)
                 7 -> EffectsPanel(project, onUpdateSelectedEffect, onUpdateFilter)
                 8 -> StickersPanel(project, onUpdateStickerType)
                 9 -> TransitionsPanel(project, onUpdateTransition)
                 10 -> AnimationsPanel(project, onUpdateTextAnimation)
                 11 -> ThreeDPanel(project, onUpdate3DShapeMask)
-                12 -> ImagePanel(project, imagePicker, onUpdateImageOverlay, onUpdateImageOverlayOpacity)
+                12 -> ImagePanel(project, imagePicker, onUpdateImageOverlay, onUpdateImageOverlayOpacity, onUpdateImageOverlayScale, onUpdateImageOverlayX, onUpdateImageOverlayY, onUpdateImageOverlayCrop)
                 13 -> TemplatePanel(project, onUpdateTemplate)
                 14 -> com.powercut.editor.ui.editor.tools.GreenScreenPanel(
                     greenScreenEnabled = project.greenScreenEnabled,
@@ -1873,6 +1902,10 @@ private fun CapCutToolPanel(
                 26 -> LooksPanel(project, onUpdatePremiumLook)
                 27 -> CanvasPanel()
                 28 -> KeyframePanel(project, onUpdateKeyframeAnim)
+                29 -> AiHubPanel(project, onUpdateAiFeature)
+                30 -> PresetsPanel(project, onUpdateSocialPreset)
+                31 -> ProPanel(project, onProTier, onUpdatePremiumLook)
+                32 -> StudioPanel(project, onPremiumStudio)
             }
         }
         // Collapse handle
@@ -1915,6 +1948,8 @@ private fun EditPanel(
     var editSubTab by remember { mutableStateOf("adjust") }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("EDIT", "✂️", NeonOrange)
+
         // Sub-tab bar like CapCut
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("adjust" to "🎨 Adjust", "crop" to "📐 Crop", "speed" to "⚡ Speed", "slowmo" to "🐌 SlowMo", "reverse" to "🔄 Reverse", "freeze" to "🧊 Freeze", "delete" to "🗑️ Delete").forEach { (id, label) ->
@@ -2125,6 +2160,8 @@ private fun EditPanel(
 @Composable
 private fun LayersPanel(project: VideoProject, context: android.content.Context, onAddLayer: (String) -> Unit, onRemoveLayer: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("LAYERS", "📑", CyberCyan)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("LAYERS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             Text("${project.activeLayers.size} active", fontSize = 8.sp, color = Color.Gray)
@@ -2257,6 +2294,8 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
 @Composable
 private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, onUpdateSpeedCurve: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("SPEED", "⚡", NeonOrange)
+
         Text("SPEED", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         // Preset buttons — toggle
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -2299,6 +2338,8 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
 @Composable
 private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onUpdateAspect: (String) -> Unit, onRotate: () -> Unit, onFlipH: () -> Unit, onFlipV: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("CROP", "📐", SignaturePurple)
+
         Text("CROP & TRANSFORM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
         // Preset crop buttons
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2348,24 +2389,270 @@ private fun AudioPanel(
     onUpdateMusicVol: (Float) -> Unit,
     onUpdateVisualizer: (String) -> Unit,
     onToggleBeatSync: () -> Unit,
-    musicPicker: androidx.activity.result.ActivityResultLauncher<String>
+    musicPicker: androidx.activity.result.ActivityResultLauncher<String>,
+    onImportAudio: (String) -> Unit = {},
+    onClearAudio: () -> Unit = {}
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var audioSubTab by remember { mutableStateOf("mixer") }
+    val pulse by rememberPulse()
+    val infiniteTransition = rememberInfiniteTransition(label = "audio")
+    val waveAnim by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "wave"
+    )
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("AUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) { Text("VIDEO VOL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White); Slider(value = project.videoVolume, onValueChange = onUpdateVideoVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.height(18.dp)) }
-            Column(Modifier.weight(1f)) { Text("BGM VOL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White); Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.height(18.dp)) }
+        Text("AUDIO STUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Import · Timeline · Royal Free · Local", fontSize = 7.sp, color = Color.Gray)
+            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Full Audio", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+            }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Box(Modifier.weight(1f).background(if (project.isMuted) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleMute() }.padding(6.dp), contentAlignment = Alignment.Center) { Text(if (project.isMuted) "UNMUTE" else "MUTE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isMuted) NeonOrange else Color.White) }
-            Box(Modifier.weight(1f).background(CyberCyan.copy(0.15f), RoundedCornerShape(6.dp)).clickable { musicPicker.launch("audio/*") }.padding(6.dp), contentAlignment = Alignment.Center) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.MusicNote, "BGM", tint = CyberCyan, modifier = Modifier.size(12.dp)); Spacer(Modifier.width(3.dp)); Text("+ SONG", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan) } }
+
+        // Sub-tabs: Mixer | Import | Royal Free | Timeline
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("mixer" to "Mixer", "import" to "Import", "royal" to "Royal Free", "timeline" to "Timeline").forEach { (id, label) ->
+                val sel = audioSubTab == id
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { audioSubTab = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
+            }
         }
-        Text("VISUALIZER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("None", "Wave", "Bars", "Radial").forEach { s -> val sel = project.visualizerStyle.lowercase() == s.lowercase(); Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateVisualizer(s) }.padding(3.dp), contentAlignment = Alignment.Center) { Text(s, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) } }
-        }
-        Box(Modifier.fillMaxWidth().background(if (project.isBeatSyncEnabled) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleBeatSync() }.padding(6.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("BEAT SYNC", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isBeatSyncEnabled) CyberCyan else Color.White); Text(if (project.isBeatSyncEnabled) "ON" else "OFF", fontSize = 8.sp, color = if (project.isBeatSyncEnabled) CyberCyan else Color.Gray) }
+
+        when (audioSubTab) {
+            "mixer" -> {
+                // Volume mixing controls
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) { Text("VIDEO VOL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White); Slider(value = project.videoVolume, onValueChange = onUpdateVideoVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.height(18.dp)) }
+                    Column(Modifier.weight(1f)) { Text("BGM VOL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White); Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.height(18.dp)) }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.weight(1f).background(if (project.isMuted) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleMute() }.padding(6.dp), contentAlignment = Alignment.Center) { Text(if (project.isMuted) "UNMUTE" else "MUTE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isMuted) NeonOrange else Color.White) }
+                    Box(Modifier.weight(1f).background(CyberCyan.copy(0.15f), RoundedCornerShape(6.dp)).clickable { musicPicker.launch("audio/*") }.padding(6.dp), contentAlignment = Alignment.Center) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.MusicNote, "BGM", tint = CyberCyan, modifier = Modifier.size(12.dp)); Spacer(Modifier.width(3.dp)); Text("+ SONG", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan) } }
+                }
+                Text("VISUALIZER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("None", "Wave", "Bars", "Radial").forEach { s -> val sel = project.visualizerStyle.lowercase() == s.lowercase(); Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateVisualizer(s) }.padding(3.dp), contentAlignment = Alignment.Center) { Text(s, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White) } }
+                }
+                Box(Modifier.fillMaxWidth().background(if (project.isBeatSyncEnabled) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleBeatSync() }.padding(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("BEAT SYNC", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isBeatSyncEnabled) CyberCyan else Color.White); Text(if (project.isBeatSyncEnabled) "ON" else "OFF", fontSize = 8.sp, color = if (project.isBeatSyncEnabled) CyberCyan else Color.Gray) }
+                }
+            }
+
+            "import" -> {
+                // Audio import — user's own audio + local music
+                Text("IMPORT AUDIO", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Text("Add your own audio file or pick from device storage", fontSize = 7.sp, color = Color.Gray)
+
+                // Import from file (custom audio)
+                Box(Modifier.fillMaxWidth().background(CyberCyan.copy(0.15f), RoundedCornerShape(8.dp)).clickable { musicPicker.launch("audio/*") }.padding(10.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.MusicNote, "Import", tint = CyberCyan, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text("IMPORT AUDIO FILE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                        Text("MP3, WAV, M4A, AAC, OGG", fontSize = 7.sp, color = Color.Gray)
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+
+                // Local music (from device)
+                Text("LOCAL MUSIC", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                Text("Browse music stored on your device", fontSize = 7.sp, color = Color.Gray)
+                Box(Modifier.fillMaxWidth().background(NeonOrange.copy(0.12f), RoundedCornerShape(8.dp)).clickable { musicPicker.launch("audio/*"); android.widget.Toast.makeText(ctx, "Select local music from your device", android.widget.Toast.LENGTH_SHORT).show() }.padding(10.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("📁 BROWSE DEVICE MUSIC", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                        Text("Pick from your music library", fontSize = 7.sp, color = Color.Gray)
+                    }
+                }
+
+                // Currently loaded audio info
+                if (project.backgroundMusicPath != null) {
+                    Spacer(Modifier.height(2.dp))
+                    Text("CURRENT AUDIO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                    Box(Modifier.fillMaxWidth().background(Color.White.copy(0.06f), RoundedCornerShape(6.dp)).padding(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MusicNote, "Current", tint = CyberCyan, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("♪ ${project.backgroundMusicPath!!.substringAfterLast("/")}", fontSize = 8.sp, color = Color.White, maxLines = 1)
+                                Text("Volume: ${(project.backgroundMusicVolume * 100).toInt()}%", fontSize = 7.sp, color = Color.Gray)
+                            }
+                            Box(Modifier.background(Color.Red.copy(0.3f), RoundedCornerShape(4.dp)).clickable { onClearAudio() }.padding(horizontal = 6.dp, vertical = 3.dp)) {
+                                Text("✕", fontSize = 9.sp, color = Color.White)
+                            }
+                        }
+                    }
+                    // Volume slider for imported audio
+                    Text("AUDIO VOLUME: ${(project.backgroundMusicVolume * 100).toInt()}%", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                    Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(24.dp))
+                }
+            }
+
+            "royal" -> {
+                // Royal free music library — royalty-free tracks
+                Text("ROYAL FREE MUSIC LIBRARY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
+                Text("Royalty-free tracks — safe for commercial use", fontSize = 7.sp, color = Color.Gray)
+
+                // Animated music wave background
+                Canvas(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                    val w = size.width
+                    val h = size.height
+                    val barCount = 30
+                    val barWidth = w / barCount
+                    for (i in 0 until barCount) {
+                        val phase = (i.toFloat() / barCount + waveAnim) % 1f
+                        val barHeight = h * (0.2f + 0.6f * kotlin.math.sin(phase * kotlin.math.PI * 2f).toFloat().coerceIn(0f, 1f))
+                        drawRoundRect(
+                            color = PremiumGold.copy(0.4f + 0.3f * kotlin.math.sin(phase * kotlin.math.PI * 2f).toFloat().coerceIn(0f, 1f)),
+                            topLeft = androidx.compose.ui.geometry.Offset(i * barWidth + barWidth * 0.2f, (h - barHeight) / 2),
+                            size = androidx.compose.ui.geometry.Size(barWidth * 0.6f, barHeight),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth * 0.3f)
+                        )
+                    }
+                }
+
+                // Royal free music categories
+                val royalMusic = listOf(
+                    "🎵 Cinematic Epic" to "cinematic_epic", "🎵 Corporate Upbeat" to "corporate_upbeat",
+                    "🎵 Lo-Fi Chill" to "lofi_chill", "🎵 EDM Energy" to "edm_energy",
+                    "🎵 Acoustic Folk" to "acoustic_folk", "🎵 Jazz Lounge" to "jazz_lounge",
+                    "🎵 Hip-Hop Beat" to "hiphop_beat", "🎵 Rock Anthem" to "rock_anthem",
+                    "🎵 Classical Piano" to "classical_piano", "🎵 Ambient Space" to "ambient_space",
+                    "🎵 Tropical House" to "tropical_house", "🎵 Trap 808" to "trap_808",
+                    "🎵 Reggae Vibes" to "reggae_vibes", "🎵 Country Road" to "country_road",
+                    "🎵 R&B Smooth" to "rnb_smooth", "🎵 Drum & Bass" to "dnb",
+                    "🎵 Synthwave 80s" to "synthwave", "🎵 Orchestral" to "orchestral",
+                    "🎵 Kids Playful" to "kids_playful", "🎵 Horror Suspense" to "horror_suspense",
+                    "🎵 Wedding Romance" to "wedding_romance", "🎵 Birthday Party" to "birthday_party",
+                    "🎵 Action Trailer" to "action_trailer", "🎵 Meditation Calm" to "meditation_calm"
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    items(royalMusic) { (label, id) ->
+                        val sel = project.backgroundMusicPath?.contains(id) == true
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .background(if (sel) PremiumGold.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                                .border(if (sel) 1.dp else 0.dp, PremiumGold, RoundedCornerShape(6.dp))
+                                .clickable {
+                                    android.widget.Toast.makeText(ctx, "🎵 $label — Tap Import tab to load from device, or this will use built-in track", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) PremiumGold else Color.White)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Free", fontSize = 7.sp, color = PremiumGold, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("▶", fontSize = 10.sp, color = if (sel) PremiumGold else Color.Gray)
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("✓ ${royalMusic.size} royalty-free tracks — no copyright strikes", fontSize = 7.sp, color = PremiumGold, fontWeight = FontWeight.Bold)
+            }
+
+            "timeline" -> {
+                // Audio timeline — visual representation of video audio + BGM
+                Text("AUDIO TIMELINE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Text("Video audio + background music tracks", fontSize = 7.sp, color = Color.Gray)
+
+                // Timeline canvas with animated waveforms
+                Canvas(modifier = Modifier.fillMaxWidth().height(120.dp).background(Color.Black.copy(0.3f), RoundedCornerShape(8.dp))) {
+                    val w = size.width
+                    val h = size.height
+                    val trackHeight = h / 3f
+
+                    // Track 1: Video Audio
+                    drawRoundRect(color = NeonOrange.copy(0.1f), topLeft = androidx.compose.ui.geometry.Offset(0f, 2f), size = androidx.compose.ui.geometry.Size(w, trackHeight - 4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f))
+                    // Video audio waveform
+                    val vSamples = 60
+                    for (i in 0 until vSamples) {
+                        val phase = (i.toFloat() / vSamples + waveAnim) % 1f
+                        val amp = trackHeight * 0.35f * (0.5f + 0.5f * kotlin.math.sin(phase * kotlin.math.PI * 4f).toFloat())
+                        drawRoundRect(
+                            color = NeonOrange.copy(0.7f),
+                            topLeft = androidx.compose.ui.geometry.Offset(i * w / vSamples + 1f, (trackHeight - amp) / 2),
+                            size = androidx.compose.ui.geometry.Size(w / vSamples - 2f, amp),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f)
+                        )
+                    }
+
+                    // Track 2: Background Music
+                    drawRoundRect(color = CyberCyan.copy(0.1f), topLeft = androidx.compose.ui.geometry.Offset(0f, trackHeight + 2f), size = androidx.compose.ui.geometry.Size(w, trackHeight - 4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f))
+                    if (project.backgroundMusicPath != null) {
+                        // BGM waveform
+                        val bSamples = 60
+                        for (i in 0 until bSamples) {
+                            val phase = (i.toFloat() / bSamples + waveAnim * 1.3f) % 1f
+                            val amp = trackHeight * 0.3f * (0.4f + 0.6f * kotlin.math.sin(phase * kotlin.math.PI * 6f).toFloat()).coerceIn(0f, 1f)
+                            drawRoundRect(
+                                color = CyberCyan.copy(0.7f),
+                                topLeft = androidx.compose.ui.geometry.Offset(i * w / bSamples + 1f, trackHeight + (trackHeight - amp) / 2),
+                                size = androidx.compose.ui.geometry.Size(w / bSamples - 2f, amp),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f)
+                            )
+                        }
+                    } else {
+                        drawContext.canvas.nativeCanvas.drawText(
+                            "No BGM — tap Import to add",
+                            w / 2 - 80f, trackHeight + trackHeight / 2 + 5f,
+                            android.graphics.Paint().apply { color = android.graphics.Color.GRAY; textSize = 24f; textAlign = android.graphics.Paint.Align.CENTER }
+                        )
+                    }
+
+                    // Track 3: Voice/Effects (placeholder)
+                    drawRoundRect(color = PremiumGold.copy(0.1f), topLeft = androidx.compose.ui.geometry.Offset(0f, trackHeight * 2 + 2f), size = androidx.compose.ui.geometry.Size(w, trackHeight - 4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f))
+
+                    // Playhead
+                    val playX = w * waveAnim
+                    drawLine(color = Color.White.copy(0.8f), start = androidx.compose.ui.geometry.Offset(playX, 0f), end = androidx.compose.ui.geometry.Offset(playX, h), strokeWidth = 2f)
+                }
+
+                // Track labels
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("🔊 Video Audio ${(project.videoVolume * 100).toInt()}%", fontSize = 7.sp, color = NeonOrange, fontWeight = FontWeight.Bold)
+                    Text("🎵 BGM ${(project.backgroundMusicVolume * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
+                    Text("🎤 Voice FX", fontSize = 7.sp, color = PremiumGold, fontWeight = FontWeight.Bold)
+                }
+
+                // Timeline controls
+                Text("TRACK CONTROLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.weight(1f).background(if (project.videoVolume > 0f) NeonOrange.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleMute() }.padding(6.dp), contentAlignment = Alignment.Center) {
+                        Text(if (project.isMuted) "🔇 Muted" else "🔊 Video On", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (project.isMuted) Color.Gray else NeonOrange)
+                    }
+                    Box(Modifier.weight(1f).background(CyberCyan.copy(0.15f), RoundedCornerShape(6.dp)).clickable { musicPicker.launch("audio/*") }.padding(6.dp), contentAlignment = Alignment.Center) {
+                        Text("🎵 + Add BGM", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                    }
+                }
+
+                // Mix balance
+                Text("MIX BALANCE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Video ${(project.videoVolume * 100).toInt()}%", fontSize = 7.sp, color = NeonOrange)
+                        Slider(value = project.videoVolume, onValueChange = onUpdateVideoVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.height(20.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Music ${(project.backgroundMusicVolume * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan)
+                        Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.height(20.dp))
+                    }
+                }
+
+                // Beat sync
+                Box(Modifier.fillMaxWidth().background(if (project.isBeatSyncEnabled) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleBeatSync() }.padding(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("BEAT SYNC", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isBeatSyncEnabled) CyberCyan else Color.White); Text(if (project.isBeatSyncEnabled) "ON" else "OFF", fontSize = 8.sp, color = if (project.isBeatSyncEnabled) CyberCyan else Color.Gray) }
+                }
+            }
         }
     }
 }
@@ -2374,25 +2661,35 @@ private fun AudioPanel(
 // ─── 5. TEXT PANEL ──────────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, onUpdateAnim: (String) -> Unit) {
+private fun TextPanel(
+    project: VideoProject,
+    onUpdateText: (String?) -> Unit,
+    onUpdateAnim: (String) -> Unit,
+    onUpdateStyle: (String) -> Unit = {},
+    onUpdatePosX: (Float) -> Unit = {},
+    onUpdatePosY: (Float) -> Unit = {},
+    onUpdateColor: (String) -> Unit = {},
+    onUpdateFontSize: (Float) -> Unit = {}
+) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var txt by remember { mutableStateOf(project.activeTextOverlay ?: "") }
     var textSubTab by remember { mutableStateOf("text") }
     var selectedFontIndex by remember { mutableStateOf(0) }
     var selectedColorIndex by remember { mutableStateOf(0) }
+    var selectedStyleIndex by remember { mutableStateOf(0) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TEXT STUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+        LiveAnimatedHeader("TEXT STUDIO", "📝", NeonOrange)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("100+ Fonts • Full Styling • Animations", fontSize = 7.sp, color = Color.Gray)
+            Text("40+ Styles · Position · 100+ Fonts · Animations", fontSize = 7.sp, color = Color.Gray)
             Box(Modifier.background(NeonOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
                 Text("✓ Pro", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
             }
         }
 
-        // Sub-tabs: Text | Fonts | Color | Motion | Logo
+        // Sub-tabs: Text | Style | Position | Fonts | Color | Motion | Logo
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("text" to "Text", "fonts" to "Fonts", "color" to "Color", "motion" to "Motion", "logo" to "Logo").forEach { (id, label) ->
+            listOf("text" to "Text", "style" to "Style", "pos" to "Position", "fonts" to "Fonts", "color" to "Color", "motion" to "Motion", "logo" to "Logo").forEach { (id, label) ->
                 val sel = textSubTab == id
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { textSubTab = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
                     Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
@@ -2405,12 +2702,117 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
                 // Text input
                 OutlinedTextField(value = txt, onValueChange = { txt = it; onUpdateText(if (it.isBlank()) null else it) }, placeholder = { Text("Type your text...", fontSize = 9.sp, color = Color.Gray) }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonOrange, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White), modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(8.dp))
 
+                // Font size slider
+                Text("FONT SIZE: ${project.textFontSize.toInt()}pt", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Slider(value = project.textFontSize, onValueChange = { onUpdateFontSize(it) }, valueRange = 8f..120f, colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange), modifier = Modifier.fillMaxWidth().height(28.dp))
+
                 // Quick text presets
                 Text("QUICK TEXT PRESETS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(listOf("🔥 Fire Text", "💫 Glow Text", "🎬 Title", "📍 Subtitle", "🎵 Lyrics", "💬 Dialog", "📰 Breaking", "⚡ Neon", "💥 Boom", "🔍 Search", "👍 Like", "🎉 Party", "🏆 Winner", "👑 Royal", "💯 100%", "🚀 Go", "✨ Magic", "🌟 Star")) { preset ->
                         Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateText(preset); txt = preset }.padding(horizontal = 8.dp, vertical = 4.dp)) {
                             Text(preset, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+
+            "style" -> {
+                // 40+ visual design/capture styles (like CapCut text styles)
+                Text("40+ TEXT DESIGN STYLES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                Text("Tap a style to apply — each has unique visual design", fontSize = 7.sp, color = Color.Gray)
+                val styles = listOf(
+                    "Classic" to "classic", "Bold Title" to "bold_title", "Subtitle" to "subtitle",
+                    "Neon Glow" to "neon_glow", "Fire Burn" to "fire_burn", "Ice Freeze" to "ice_freeze",
+                    "Gold Lux" to "gold_lux", "Silver Chrome" to "silver_chrome", "Bronze Metal" to "bronze_metal",
+                    "Rainbow" to "rainbow", "Gradient" to "gradient", "Holographic" to "holographic",
+                    "3D Block" to "3d_block", "3D Shadow" to "3d_shadow", "3D Pop" to "3d_pop",
+                    "Outline" to "outline", "Double Outline" to "double_outline", "Shadow Drop" to "shadow_drop",
+                    "Glow Aura" to "glow_aura", "Neon Border" to "neon_border", "Box Banner" to "box_banner",
+                    "Strip Banner" to "strip_banner", "Gradient BG" to "gradient_bg", "Solid BG" to "solid_bg",
+                    "Blur BG" to "blur_bg", "Frosted Glass" to "frosted_glass", "Glassmorphic" to "glassmorphic",
+                    "Typewriter" to "typewriter", "Retro 80s" to "retro_80s", "Vintage Film" to "vintage_film",
+                    "Comic Book" to "comic_book", "Graffiti" to "graffiti", "Street Art" to "street_art",
+                    "Calligraphy" to "calligraphy", "Handwriting" to "handwriting", "Brush Script" to "brush_script",
+                    "Pixel 8-Bit" to "pixel_8bit", "Arcade" to "arcade", "Digital Matrix" to "matrix",
+                    "Cyberpunk" to "cyberpunk", "Hologram" to "hologram", "Glitch" to "glitch"
+                )
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    styles.forEachIndexed { idx, (label, id) ->
+                        val sel = project.textStyleId == id
+                        Box(
+                            Modifier
+                                .background(if (sel) NeonOrange.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                                .border(if (sel) 1.dp else 0.dp, NeonOrange, RoundedCornerShape(6.dp))
+                                .clickable {
+                                    selectedStyleIndex = idx
+                                    onUpdateStyle(if (sel) "classic" else id)
+                                    android.widget.Toast.makeText(ctx, "Style: $label", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 6.dp, vertical = 5.dp)
+                        ) {
+                            Text(label, fontSize = 7.sp, fontWeight = if (sel) FontWeight.Black else FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                        }
+                    }
+                }
+                Text("✓ ${styles.size} design styles available — more than CapCut!", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
+            }
+
+            "pos" -> {
+                // Position/placement control — user can set where text appears on screen
+                Text("TEXT POSITION CONTROL", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Text("Tap a position or use sliders to place text anywhere on screen", fontSize = 7.sp, color = Color.Gray)
+
+                // Visual 3x3 position grid
+                Text("QUICK POSITIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                val positions = listOf(
+                    "TL" to 0.15f to 0.15f, "TC" to 0.5f to 0.15f, "TR" to 0.85f to 0.15f,
+                    "ML" to 0.15f to 0.5f, "C" to 0.5f to 0.5f, "MR" to 0.85f to 0.5f,
+                    "BL" to 0.15f to 0.85f, "BC" to 0.5f to 0.85f, "BR" to 0.85f to 0.85f
+                )
+                // Build 3x3 grid
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    for (row in 0..2) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            for (col in 0..2) {
+                                val (label, coords) = positions[row * 3 + col]
+                                val (px, py) = coords
+                                val isSel = kotlin.math.abs(project.textPositionX - px) < 0.05f && kotlin.math.abs(project.textPositionY - py) < 0.05f
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(32.dp)
+                                        .background(if (isSel) CyberCyan.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                                        .border(if (isSel) 1.dp else 0.dp, CyberCyan, RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            onUpdatePosX(px)
+                                            onUpdatePosY(py)
+                                            android.widget.Toast.makeText(ctx, "Text → $label", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // X position slider
+                Text("X POSITION: ${(project.textPositionX * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Slider(value = project.textPositionX, onValueChange = { onUpdatePosX(it) }, valueRange = 0f..1f, colors = SliderDefaults.colors(thumbColor = CyberCyan, activeTrackColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(28.dp))
+
+                // Y position slider
+                Text("Y POSITION: ${(project.textPositionY * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Slider(value = project.textPositionY, onValueChange = { onUpdatePosY(it) }, valueRange = 0f..1f, colors = SliderDefaults.colors(thumbColor = CyberCyan, activeTrackColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(28.dp))
+
+                // Quick presets
+                Text("PRESET POSITIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("Top" to 0.5f to 0.1f, "Bottom" to 0.5f to 0.9f, "Center" to 0.5f to 0.5f, "Lower Third" to 0.5f to 0.75f, "Upper Third" to 0.5f to 0.25f, "Left Edge" to 0.1f to 0.5f, "Right Edge" to 0.9f to 0.5f).forEach { (label, coords) ->
+                        val (px, py) = coords
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdatePosX(px); onUpdatePosY(py) }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -2464,12 +2866,25 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
                     Color(0xFF20B2AA), Color(0xFFFFB6C1), Color(0xFF90EE90), Color(0xFFDDA0DD),
                     Color(0xFFF0E68C), Color(0xFFE6E6FA), Color(0xFFFFFACD), Color(0xFFAFEEEE)
                 )
+                val colorHexes = listOf(
+                    "#FFFFFF", "#000000", "#FF0000", "#00FF00", "#0000FF",
+                    "#FFFF00", "#00FFFF", "#FF00FF", "#7C5CFF", "#FF6B35",
+                    "#2DD4BF", "#FF3D7F", "#FFD700", "#00FF00", "#FF00FF",
+                    "#00FFFF", "#FFA500", "#800080", "#FF1493", "#00CED1",
+                    "#FF4500", "#32CD32", "#FF69B4", "#1E90FF", "#FF8C00",
+                    "#9370DB", "#20B2AA", "#FFB6C1", "#90EE90", "#DDA0DD",
+                    "#F0E68C", "#E6E6FA", "#FFFACD", "#AFEEEE"
+                )
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     textColors.forEachIndexed { idx, color ->
                         val sel = selectedColorIndex == idx
                         Box(Modifier.size(28.dp).background(color, RoundedCornerShape(6.dp))
                             .border(if (sel) 2.dp else 0.dp, Color.White, RoundedCornerShape(6.dp))
-                            .clickable { selectedColorIndex = idx; android.widget.Toast.makeText(ctx, "Text color selected", android.widget.Toast.LENGTH_SHORT).show() }) {}
+                            .clickable {
+                                selectedColorIndex = idx
+                                onUpdateColor(colorHexes[idx])
+                                android.widget.Toast.makeText(ctx, "Text color selected", android.widget.Toast.LENGTH_SHORT).show()
+                            }) {}
                     }
                 }
 
@@ -2485,7 +2900,7 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
             }
 
             "motion" -> {
-                // Animated text — loop/move full screen (user request: "text mein loop hoon full screen per move hon")
+                // Animated text — loop/move full screen
                 Text("LOOP & FULL SCREEN MOTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     listOf("Loop L→R" to "loop_lr", "Loop R→L" to "loop_rl", "Loop Up" to "loop_up", "Loop Down" to "loop_down", "Bounce Loop" to "loop_bounce", "Pulse Loop" to "loop_pulse", "Full Screen Scroll" to "fullscreen_scroll", "Marquee Loop" to "marquee_loop", "Orbit" to "orbit", "Wave Motion" to "wave_motion", "Typewriter Loop" to "typewriter_loop", "Zoom Loop" to "zoom_loop").forEach { (label, id) ->
@@ -2508,7 +2923,7 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
             }
 
             "logo" -> {
-                // Logo overlay support (user request: "logo laga sake")
+                // Logo overlay support
                 Text("LOGO OVERLAY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
                 Text("Add your brand logo or watermark image on top of the video. Use the Image tool (tool dock) to pick a logo image, then adjust opacity and scale here.", fontSize = 8.sp, color = Color.Gray)
                 Spacer(Modifier.height(4.dp))
@@ -2532,6 +2947,8 @@ private fun TextPanel(project: VideoProject, onUpdateText: (String?) -> Unit, on
 private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit) {
     var filterCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("FILTERS", "🎨", SignaturePurple)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("CINEMATIC FILTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
@@ -2691,6 +3108,8 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var effectCategory by remember { mutableStateOf("all") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("EFFECTS", "✨", NeonOrange)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("SUPER EFFECTS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
             Box(Modifier.background(NeonOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
@@ -3111,6 +3530,8 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("STICKERS", "😀", CyberCyan)
+
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -3203,6 +3624,8 @@ private fun StickersPanel(project: VideoProject, onUpdateSticker: (String) -> Un
 @Composable
 private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("TRANSITIONS", "🔄", SignaturePurple)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("TRANSITIONS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
             Box(Modifier.background(NeonOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
@@ -3341,6 +3764,8 @@ private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
     )
     val categories3D = listOf("all" to "All", "shape" to "Shape", "cinema" to "Cinema", "fx" to "FX")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("3D MASK", "🎭", CyberCyan)
+
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -3474,27 +3899,161 @@ private fun ImagePanel(
     project: VideoProject,
     imagePicker: androidx.activity.result.ActivityResultLauncher<String>,
     onUpdateImage: (String?) -> Unit,
-    onUpdateOpacity: (Float) -> Unit
+    onUpdateOpacity: (Float) -> Unit,
+    onUpdateScale: (Float) -> Unit = {},
+    onUpdateX: (Float) -> Unit = {},
+    onUpdateY: (Float) -> Unit = {},
+    onUpdateCrop: (String) -> Unit = {}
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("IMAGE OVERLAY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.weight(1f).background(CyberCyan.copy(0.15f), RoundedCornerShape(8.dp)).clickable { imagePicker.launch("image/*") }.padding(10.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("🖼️", fontSize = 20.sp)
-                    Text("Add Image", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var imageSubTab by remember { mutableStateOf("add") }
+    var selectedCropArea by remember { mutableStateOf("full") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("IMAGE OVERLAY STUDIO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Add · Crop · Position · Scale", fontSize = 7.sp, color = Color.Gray)
+            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                Text("✓ Full Control", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             }
-            Box(Modifier.weight(1f).background(if (project.imageOverlayPath != null) NeonOrange.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateImage(null) }.padding(10.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("🗑️", fontSize = 20.sp)
-                    Text("Remove", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.imageOverlayPath != null) NeonOrange else Color.Gray)
+        }
+
+        // Sub-tabs: Add | Crop | Position | Scale | Effects
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("add" to "Add", "crop" to "Crop", "pos" to "Position", "scale" to "Scale", "fx" to "Effects").forEach { (id, label) ->
+                val sel = imageSubTab == id
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { imageSubTab = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                 }
             }
         }
-        if (project.imageOverlayPath != null) {
-            Text("OPACITY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-            Slider(value = project.imageOverlayOpacity, onValueChange = onUpdateOpacity, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.height(18.dp))
+
+        when (imageSubTab) {
+            "add" -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.weight(1f).background(CyberCyan.copy(0.15f), RoundedCornerShape(8.dp)).clickable { imagePicker.launch("image/*") }.padding(10.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🖼️", fontSize = 20.sp)
+                            Text("Add Image", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                        }
+                    }
+                    Box(Modifier.weight(1f).background(if (project.imageOverlayPath != null) NeonOrange.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).clickable { onUpdateImage(null) }.padding(10.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🗑️", fontSize = 20.sp)
+                            Text("Remove", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.imageOverlayPath != null) NeonOrange else Color.Gray)
+                        }
+                    }
+                }
+                if (project.imageOverlayPath != null) {
+                    Text("IMAGE ADDED ✓", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                    Text("Use Crop, Position, Scale tabs to adjust placement on video", fontSize = 7.sp, color = Color.Gray)
+                }
+            }
+            "crop" -> {
+                Text("CROP AREA — Select where to place image on video", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                // Visual crop area selector grid
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Full Screen" to "full", "Center" to "center", "Top Half" to "top", "Bottom Half" to "bottom", "Left Half" to "left", "Right Half" to "right", "Top-Left" to "tl", "Top-Right" to "tr", "Bottom-Left" to "bl", "Bottom-Right" to "br", "Square Center" to "square", "Wide Bar" to "bar", "Circle Mask" to "circle", "Corner Badge" to "badge", "Split Screen" to "split", "Picture-in-Pic" to "pip").forEach { (label, id) ->
+                        val sel = selectedCropArea == id
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, if (sel) CyberCyan else Color.Transparent, RoundedCornerShape(6.dp)).clickable {
+                            selectedCropArea = id
+                            onUpdateCrop(id)
+                            android.widget.Toast.makeText(ctx, "Crop area: $label", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+                // Aspect ratio crop presets
+                Text("ASPECT RATIO CROP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("1:1" to "1:1", "4:3" to "4:3", "3:4" to "3:4", "16:9" to "16:9", "9:16" to "9:16", "3:2" to "3:2", "2:3" to "2:3", "Free" to "free").forEach { (label, id) ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            android.widget.Toast.makeText(ctx, "Crop ratio: $label", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+            "pos" -> {
+                Text("POSITION — Drag to set image location on video", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                // Visual position grid (3x3)
+                Box(Modifier.fillMaxWidth().height(80.dp).background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, CyberCyan.copy(0.2f), RoundedCornerShape(8.dp))) {
+                    // 3x3 grid for position selection
+                    val positions = listOf(
+                        "↖ TL" to 0.15f to 0.15f, "↑ TC" to 0.5f to 0.15f, "↖ TR" to 0.85f to 0.15f,
+                        "← ML" to 0.15f to 0.5f, "● C" to 0.5f to 0.5f, "→ MR" to 0.85f to 0.5f,
+                        "↙ BL" to 0.15f to 0.85f, "↓ BC" to 0.5f to 0.85f, "↘ BR" to 0.85f to 0.85f
+                    )
+                    positions.forEach { (labelxy) ->
+                        val (label, xy) = labelxy
+                        val (x, y) = xy
+                        val sel = kotlin.math.abs(project.imageOverlayX - x) < 0.1f && kotlin.math.abs(project.imageOverlayY - y) < 0.1f
+                        Box(Modifier.offset(x = (x * 280).dp - 20.dp, y = (y * 80).dp - 12.dp).size(40.dp).background(if (sel) CyberCyan.copy(0.3f) else Color.White.copy(0.08f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, CyberCyan, RoundedCornerShape(6.dp)).clickable {
+                            onUpdateX(x); onUpdateY(y)
+                            android.widget.Toast.makeText(ctx, "Position: $label", android.widget.Toast.LENGTH_SHORT).show()
+                        }, contentAlignment = Alignment.Center) {
+                            Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+                // Fine position sliders
+                Text("X POSITION: ${String.format("%.0f", project.imageOverlayX * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Slider(value = project.imageOverlayX, onValueChange = onUpdateX, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(18.dp))
+                Text("Y POSITION: ${String.format("%.0f", project.imageOverlayY * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Slider(value = project.imageOverlayY, onValueChange = onUpdateY, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(18.dp))
+            }
+            "scale" -> {
+                Text("SCALE & OPACITY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Text("SIZE: ${String.format("%.0f", project.imageOverlayScale * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Slider(value = project.imageOverlayScale, onValueChange = onUpdateScale, valueRange = 0.1f..3f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(18.dp))
+                Text("OPACITY: ${String.format("%.0f", project.imageOverlayOpacity * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                Slider(value = project.imageOverlayOpacity, onValueChange = onUpdateOpacity, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.fillMaxWidth().height(18.dp))
+                // Quick scale presets
+                Text("QUICK SIZE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("25%" to 0.25f, "50%" to 0.5f, "75%" to 0.75f, "100%" to 1f, "150%" to 1.5f, "200%" to 2f).forEach { (label, value) ->
+                        Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateScale(value) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+            "fx" -> {
+                Text("IMAGE EFFECTS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("None", "Blur Edge", "Round Corners", "Circle Mask", "Shadow", "Glow", "Border", "Grayscale", "Sepia", "Invert", "Vignette", "Gradient BG", "Neon Edge", "3D Pop", "Glass", "Frosted").forEach { fx ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            android.widget.Toast.makeText(ctx, "Image FX: $fx", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(fx, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+                // Blend mode for image
+                Text("BLEND MODE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Hard Light", "Color Dodge", "Color Burn", "Darken", "Lighten", "Difference", "Exclusion").forEach { mode ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            android.widget.Toast.makeText(ctx, "Blend: $mode", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 5.dp, vertical = 3.dp)) {
+                            Text(mode, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+                // Animation
+                Text("ENTRANCE ANIMATION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf("Fade In", "Slide L", "Slide R", "Slide Up", "Slide Down", "Zoom In", "Zoom Out", "Pop", "Bounce", "Flip", "Rotate", "Elastic").forEach { anim ->
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            android.widget.Toast.makeText(ctx, "Image anim: $anim", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 5.dp, vertical = 3.dp)) {
+                            Text(anim, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -3504,6 +4063,8 @@ private fun ImagePanel(
 @Composable
 private fun TemplatePanel(project: VideoProject, onUpdateTemplate: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("IMAGE", "🖼️", NeonOrange)
+
         Text("ORIGINAL TEMPLATES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             val templates = listOf(
@@ -3898,6 +4459,8 @@ private fun CanvasPanel() {
     var canvasSubTab by remember { mutableStateOf("draw") }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("CANVAS", "🖌️", CyberCyan)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("CANVAS & DRAW", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
@@ -3983,6 +4546,8 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
     var selectedEasing by remember { mutableStateOf("linear") }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LiveAnimatedHeader("KEYFRAMES", "💎", NeonOrange)
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("KEYFRAMES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SignatureOrange)
             Box(Modifier.background(SignatureOrange.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
@@ -4088,6 +4653,498 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
                     android.widget.Toast.makeText(ctx, "Keyframe: $label", android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(5.dp), contentAlignment = Alignment.Center) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (id == "add") SignatureOrange else Color.White)
+                }
+            }
+        }
+    }
+}
+
+
+
+// Shared infinite pulse animation driver for in-editor premium panels
+@Composable
+private fun rememberPulse(): Float {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val pulse by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseVal"
+    )
+    return pulse
+}
+
+// v6.2.0: Reusable live animated header for all tool panels
+// User request: "All Demos Live Background"
+@Composable
+private fun LiveAnimatedHeader(title: String, icon: String, accentColor: Color = NeonOrange) {
+    val pulse = rememberPulse()
+    Box(
+        Modifier.fillMaxWidth().height(44.dp)
+            .background(Brush.horizontalGradient(listOf(accentColor.copy(0.15f), SignaturePurple.copy(0.12f))), RoundedCornerShape(10.dp))
+            .border(1.dp, accentColor.copy(0.35f), RoundedCornerShape(10.dp))
+    ) {
+        Canvas(Modifier.fillMaxSize().padding(3.dp)) {
+            val w = size.width
+            val h = size.height
+            val t = pulse
+            // Animated flowing wave background
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(0f, h * 0.7f)
+                for (x in 0..w.toInt() step 6) {
+                    val y = h * 0.7f + kotlin.math.sin((x / w.toFloat() * 6.28f * 2f + t * 3f).toDouble()).toFloat() * h * 0.2f
+                    lineTo(x.toFloat(), y)
+                }
+                lineTo(w, h)
+                lineTo(0f, h)
+                close()
+            }
+            drawPath(path, accentColor.copy(alpha = 0.1f))
+            // Floating particles
+            for (i in 0 until 6) {
+                val px = ((t * 0.3f + i * 0.18f) % 1f) * w
+                val py = h * (0.2f + (kotlin.math.sin((t * 2f + i).toDouble()).toFloat() * 0.15f + 0.15f))
+                val r = 2f + (kotlin.math.sin((t * 4f + i).toDouble()).toFloat() * 1f)
+                drawCircle(accentColor.copy(alpha = 0.5f), r, androidx.compose.ui.geometry.Offset(px, py))
+            }
+        }
+        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, fontSize = 14.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(title, fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White)
+        }
+    }
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+//  IN-EDITOR PREMIUM PANELS (AI Hub, Presets, Pro, Studio)
+//  v6.2.0: Converted from separate screens to in-editor 3D Glass slide-up panels
+//  User request: "isko separate screen na rakho jaise anim 3D Glass CARD mein
+//  usi screen per hain waise hi in sab ko rakho"
+// ════════════════════════════════════════════════════════════════════════════════
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("all") }
+    val pulse = rememberPulse()
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Header with live animated background
+        Box(
+            Modifier.fillMaxWidth().height(52.dp)
+                .background(Brush.horizontalGradient(listOf(SignatureOrange.copy(0.2f), SignaturePurple.copy(0.2f))), RoundedCornerShape(10.dp))
+                .border(1.dp, SignatureOrange.copy(0.4f), RoundedCornerShape(10.dp))
+        ) {
+            // Live animated neural network background
+            Canvas(Modifier.fillMaxSize().padding(4.dp)) {
+                val w = size.width
+                val h = size.height
+                val t = pulse.value
+                // Neural network nodes
+                val nodes = listOf(
+                    GeomOffset(w * 0.1f, h * 0.3f), GeomOffset(w * 0.25f, h * 0.7f),
+                    GeomOffset(w * 0.4f, h * 0.2f), GeomOffset(w * 0.55f, h * 0.6f),
+                    GeomOffset(w * 0.7f, h * 0.3f), GeomOffset(w * 0.85f, h * 0.7f),
+                    GeomOffset(w * 0.92f, h * 0.4f)
+                )
+                // Connections
+                for (i in nodes.indices) {
+                    for (j in (i + 1) until nodes.size) {
+                        val alpha = (kotlin.math.sin((t * 2f + i + j).toDouble()).toFloat() * 0.5f + 0.5f) * 0.3f
+                        drawLine(SignatureOrange.copy(alpha = alpha), nodes[i], nodes[j], strokeWidth = 1f)
+                    }
+                }
+                // Nodes
+                nodes.forEachIndexed { idx, node ->
+                    val r = 4f + (kotlin.math.sin((t * 3f + idx).toDouble()).toFloat() * 2f)
+                    drawCircle(SignatureOrange, r, node)
+                    drawCircle(Color.White.copy(0.5f), r * 0.5f, node)
+                }
+            }
+            Row(Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("🤖 AI HUB", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.background(SignatureOrange.copy(0.3f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    Text("50+ AI Tools", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+        }
+
+        // Search bar
+        OutlinedTextField(
+            value = searchQuery, onValueChange = { searchQuery = it },
+            placeholder = { Text("Search AI tools...", fontSize = 8.sp, color = Color.Gray) },
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SignatureOrange, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+            modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(8.dp),
+            leadingIcon = null, trailingIcon = null, singleLine = true
+        )
+
+        // Category filter
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("all" to "All", "ai" to "AI Features", "enhance" to "Enhance", "audio" to "Audio AI", "visual" to "Visual AI").forEach { (id, label) ->
+                val sel = selectedCategory == id
+                Box(Modifier.background(if (sel) SignatureOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedCategory = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignatureOrange else Color.White)
+                }
+            }
+        }
+
+        // AI features grid (40+ AI tools from PremiumFeatureCatalog)
+        val aiTools = listOf(
+            "✂️" to "AI Auto Cut" to "ai_auto_cut",
+            "✍️" to "AI Script Writer" to "ai_script_writer",
+            "📖" to "AI Story Gen" to "ai_story_gen",
+            "🧑‍💼" to "AI Avatar" to "ai_avatar",
+            "🧙" to "AI Character" to "ai_character",
+            "🗣️" to "AI Talking Photo" to "ai_talking_photo",
+            "🎤" to "AI Voice Gen" to "ai_voice_gen",
+            "🎭" to "AI Voice Clone" to "ai_voice_clone",
+            "🔄" to "AI Voice Changer" to "ai_voice_changer",
+            "🔇" to "AI Noise Removal" to "ai_noise_removal",
+            "🎵" to "AI Music Gen" to "ai_music_gen",
+            "🥁" to "AI Beat Detect" to "ai_beat_detect",
+            "💬" to "AI Auto Captions" to "ai_captions",
+            "📑" to "AI Subtitles" to "ai_subtitle_gen",
+            "🌍" to "AI Translation" to "ai_translate",
+            "👄" to "AI Lip Sync" to "ai_lip_sync",
+            "✨" to "AI Face Retouch" to "ai_face_retouch",
+            "🖼️" to "AI Enhance" to "ai_enhance",
+            "🔍" to "AI Upscale" to "ai_upscale",
+            "🛠️" to "AI Restore" to "ai_restore",
+            "🌟" to "AI Image Enhance" to "ai_image_enhance",
+            "🎨" to "AI Color Correct" to "ai_color_correct",
+            "🎯" to "AI Color Match" to "ai_color_match",
+            "🪄" to "AI Object Remove" to "ai_object_remove",
+            "🧹" to "AI BG Remove" to "ai_bg_remove",
+            "🌤️" to "AI Sky Replace" to "ai_sky_replace",
+            "💡" to "AI Relight" to "ai_relight",
+            "🎯" to "AI Motion Track" to "ai_motion_track",
+            "🤖" to "AI Smart Crop" to "ai_smart_crop",
+            "📐" to "AI Auto Reframe" to "ai_auto_reframe",
+            "🖼️" to "AI BG Blur" to "ai_bg_blur",
+            "🎭" to "AI Style Transfer" to "ai_style_transfer",
+            "✨" to "AI Glamour" to "ai_glamour",
+            "👁️" to "AI Eye Enhance" to "ai_eye_enhance",
+            "💄" to "AI Makeup" to "ai_makeup",
+            "🔄" to "AI Deinterlace" to "ai_deinterlace",
+            "📊" to "AI Stabilize" to "ai_stabilize",
+            "🎞️" to "AI Frame Interp" to "ai_frame_interp",
+            "🌈" to "AI HDR" to "ai_hdr",
+            "🎬" to "AI Cinematic" to "ai_cinematic",
+            "🔊" to "AI Audio Enhance" to "ai_audio_enhance",
+            "🎵" to "AI Music Match" to "ai_music_match",
+            "📝" to "AI Text Gen" to "ai_text_gen",
+            "🪄" to "AI Magic Edit" to "ai_magic_edit"
+        )
+
+        val filtered = aiTools.filter { tool ->
+            (searchQuery.isBlank() || tool.first.second.contains(searchQuery, ignoreCase = true)) &&
+            (selectedCategory == "all" || (selectedCategory == "ai" && tool.second.startsWith("ai_")))
+        }
+
+        Text("${filtered.size} AI TOOLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            filtered.forEach { (emojiName, id) ->
+                val (emoji, name) = emojiName
+                val sel = project.activeAiFeature == id
+                Box(Modifier.background(if (sel) SignatureOrange.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .border(if (sel) 1.dp else 0.dp, if (sel) SignatureOrange else Color.Transparent, RoundedCornerShape(6.dp))
+                    .clickable {
+                        onUpdateAiFeature(if (sel) "none" else id)
+                        android.widget.Toast.makeText(ctx, "AI: $name ${if (sel) "disabled" else "enabled"}", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(horizontal = 5.dp, vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(emoji, fontSize = 10.sp)
+                        Spacer(Modifier.width(2.dp))
+                        Text(name, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) SignatureOrange else Color.White, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PresetsPanel(project: VideoProject, onUpdateSocialPreset: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pulse = rememberPulse()
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Header with live animated background
+        Box(
+            Modifier.fillMaxWidth().height(52.dp)
+                .background(Brush.horizontalGradient(listOf(SignaturePurple.copy(0.2f), CyberCyan.copy(0.2f))), RoundedCornerShape(10.dp))
+                .border(1.dp, SignaturePurple.copy(0.4f), RoundedCornerShape(10.dp))
+        ) {
+            Canvas(Modifier.fillMaxSize().padding(4.dp)) {
+                val w = size.width
+                val h = size.height
+                val t = pulse.value
+                // Animated aspect ratio frames morphing
+                val ratios = listOf(0.3f, 0.45f, 0.6f, 0.75f, 0.9f)
+                ratios.forEachIndexed { idx, rx ->
+                    val frameW = w * rx
+                    val frameH = h * (0.3f + (kotlin.math.sin((t + idx).toDouble()).toFloat() * 0.2f + 0.2f))
+                    val fx = (w - frameW) / 2f
+                    val fy = (h - frameH) / 2f
+                    drawRoundRect(
+                        color = SignaturePurple.copy(alpha = 0.3f),
+                        topLeft = GeomOffset(fx, fy),
+                        size = GeomSize(frameW, frameH),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f)
+                    )
+                }
+            }
+            Row(Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("📱 SOCIAL PRESETS", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.background(SignaturePurple.copy(0.3f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    Text("1-Tap Export", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+        }
+
+        Text("EXPORT PRESETS FOR EVERY PLATFORM", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+
+        val presets = listOf(
+            "📱" to "Instagram Post" to "ig_post" to "1:1 · 1080×1080",
+            "📱" to "Instagram Story" to "ig_story" to "9:16 · 1080×1920",
+            "📱" to "Instagram Reel" to "ig_reel" to "9:16 · 1080×1920",
+            "🎵" to "TikTok" to "tiktok" to "9:16 · 1080×1920",
+            "📺" to "YouTube Short" to "yt_short" to "9:16 · 1080×1920",
+            "📺" to "YouTube Video" to "yt_video" to "16:9 · 1920×1080",
+            "📘" to "Facebook Post" to "fb_post" to "1:1 · 1080×1080",
+            "📘" to "Facebook Story" to "fb_story" to "9:16 · 1080×1920",
+            "💬" to "WhatsApp Status" to "wa_status" to "9:16 · 1080×1920",
+            "🐦" to "X / Twitter" to "twitter" to "16:9 · 1920×1080",
+            "📌" to "Pinterest" to "pinterest" to "2:3 · 1000×1500",
+            "💼" to "LinkedIn" to "linkedin" to "1.91:1 · 1200×627",
+            "🎬" to "Cinema 4K" to "cinema_4k" to "16:9 · 3840×2160",
+            "🎮" to "Gaming 8K" to "gaming_8k" to "16:9 · 7680×4320",
+            "📺" to "TV Broadcast" to "tv_broadcast" to "16:9 · 1920×1080",
+            "🖼️" to "Portrait" to "portrait" to "2:3 · 1080×1620",
+            "🖼️" to "Landscape" to "landscape" to "3:2 · 1620×1080",
+            "⬜" to "Square" to "square" to "1:1 · 1080×1080"
+        )
+
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            presets.forEach { (emojiName, idSpec) ->
+                val (emojiName2, id) = emojiName to idSpec.first
+                val (emoji, name) = emojiName2
+                val spec = idSpec.second
+                val sel = project.socialPreset == id
+                Box(Modifier.weight(1f).fillMaxWidth(0.48f)
+                    .background(if (sel) SignaturePurple.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
+                    .border(if (sel) 1.5.dp else 0.dp, if (sel) SignaturePurple else Color.Transparent, RoundedCornerShape(8.dp))
+                    .clickable {
+                        onUpdateSocialPreset(if (sel) "none" else id)
+                        android.widget.Toast.makeText(ctx, "Preset: $name\n$spec", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(6.dp)) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(emoji, fontSize = 16.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignaturePurple else Color.White, maxLines = 1)
+                        }
+                        Text(spec, fontSize = 5.sp, color = Color.Gray, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProPanel(project: VideoProject, onUpdateProTier: () -> Unit, onApplyLook: (String) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pulse = rememberPulse()
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Header with live animated gold shimmer background
+        Box(
+            Modifier.fillMaxWidth().height(52.dp)
+                .background(Brush.horizontalGradient(listOf(PremiumGold.copy(0.2f), SignatureOrange.copy(0.2f))), RoundedCornerShape(10.dp))
+                .border(1.dp, PremiumGold.copy(0.5f), RoundedCornerShape(10.dp))
+        ) {
+            Canvas(Modifier.fillMaxSize().padding(4.dp)) {
+                val w = size.width
+                val h = size.height
+                val t = pulse.value
+                // Animated gold shimmer streaks
+                for (i in 0 until 5) {
+                    val x = ((t * 0.5f + i * 0.2f) % 1f) * w
+                    drawLine(
+                        PremiumGold.copy(alpha = 0.4f),
+                        GeomOffset(x - 20f, 0f), GeomOffset(x + 20f, h),
+                        strokeWidth = 2f
+                    )
+                }
+                // Crown icon pulsing
+                val cx = w * 0.5f
+                val cy = h * 0.5f
+                val r = 8f + (kotlin.math.sin((t * 2f).toDouble()).toFloat() * 3f)
+                drawCircle(PremiumGold.copy(0.2f), r + 6f, GeomOffset(cx, cy))
+            }
+            Row(Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("👑 PRO TIER", fontSize = 12.sp, fontWeight = FontWeight.Black, color = PremiumGold)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.background(PremiumGold.copy(0.3f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    Text("Unlock All", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
+                }
+            }
+        }
+
+        // Pro features list
+        Text("PRO FEATURES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
+        val proFeatures = listOf(
+            "🚫 No Watermark" to "Remove PowerCut watermark from all exports",
+            "🎬 8K Export" to "Export up to 8K (7680×4320) resolution",
+            "💎 Premium Looks" to "50+ cinematic LUTs and color grades",
+            "🤖 AI Tools" to "All 45+ AI features unlocked",
+            "🎵 Royalty Music" to "Full royalty-free music library",
+            "📱 All Presets" to "18+ social media export presets",
+            "💎 4K HDR" to "HDR10+ export with wide gamut",
+            "∞ Unlimited Drafts" to "Save unlimited project drafts",
+            "⚡ Priority Export" to "Hardware-accelerated fast export",
+            "🎯 No Ads" to "Completely ad-free experience"
+        )
+        proFeatures.forEach { (title, desc) ->
+            Box(Modifier.fillMaxWidth().background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, PremiumGold.copy(0.15f), RoundedCornerShape(6.dp)).padding(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
+                    Spacer(Modifier.weight(1f))
+                    Text("✓", fontSize = 10.sp, fontWeight = FontWeight.Black, color = PremiumGold)
+                }
+                Spacer(Modifier.height(1.dp))
+            }
+        }
+
+        // Premium Looks (cinematic LUTs)
+        Text("PREMIUM LOOKS (50+)", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        val looks = listOf("Cinematic", "Teal Orange", "Vintage Film", "Golden Hour", "Noir B&W", "Cyberpunk", "Sunset Glow", "Faded", "Vivid Pop", "Matte", "Warm Retro", "Cool Blue", "Dreamy", "High Contrast", "Soft Pastel", "Film Grain", "Anamorphic", "Bleach Bypass", "Cross Process", "Sepia Warm")
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            looks.forEach { look ->
+                val sel = project.activePremiumLook == look.lowercase().replace(" ", "_")
+                Box(Modifier.background(if (sel) PremiumGold.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                    .border(if (sel) 1.dp else 0.dp, if (sel) PremiumGold else Color.Transparent, RoundedCornerShape(6.dp))
+                    .clickable {
+                        onApplyLook(if (sel) "none" else look.lowercase().replace(" ", "_"))
+                        android.widget.Toast.makeText(ctx, "Look: $look", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(look, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) PremiumGold else Color.White)
+                }
+            }
+        }
+
+        // Upgrade button
+        Box(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(PremiumGold, SignatureOrange)), RoundedCornerShape(8.dp)).clickable {
+            onUpdateProTier()
+            android.widget.Toast.makeText(ctx, "Pro Tier activated! All features unlocked.", android.widget.Toast.LENGTH_LONG).show()
+        }.padding(10.dp), contentAlignment = Alignment.Center) {
+            Text("🚀 UPGRADE TO PRO", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.Black)
+        }
+    }
+}
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StudioPanel(project: VideoProject, onPremiumStudio: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val pulse = rememberPulse()
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Header with live animated aurora background
+        Box(
+            Modifier.fillMaxWidth().height(52.dp)
+                .background(Brush.horizontalGradient(listOf(SignatureOrange.copy(0.15f), SignaturePurple.copy(0.15f), CyberCyan.copy(0.15f))), RoundedCornerShape(10.dp))
+                .border(1.dp, CyberCyan.copy(0.4f), RoundedCornerShape(10.dp))
+        ) {
+            Canvas(Modifier.fillMaxSize().padding(4.dp)) {
+                val w = size.width
+                val h = size.height
+                val t = pulse.value
+                // Aurora waves
+                for (i in 0 until 3) {
+                    val phase = t + i * 1.5f
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(0f, h * 0.5f)
+                        for (x in 0..w.toInt() step 8) {
+                            val y = h * 0.5f + kotlin.math.sin((x / w.toFloat() * 6.28f + phase).toDouble()).toFloat() * h * 0.3f
+                            lineTo(x.toFloat(), y)
+                        }
+                    }
+                    val colors = listOf(SignatureOrange, SignaturePurple, CyberCyan)
+                    drawPath(path, colors[i].copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                }
+            }
+            Row(Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("✨ STUDIO", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.background(CyberCyan.copy(0.3f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    Text("Premium FX", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                }
+            }
+        }
+
+        Text("PREMIUM STUDIO EFFECTS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+
+        // Studio effect categories
+        val studioEffects = listOf(
+            "🎬 Cinematic Bars" to "cinematic_bars",
+            "📽️ Film Burn" to "film_burn",
+            "📼 VHS Effect" to "vhs",
+            "📡 Glitch TV" to "glitch_tv",
+            "🌈 RGB Split" to "rgb_split",
+            "🔮 Prism" to "prism",
+            "⚡ Lightning" to "lightning",
+            "🎆 Fireworks" to "fireworks",
+            "❄️ Frozen" to "frozen",
+            "🔥 Fire Effect" to "fire_effect",
+            "💧 Water Ripple" to "water_ripple",
+            "🌌 Starfield" to "starfield",
+            "🫧 Bokeh" to "bokeh",
+            "📐 Light Leak" to "light_leak",
+            "🎞️ Film Scratch" to "film_scratch",
+            "🌫️ Dream Blur" to "dream_blur",
+            "🌑 Vignette Pro" to "vignette_pro",
+            "✨ Sparkle" to "sparkle",
+            "🎯 Lens Flare" to "lens_flare",
+            "⭐ Star Burst" to "star_burst"
+        )
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            studioEffects.forEach { (label, id) ->
+                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, CyberCyan.copy(0.2f), RoundedCornerShape(6.dp))
+                    .clickable {
+                        android.widget.Toast.makeText(ctx, "Studio FX: $label", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+        }
+
+        // Advanced studio controls
+        Text("ADVANCED CONTROLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        val advancedTools = listOf("🎚️ Audio Mixer", "🎨 Color Grader", "📐 Composition Guide", "🔌 Plugin Manager", "📊 Analytics", "🎥 Multi-Cam", "📱 Screen Record", "🖥️ Desktop Sync")
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            advancedTools.forEach { tool ->
+                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, CyberCyan.copy(0.2f), RoundedCornerShape(8.dp)).clickable {
+                    onPremiumStudio()
+                    android.widget.Toast.makeText(ctx, "Studio: $tool", android.widget.Toast.LENGTH_SHORT).show()
+                }.padding(8.dp)) {
+                    Text(tool, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
