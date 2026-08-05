@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PowerCut Pro 2027 8K palette -->
+    <color name="pc_bg">#FF0F0F1A</color>
+    <color name="pc_bg_elev">#FF161623</color>
+    <color name="pc_orange">#FFFF5A3C</color>
+    <color name="pc_purple">#FF9D4EDD</color>
+    <color name="pc_text_primary">#FFF5F5FA</color>
+    <color name="pc_text_secondary">#FFA0A0B8</color>
+    <color name="pc_glass_stroke">#33FFFFFF</color>
+    <color name="pc_track_video">#FFC7513B</color>
+    <color name="pc_track_audio">#FF3A7BD5</color>
+    <color name="pc_track_subtitle">#FF9D4EDD</color>
+    <color name="pc_track_sticker">#FFF4C430</color>
+    <color name="pc_success">#FF22C55E</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+</resources>

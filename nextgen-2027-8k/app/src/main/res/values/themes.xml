@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PowerCut" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/pc_bg</item>
+        <item name="android:statusBarColor">@color/pc_bg</item>
+        <item name="android:navigationBarColor">@color/pc_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:colorEdgeEffect">@color/pc_purple</item>
+        <item name="android:windowActivityTransitions">true</item>
+        <item name="android:windowContentTransitions">true</item>
+    </style>
+</resources>
