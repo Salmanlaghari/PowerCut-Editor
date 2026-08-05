@@ -120,7 +120,7 @@ fun Mp3ToMp4DemoPreview(modifier: Modifier = Modifier) {
         val startX = w * 0.08f
         val spacing = w * 0.06f
         for (i in 0 until barCount) {
-            val barH = h * (0.2f + 0.5f * kotlin.math.sin((i + pulse * 3f) * 0.8f).absoluteValue)
+            val barH = h * (0.2f + 0.5f * kotlin.math.abs(kotlin.math.sin((i + pulse * 3f) * 0.8f)))
             drawRect(
                 color = AccentCyan.copy(alpha = waveAlpha),
                 topLeft = Offset(startX + i * spacing, (h - barH) / 2f),
@@ -538,7 +538,7 @@ fun AiHubDemoPreview(modifier: Modifier = Modifier) {
         }
         // Draw nodes (pulsing)
         nodes.forEachIndexed { i, node ->
-            val nodePulse = (kotlin.math.sin((i + pulse * 3f) * 1.5f).absoluteValue + 1f) / 2f
+            val nodePulse = (kotlin.math.abs(kotlin.math.sin((i + pulse * 3f) * 1.5f)) + 1f) / 2f
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(SignatureOrange, SignaturePurple),
@@ -801,7 +801,7 @@ fun TransitionDemoPreview(transitionId: String, modifier: Modifier = Modifier) {
         drawRect(leftCol, Offset.Zero, size)
         when {
             p.contains("fade") || p == "none" -> {
-                drawRect(rightCol.copy(alpha = pulse * 0.85f), Offset.Zero, size)
+                drawRect(rightCol, Offset.Zero, size, alpha = pulse * 0.85f)
             }
             p.contains("zoom") -> {
                 val sz = (0.2f + pulse * 0.8f)
@@ -821,11 +821,11 @@ fun TransitionDemoPreview(transitionId: String, modifier: Modifier = Modifier) {
                 drawCircle(rightCol, (0.1f + pulse * 0.9f) * w, Offset(w * 0.5f, h * 0.5f))
             }
             p.contains("blur") -> {
-                drawRect(rightCol.copy(alpha = pulse), Offset.Zero, size)
+                drawRect(rightCol, Offset.Zero, size, alpha = pulse)
                 for (i in 0..8) drawCircle(Color.White.copy(alpha = (1f - pulse) * 0.3f), w * 0.04f, Offset(w * (i / 8f), h * 0.5f))
             }
             p.contains("glitch") || p.contains("rgb") || p.contains("tv") || p.contains("vhs") -> {
-                drawRect(rightCol.copy(alpha = pulse), Offset.Zero, size)
+                drawRect(rightCol, Offset.Zero, size, alpha = pulse)
                 drawRect(SignatureOrange, Offset(w * 0.2f * (1 - pulse), h * 0.3f), Size(w * 0.4f, h * 0.08f))
                 drawRect(AccentCyan, Offset(w * 0.3f * pulse, h * 0.6f), Size(w * 0.5f, h * 0.08f))
             }
@@ -858,7 +858,7 @@ fun TransitionDemoPreview(transitionId: String, modifier: Modifier = Modifier) {
                 drawPath(path, rightCol)
             }
             else -> {
-                drawRect(rightCol.copy(alpha = pulse), Offset(w * pulse, 0f), Size(w, h))
+                drawRect(rightCol, Offset(w * pulse, 0f), Size(w, h), alpha = pulse)
             }
         }
     }
@@ -876,7 +876,7 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
         val baseAlpha = 0.9f
         when {
             p.contains("fade") || p == "none" -> {
-                drawRoundRect(textCol.copy(alpha = baseAlpha * pulse), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f), alpha = baseAlpha * pulse)
             }
             p.contains("typewriter") || p.contains("marquee") || p.contains("scroll") -> {
                 val cw = w * 0.6f * pulse
@@ -908,7 +908,7 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
                 drawRect(AccentCyan, Offset(w * 0.2f - ox, h * 0.5f), Size(w * 0.6f, h * 0.08f))
             }
             p.contains("pulse") || p.contains("blink") || p.contains("neon") || p.contains("glow") -> {
-                drawRoundRect(textCol.copy(alpha = 0.3f + pulse * 0.7f), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f), alpha = 0.3f + pulse * 0.7f)
                 drawRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), style = Stroke(w * 0.01f * (1f + pulse)))
             }
             p.contains("wave") -> {
@@ -926,7 +926,7 @@ fun AnimationDemoPreview(animId: String, modifier: Modifier = Modifier) {
                 drawRoundRect(Brush.horizontalGradient(listOf(c.copy(0.5f), Color.White, c.copy(0.5f))), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
             }
             else -> {
-                drawRoundRect(textCol.copy(alpha = baseAlpha * pulse), Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f))
+                drawRoundRect(textCol, Offset(w * 0.2f, h * 0.4f), Size(w * 0.6f, h * 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.02f), alpha = baseAlpha * pulse)
             }
         }
     }

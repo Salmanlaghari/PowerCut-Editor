@@ -38,6 +38,7 @@ import com.powercut.editor.domain.premium.PremiumFeature
 import com.powercut.editor.domain.premium.PremiumFeatureCatalog
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.theme.AccentPrimary
+import com.powercut.editor.ui.theme.SignatureOrange
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.CyberCyan
 import com.powercut.editor.ui.theme.DarkBgStart
