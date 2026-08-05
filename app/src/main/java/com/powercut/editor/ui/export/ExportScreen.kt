@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -114,22 +118,24 @@ fun ExportScreen(
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // VIDEO PREVIEW
+                    // VIDEO PREVIEW — PRIORITY 2 FIX: removed blue placeholder.
+                    // Now uses a dark gradient (#1A1A2E → #12121F) with a centered
+                    // play icon and the project title in white. No blue anywhere.
                     Box(
-                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp))
-                            .border(1.dp, Color.White.copy(0.05f), RoundedCornerShape(16.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFF0D47A1), Color(0xFF1565C0)))),
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(0.08f), RoundedCornerShape(24.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF1A1A2E), Color(0xFF12121F)))),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
-                            modifier = Modifier.size(48.dp).background(Color.White.copy(0.15f), CircleShape)
-                                .border(1.dp, Color.White.copy(0.25f), CircleShape),
+                            modifier = Modifier.size(56.dp).background(Color.White.copy(0.1f), CircleShape)
+                                .border(1.dp, Color.White.copy(0.2f), CircleShape),
                             contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(20.dp)) }
-                        Box(modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+                        ) { Icon(Icons.Default.PlayArrow, "Play", tint = Color.White.copy(0.9f), modifier = Modifier.size(24.dp)) }
+                        Box(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
                             Column {
-                                Text("My Project", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                Text("Duration: 00:00:30", fontSize = 9.sp, color = Color.LightGray)
+                                Text("My Project", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Duration: 00:00:30", fontSize = 10.sp, color = Color.LightGray)
                             }
                         }
                     }
@@ -293,109 +299,111 @@ fun ExportScreen(
             }
 
             is Resource.Loading -> {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBackToEditor) {
-                        Icon(Icons.Default.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text("Export Video", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("Processing high-speed output pipeline...", fontSize = 11.sp, color = Color.Gray)
-                    }
-                }
+                // PRIORITY 3 FIX: Simplified progress screen.
+                // Only: circular progress (120dp orange→purple gradient), big %
+                // text (white 36sp), thin linear bar (gradient), "Exporting
+                // video..." (gray 14sp), Cancel button. All stage text, step
+                // dots, and milestones have been removed.
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp)) {
-                        // v5.2.0: Live export progress with percentage (10%, 20%, 100%)
-                        // User request: "Live 10% 20% 100% dekhao video process export"
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    ) {
                         val progressVal = exportProgress.coerceIn(0, 100)
                         val progressFraction = progressVal / 100f
 
-                        // Stage label based on progress
-                        val stageLabel = when {
-                            progressVal < 10 -> "Initializing export..."
-                            progressVal < 30 -> "Decoding video frames..."
-                            progressVal < 50 -> "Applying filters & effects..."
-                            progressVal < 70 -> "Encoding video stream..."
-                            progressVal < 90 -> "Mixing audio & finalizing..."
-                            progressVal < 100 -> "Writing output file..."
-                            else -> "Export complete!"
-                        }
-
-                        // Animated circular progress with percentage
+                        // (a) Large centered circular progress indicator (120dp)
+                        //     with orange→purple gradient stroke drawn via Canvas.
                         Box(contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(
-                                progress = { progressFraction },
-                                modifier = Modifier.size(96.dp),
-                                color = NeonOrange,
-                                strokeWidth = 8.dp,
-                                trackColor = Color.White.copy(0.08f)
-                            )
+                            // Track (background ring)
+                            Canvas(modifier = Modifier.size(120.dp)) {
+                                val strokeWidth = 6.dp.toPx()
+                                val diameter = size.minDimension - strokeWidth
+                                val topLeft = Offset(
+                                    (size.width - diameter) / 2f,
+                                    (size.height - diameter) / 2f
+                                )
+                                val arcSize = Size(diameter, diameter)
+                                // Background track
+                                drawArc(
+                                    color = Color.White.copy(0.06f),
+                                    startAngle = 0f,
+                                    sweepAngle = 360f,
+                                    useCenter = false,
+                                    topLeft = topLeft,
+                                    size = arcSize,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                                // Progress arc with gradient (orange→purple)
+                                val brush = Brush.sweepGradient(
+                                    listOf(NeonOrange, Color(0xFF9C27B0), NeonOrange)
+                                )
+                                drawArc(
+                                    brush = brush,
+                                    startAngle = -90f,
+                                    sweepAngle = 360f * progressFraction,
+                                    useCenter = false,
+                                    topLeft = topLeft,
+                                    size = arcSize,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+                            // (b) Big bold percentage text in the center (white 36sp)
                             Text(
                                 text = "$progressVal%",
-                                fontSize = 24.sp,
+                                fontSize = 36.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color.White
                             )
                         }
 
-                        Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(28.dp))
 
-                        // Linear progress bar
+                        // (c) Thin linear progress bar below (same gradient)
                         Box(
-                            modifier = Modifier.fillMaxWidth().height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.White.copy(0.08f))
+                            modifier = Modifier.fillMaxWidth().height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(0.06f))
                         ) {
                             Box(
-                                modifier = Modifier.fillMaxWidth(progressFraction).height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Brush.horizontalGradient(listOf(NeonOrange, CyberCyan)))
+                                modifier = Modifier.fillMaxWidth(progressFraction).height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Brush.horizontalGradient(listOf(NeonOrange, Color(0xFF9C27B0))))
                             )
                         }
 
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(20.dp))
 
-                        // Stage label
+                        // (d) One line "Exporting video..." (gray 14sp)
                         Text(
-                            text = stageLabel,
+                            text = "Exporting video...",
                             fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CyberCyan,
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            text = LanguageHelper.getString(R.string.video_exporting, language),
-                            fontSize = 11.sp,
                             color = Color.Gray,
                             textAlign = TextAlign.Center
                         )
+                    }
+                }
 
-                        // Progress milestones indicator
-                        Spacer(Modifier.height(20.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            listOf(0, 25, 50, 75, 100).forEach { milestone ->
-                                val reached = progressVal >= milestone
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier = Modifier.size(if (reached) 10.dp else 8.dp)
-                                            .clip(CircleShape)
-                                            .background(if (reached) CyberCyan else Color.White.copy(0.15f))
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = "$milestone%",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (reached) CyberCyan else Color.Gray
-                                    )
-                                }
-                            }
-                        }
+                // (e) Cancel button at the bottom
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Color(0xFF0F0F14))
+                        .border(1.dp, Color.White.copy(0.05f))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                            .background(Color.DarkGray, RoundedCornerShape(14.dp))
+                            .tactileClick { onBackToEditor() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "CANCEL",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
                     }
                 }
             }

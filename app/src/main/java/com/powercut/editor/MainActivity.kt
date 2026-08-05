@@ -52,9 +52,11 @@ import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
 import com.powercut.editor.ui.home.HomeScreen
 import com.powercut.editor.ui.premium.AiFeatureHubScreen
+import com.powercut.editor.ui.premium.EffectsScreen
 import com.powercut.editor.ui.premium.PremiumEntryPoint
 import com.powercut.editor.ui.premium.ProTierScreen
 import com.powercut.editor.ui.premium.SocialPresetScreen
+import com.powercut.editor.ui.premium.StickersScreen
 import com.powercut.editor.ui.theme.PowerCutTheme
 import com.powercut.editor.ui.theme.AccentPrimary
 import com.powercut.editor.ui.theme.AccentSecondary
@@ -122,6 +124,9 @@ class MainActivity : ComponentActivity() {
                         var showSocialPresets by remember { mutableStateOf(false) }
                         var showProTier by remember { mutableStateOf(false) }
                         var showPremiumStudio by remember { mutableStateOf(false) }
+                        // v6.0.0 Effects & Stickers gallery overlay state
+                        var showEffectsGallery by remember { mutableStateOf(false) }
+                        var showStickersGallery by remember { mutableStateOf(false) }
 
                         val settingsRes by viewModel.selectedResolution.collectAsState()
                         val settingsFps by viewModel.selectedFps.collectAsState()
@@ -269,12 +274,7 @@ class MainActivity : ComponentActivity() {
                                     // actually sees progress / success / error when MP3->MP4, Slideshow,
                                     // Compress or AI Edit runs.
                                     quickToolState = exportState,
-                                    quickToolProgress = exportProgress,
-                                    // v6.0.0 Premium launcher — top bar buttons rendered inside HomeScreen
-                                    onAiHub = { showAiHub = true },
-                                    onSocialPresets = { showSocialPresets = true },
-                                    onProTier = { showProTier = true },
-                                    onPremiumStudio = { showPremiumStudio = true }
+                                    quickToolProgress = exportProgress
                                 )
                             }
                             "editor" -> {
@@ -425,7 +425,15 @@ class MainActivity : ComponentActivity() {
                                         onToggleAudioDucking = { viewModel.toggleAudioDucking() },
                                         onUpdateBorderStyle = { viewModel.updateBorderStyle(it) },
                                         onUpdateVignetteStyle = { viewModel.updateVignetteStyle(it) },
-                                        onUpdatePremiumLook = { viewModel.updatePremiumLook(it) }
+                                        onUpdatePremiumLook = { viewModel.updatePremiumLook(it) },
+                                        // v6.0.0 Premium launcher — top action row buttons (AI Hub, Presets, Pro, Studio)
+                                        onAiHub = { showAiHub = true },
+                                        onSocialPresets = { showSocialPresets = true },
+                                        onProTier = { showProTier = true },
+                                        onPremiumStudio = { showPremiumStudio = true },
+                                        // v6.0.0 Effects & Stickers galleries
+                                        onOpenEffects = { showEffectsGallery = true },
+                                        onOpenStickers = { showStickersGallery = true }
                                     )
                                 } ?: viewModel.resetToHome()
                             }
@@ -482,6 +490,21 @@ class MainActivity : ComponentActivity() {
                         if (showPremiumStudio) {
                             PremiumEntryPoint(
                                 onExit = { showPremiumStudio = false }
+                            )
+                        }
+                        // v6.0.0 Effects & Stickers galleries — 3D glass browsers
+                        // that drive REAL project state (selectedEffect / stickerType)
+                        // into PowerCutDAG at export.
+                        if (showEffectsGallery) {
+                            EffectsScreen(
+                                viewModel = viewModel,
+                                onBack = { showEffectsGallery = false }
+                            )
+                        }
+                        if (showStickersGallery) {
+                            StickersScreen(
+                                viewModel = viewModel,
+                                onBack = { showStickersGallery = false }
                             )
                         }
                     }
