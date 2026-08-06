@@ -15,8 +15,8 @@ android {
         applicationId = "com.powercut.editor"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "6.1.0"
+        versionCode = 17
+        versionName = "6.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

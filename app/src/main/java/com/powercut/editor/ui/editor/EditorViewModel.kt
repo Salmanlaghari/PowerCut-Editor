@@ -217,6 +217,11 @@ class EditorViewModel @Inject constructor(
         json.put("speedCurve", project.speedCurve)
         json.put("activeTextOverlay", project.activeTextOverlay ?: "")
         json.put("textAnimationType", project.textAnimationType)
+        json.put("textStyleId", project.textStyleId)
+        json.put("textPositionX", project.textPositionX)
+        json.put("textPositionY", project.textPositionY)
+        json.put("textColorHex", project.textColorHex)
+        json.put("textFontSize", project.textFontSize)
         json.put("stickerType", project.stickerType)
         json.put("activeTemplateId", project.activeTemplateId)
         json.put("visualizerStyle", project.visualizerStyle)
@@ -306,6 +311,11 @@ class EditorViewModel @Inject constructor(
             speedCurve = json.optString("speedCurve", "constant"),
             activeTextOverlay = json.optString("activeTextOverlay", "").let { if (it.isEmpty()) null else it },
             textAnimationType = json.optString("textAnimationType", "fade"),
+            textStyleId = json.optString("textStyleId", "classic"),
+            textPositionX = json.optDouble("textPositionX", 0.5).toFloat(),
+            textPositionY = json.optDouble("textPositionY", 0.85).toFloat(),
+            textColorHex = json.optString("textColorHex", "#FFFFFF"),
+            textFontSize = json.optDouble("textFontSize", 24.0).toFloat(),
             stickerType = json.optString("stickerType", "none"),
             activeTemplateId = json.optString("activeTemplateId", "none"),
             visualizerStyle = json.optString("visualizerStyle", "none"),
@@ -712,6 +722,36 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun updateTextStyle(styleId: String) {
+        projectRepository.updateProject { project ->
+            project.copy(textStyleId = styleId)
+        }
+    }
+
+    fun updateTextPositionX(x: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(textPositionX = x.coerceIn(0f, 1f))
+        }
+    }
+
+    fun updateTextPositionY(y: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(textPositionY = y.coerceIn(0f, 1f))
+        }
+    }
+
+    fun updateTextColor(hex: String) {
+        projectRepository.updateProject { project ->
+            project.copy(textColorHex = hex)
+        }
+    }
+
+    fun updateTextFontSize(size: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(textFontSize = size.coerceIn(8f, 120f))
+        }
+    }
+
     fun updateStickerType(sticker: String) {
         projectRepository.updateProject { project ->
             project.copy(stickerType = sticker)
@@ -764,6 +804,24 @@ class EditorViewModel @Inject constructor(
     fun updateImageOverlayScale(scale: Float) {
         projectRepository.updateProject { project ->
             project.copy(imageOverlayScale = scale)
+        }
+    }
+
+    fun updateImageOverlayX(x: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayX = x.coerceIn(0f, 1f))
+        }
+    }
+
+    fun updateImageOverlayY(y: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayY = y.coerceIn(0f, 1f))
+        }
+    }
+
+    fun updateImageOverlayCrop(crop: String) {
+        projectRepository.updateProject { project ->
+            project.copy(cropPreset = crop)
         }
     }
 

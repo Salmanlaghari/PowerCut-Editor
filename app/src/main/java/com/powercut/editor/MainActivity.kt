@@ -345,6 +345,21 @@ class MainActivity : ComponentActivity() {
                                         onUpdateTextAnimation = { anim ->
                                             viewModel.updateTextAnimation(anim)
                                         },
+                                        onUpdateTextStyle = { style ->
+                                            viewModel.updateTextStyle(style)
+                                        },
+                                        onUpdateTextPositionX = { x ->
+                                            viewModel.updateTextPositionX(x)
+                                        },
+                                        onUpdateTextPositionY = { y ->
+                                            viewModel.updateTextPositionY(y)
+                                        },
+                                        onUpdateTextColor = { hex ->
+                                            viewModel.updateTextColor(hex)
+                                        },
+                                        onUpdateTextFontSize = { size ->
+                                            viewModel.updateTextFontSize(size)
+                                        },
                                         onUpdateStickerType = { sticker ->
                                             viewModel.updateStickerType(sticker)
                                         },
@@ -374,6 +389,15 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onUpdateImageOverlayScale = { scale ->
                                             viewModel.updateImageOverlayScale(scale)
+                                        },
+                                        onUpdateImageOverlayX = { x ->
+                                            viewModel.updateImageOverlayX(x)
+                                        },
+                                        onUpdateImageOverlayY = { y ->
+                                            viewModel.updateImageOverlayY(y)
+                                        },
+                                        onUpdateImageOverlayCrop = { crop ->
+                                            viewModel.updateImageOverlayCrop(crop)
                                         },
                                         onUpdateSelectedEffect = { effect ->
                                             viewModel.updateSelectedEffect(effect)
@@ -429,6 +453,9 @@ class MainActivity : ComponentActivity() {
                                         onUpdateBorderStyle = { viewModel.updateBorderStyle(it) },
                                         onUpdateVignetteStyle = { viewModel.updateVignetteStyle(it) },
                                         onUpdatePremiumLook = { viewModel.updatePremiumLook(it) },
+                                        // v6.2.0 In-editor premium panels
+                                        onUpdateAiFeature = { viewModel.updateAiFeature(it) },
+                                        onUpdateSocialPreset = { viewModel.updateSocialPreset(it) },
                                         // v6.0.0 Premium launcher — top action row buttons (AI Hub, Presets, Pro, Studio)
                                         onAiHub = { showAiHub = true },
                                         onSocialPresets = { showSocialPresets = true },
