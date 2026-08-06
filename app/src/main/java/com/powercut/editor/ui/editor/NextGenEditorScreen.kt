@@ -1077,7 +1077,8 @@ fun NextGenEditorScreen(
                 onUpdatePremiumLook = onUpdatePremiumLook,
                 onUpdateKeyframeAnim = onUpdateKeyframeAnim,
                 onUpdateAiFeature = onUpdateAiFeature,
-                onUpdateSocialPreset = onUpdateSocialPreset
+                onUpdateSocialPreset = onUpdateSocialPreset,
+                onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic
             )
         }
 
@@ -1871,7 +1872,8 @@ private fun CapCutToolPanel(
     onUpdateAiFeature: (String) -> Unit = {},
     onUpdateSocialPreset: (String) -> Unit = {},
     onProTier: () -> Unit = {},
-    onPremiumStudio: () -> Unit = {}
+    onPremiumStudio: () -> Unit = {},
+    onGenerateRoyaltyFreeMusic: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
