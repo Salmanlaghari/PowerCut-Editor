@@ -19,6 +19,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset as GeomOffset
+import androidx.compose.ui.layout.BiasAlignment
 import androidx.compose.ui.geometry.Size as GeomSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -677,6 +678,28 @@ fun NextGenEditorScreen(
                 }
 
                 // Text overlay -- v5.0.0 LIVE PREVIEW ANIMATION
+                // v6.3.0 — Centered "Enter your text here" placeholder when text
+                // tool is active but no text has been entered yet. This gives the
+                // user a clear visual cue to start typing.
+                if ((project.activeTextOverlay == null || project.activeTextOverlay!!.isBlank()) && selectedTool == 5 && layerTextVisible) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                            .border(1.5.dp, NeonOrange.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 24.dp, vertical = 14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("✏️", fontSize = 16.sp)
+                            Text(
+                                "Enter your text here",
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
                 // Renders the text with a real Compose animation matching the
                 // selected textAnimationType so the user sees the effect live
                 // (the same effect is burned in at export via FFmpeg drawtext).
@@ -731,7 +754,12 @@ fun NextGenEditorScreen(
                     val showCursor = animType == "typewriter" && (t2 < 0.5f)
 
                     Box(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
+                        modifier = Modifier.align(
+                                BiasAlignment(
+                                    horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
+                                    verticalBias = (project.textPositionY * 2f - 1f).coerceIn(-1f, 1f)
+                                )
+                            )
                             .graphicsLayer {
                                 this.alpha = alpha
                                 this.scaleX = scale
@@ -804,10 +832,46 @@ fun NextGenEditorScreen(
                 ) {
                     Text("PREVIEW", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f), letterSpacing = 1.sp)
                 }
+
+                // v6.3.0 — ACTIVE EFFECTS INDICATOR: Shows what effects/filters are
+                // applied and will be burned in at export. This makes it clear to the
+                // user that their selections are REAL (applied via FFmpeg at export).
+                val hasEffect = project.selectedEffect != "none"
+                val hasFilter = project.selectedFilter != "none" && project.selectedFilter.lowercase() != "none"
+                val hasLook = project.activePremiumLook.isNotEmpty() && project.activePremiumLook != "none"
+                if (hasEffect || hasFilter || hasLook) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(10.dp)
+                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                            .border(1.dp, CyberCyan.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(Modifier.size(5.dp).background(Color(0xFF34D399), CircleShape))
+                            Text("✓ FX", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34D399))
+                            if (hasEffect) {
+                                Text(project.selectedEffect.replace("_", " ").replaceFirstChar { it.uppercase() }, fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1)
+                            }
+                            if (hasFilter) {
+                                Text("+ ${project.selectedFilter.replace("_", " ").replaceFirstChar { it.uppercase() }}", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Medium, maxLines = 1)
+                            }
+                            if (hasLook) {
+                                Text("+ ${project.activePremiumLook.replaceFirstChar { it.uppercase() }}", fontSize = 7.sp, color = PremiumGold, fontWeight = FontWeight.Medium, maxLines = 1)
+                            }
+                        }
+                    }
+                }
                 // v5.2.0 — Tap-to-edit overlay on text
                 if (project.activeTextOverlay != null && layerTextVisible) {
                     Box(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
+                        modifier = Modifier.align(
+                            BiasAlignment(
+                                horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
+                                verticalBias = ((project.textPositionY - 0.15f) * 2f - 1f).coerceIn(-1f, 1f)
+                            )
+                        )
                             .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
                             .border(1.dp, CyberCyan.copy(0.5f), RoundedCornerShape(6.dp))
                             .clickable { selectedTool = 6 }
@@ -1024,14 +1088,9 @@ fun NextGenEditorScreen(
             onProTier = onProTier,
             onPremiumStudio = onPremiumStudio,
             onToolSelected = { idx ->
-                // v6.0.0 — Effects (idx 7) & Stickers (idx 8) open full-screen galleries
-                when (idx) {
-                    7 -> onOpenEffects()
-                    8 -> onOpenStickers()
-                    else -> {
-                        if (selectedTool == idx) { isPanelExpanded = !isPanelExpanded } else { selectedTool = idx; isPanelExpanded = true }
-                    }
-                }
+                // v6.3.0 — ALL tools (including Effects & Stickers) use in-editor panels.
+                // No more separate full-screen gallery screens — everything is inline.
+                if (selectedTool == idx) { isPanelExpanded = !isPanelExpanded } else { selectedTool = idx; isPanelExpanded = true }
             }
         )
     }
@@ -1824,7 +1883,7 @@ private fun CapCutToolPanel(
                 1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
-                4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) })
+                4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) }, onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic)
                 5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation, onUpdateTextStyle, onUpdateTextPositionX, onUpdateTextPositionY, onUpdateTextColor, onUpdateTextFontSize)
                 6 -> FiltersPanel(project, onUpdateFilter)
                 7 -> EffectsPanel(project, onUpdateSelectedEffect, onUpdateFilter)
@@ -2396,7 +2455,8 @@ private fun AudioPanel(
     onToggleBeatSync: () -> Unit,
     musicPicker: androidx.activity.result.ActivityResultLauncher<String>,
     onImportAudio: (String) -> Unit = {},
-    onClearAudio: () -> Unit = {}
+    onClearAudio: () -> Unit = {},
+    onGenerateRoyaltyFreeMusic: (String) -> Unit = {}
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var audioSubTab by remember { mutableStateOf("mixer") }
@@ -2547,7 +2607,8 @@ private fun AudioPanel(
                                 .background(if (sel) PremiumGold.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
                                 .border(if (sel) 1.dp else 0.dp, PremiumGold, RoundedCornerShape(6.dp))
                                 .clickable {
-                                    android.widget.Toast.makeText(ctx, "🎵 $label — Tap Import tab to load from device, or this will use built-in track", android.widget.Toast.LENGTH_LONG).show()
+                                    android.widget.Toast.makeText(ctx, "♻️ Generating $label — royalty-free audio being created...", android.widget.Toast.LENGTH_SHORT).show()
+                                    onGenerateRoyaltyFreeMusic(id)
                                 }
                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                         ) {
@@ -3122,7 +3183,7 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon", "magic" to "Magic").forEach { (id, label) ->
+            listOf("all" to "All", "vfx" to "VFX", "color" to "Color", "motion" to "Motion", "retro" to "Retro", "neon" to "Neon", "magic" to "Magic", "artistic" to "Art").forEach { (id, label) ->
                 val sel = effectCategory == id
                 Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { effectCategory = id }.padding(horizontal = 6.dp, vertical = 3.dp)) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
@@ -3192,6 +3253,14 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
                 EffectItem("Disco", "disco", "rainbow", "neon"),
                 EffectItem("Concert", "concert", "none", "neon"),
                 EffectItem("Party", "party", "rainbow", "neon"),
+                // ── v6.3.0 ANIME & ARTISTIC EFFECTS (user-requested, real FFmpeg) ──
+                EffectItem("🌸 Anime", "anime", "none", "artistic"),
+                EffectItem("🎨 Ghibli", "ghibli", "none", "artistic"),
+                EffectItem("📖 Manga", "manga", "grayscale", "artistic"),
+                EffectItem("💥 Comic", "comic", "none", "artistic"),
+                EffectItem("🖼️ Painting", "painting", "none", "artistic"),
+                EffectItem("🎭 Cel Shade", "cel_shade", "none", "artistic"),
+                EffectItem("📽️ Retro Film", "vintage_film", "sepia", "artistic"),
                 // ── v4.4.0 MAGIC / ANIMATED EFFECTS (real FFmpeg time expressions) ──
                 EffectItem("✨ Magic Pulse", "magic_pulse", "none", "magic"),
                 EffectItem("🌈 Hue Cycle", "magic_hue_cycle", "none", "magic"),

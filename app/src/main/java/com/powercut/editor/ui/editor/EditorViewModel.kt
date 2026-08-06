@@ -1,6 +1,7 @@
 package com.powercut.editor.ui.editor
 
 import android.content.Context
+import android.util.Log
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,7 @@ import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.export.ExportForegroundService
 import com.powercut.editor.domain.export.ExportManager
 import com.powercut.editor.domain.processing.VideoProcessor
+import com.powercut.editor.domain.processing.RoyaltyFreeMusicGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,7 +44,8 @@ class EditorViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val projectRepository: ProjectRepository,
     private val exportManager: ExportManager,
-    private val videoProcessor: VideoProcessor
+    private val videoProcessor: VideoProcessor,
+    private val royaltyFreeMusicGenerator: RoyaltyFreeMusicGenerator
 ) : ViewModel() {
 
     private val _currentScreen = MutableStateFlow("home") // "home" (dashboard), "editor", "export"
@@ -56,6 +59,10 @@ class EditorViewModel @Inject constructor(
 
     val currentProject: StateFlow<VideoProject?> = projectRepository.currentProject
     val exportState: StateFlow<Resource<String>> = exportManager.exportState
+
+    /** Royalty-free music generation status (separate from export). */
+    private val _musicState = MutableStateFlow<Resource<String>>(Resource.Idle)
+    val musicState: StateFlow<Resource<String>> = _musicState.asStateFlow()
 
     /** Live export progress 0-100 (mirrors the foreground service). */
     val exportProgress: StateFlow<Int> = exportManager.progress
@@ -640,6 +647,32 @@ class EditorViewModel @Inject constructor(
     fun updateBackgroundMusic(path: String?) {
         projectRepository.updateProject { project ->
             project.copy(backgroundMusicPath = path)
+        }
+    }
+
+    /**
+     * Generate a REAL royalty-free music track using FFmpeg audio synthesis
+     * and set it as the background music. This makes the "Royalty Free Music"
+     * feature fully functional — tapping a track creates an actual audio file
+     * that gets mixed into the exported video.
+     */
+    fun generateAndSetRoyaltyFreeMusic(trackId: String) {
+        viewModelScope.launch {
+            _musicState.value = Resource.Loading
+            try {
+                val path = royaltyFreeMusicGenerator.generateTrack(trackId, 30)
+                if (path != null) {
+                    projectRepository.updateProject { project ->
+                        project.copy(backgroundMusicPath = path)
+                    }
+                    _musicState.value = Resource.Success(path)
+                    Log.d("EditorViewModel", "Royalty-free music set: $trackId -> $path")
+                } else {
+                    _musicState.value = Resource.Error("Failed to generate music track")
+                }
+            } catch (e: Exception) {
+                _musicState.value = Resource.Error("Music generation error: ${e.message}")
+            }
         }
     }
 

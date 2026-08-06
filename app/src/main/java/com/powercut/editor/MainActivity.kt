@@ -312,6 +312,9 @@ class MainActivity : ComponentActivity() {
                                         onUpdateBackgroundMusic = { path ->
                                             viewModel.updateBackgroundMusic(path)
                                         },
+                                        onGenerateRoyaltyFreeMusic = { trackId ->
+                                            viewModel.generateAndSetRoyaltyFreeMusic(trackId)
+                                        },
                                         onUpdateMusicVolume = { vol ->
                                             viewModel.updateMusicVolume(vol)
                                         },
