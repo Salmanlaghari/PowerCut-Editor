@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1528,7 +1529,7 @@ fun EditorScreen(
                             fontSize = 9.sp,
                             color = if (sec <= currentPlaybackTime / 1000) NeonOrange else Color.Gray,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(end = (300 / tickCount).dp)
+                            modifier = Modifier.padding(end = (300f / tickCount).dp)
                         )
                     }
                 }
