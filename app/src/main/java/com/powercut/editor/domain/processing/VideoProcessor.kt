@@ -303,8 +303,10 @@ class VideoProcessor @Inject constructor(
                     lastThermalCheckMs = now
                     val temp = getBatteryTemperatureCelsius()
                     if (temp != null && temp >= thermalThresholdC) {
-                        Log.w(tag, "Thermal throttle: battery at ${temp}°C — sleeping ${thermalSleepMs}ms to cool")
-                        try { Thread.sleep(thermalSleepMs) } catch (_: InterruptedException) {}
+                        // NON-BLOCKING: We only log the thermal warning. Sleeping on the
+                        // FFmpeg statistics callback thread blocks progress reporting and
+                        // can trigger ANR / crash. FFmpeg itself will throttle if needed.
+                        Log.w(tag, "Thermal warning: battery at ${temp}°C — export continuing (non-blocking)")
                     }
                 }
             } catch (_: Exception) {
@@ -1346,10 +1348,10 @@ class VideoProcessor @Inject constructor(
             "warm" -> "eq=temp=1.1:saturation=1.1,colorbalance=rs=0.08:gs=0.02:rm=0.05"
             "cool" -> "eq=temp=0.9:saturation=1.05,colorbalance=bs=0.1:gm=-0.03:bm=0.05"
             "vintage" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.8:contrast=1.1:gamma=1.1,vignette=angle=PI/4"
-            "dramatic" -> "eq=contrast=1.4:saturation=1.3:gamma=0.9,curves=preset=increase_contrast"
-            "vivid" -> "eq=saturation=1.6:contrast=1.2,vibrance=0.4"
+            "dramatic" -> "eq=contrast=1.4:saturation=1.3:gamma=0.9,curves=preset=strong_contrast"
+            "vivid" -> "eq=saturation=1.6:contrast=1.2"
             "noir" -> "format=gray,eq=contrast=1.5:gamma=0.8,vignette=angle=PI/3"
-            "bloom" -> "eq=brightness=0.05:contrast=1.1,boxblur=luma_radius=5:luma_power=1,blend=all_mode=screen"
+            "bloom" -> "eq=brightness=0.05:contrast=1.1,boxblur=luma_radius=5:luma_power=1,tblend=all_mode=screen"
             "tealorange", "teal_orange" -> "colorbalance=rs=0.12:gs=-0.05:bs=0.05:rm=0.1:bm=0.08,eq=saturation=1.3:contrast=1.15"
             "pastel" -> "eq=saturation=0.7:brightness=0.08:contrast=0.95,colorbalance=rs=0.03:gs=0.02:bs=0.05"
             "fade" -> "eq=saturation=0.6:contrast=0.9:brightness=0.05,colorbalance=rs=0.04:gs=0.02:bs=0.06"
@@ -1359,8 +1361,8 @@ class VideoProcessor @Inject constructor(
             "forest" -> "eq=saturation=1.2:contrast=1.1,colorbalance=gs=0.1:gm=0.06:bs=-0.03"
             "rose" -> "colorbalance=rs=0.1:rm=0.08:gs=-0.02:bs=0.04,eq=saturation=1.3:brightness=0.03"
             "golden" -> "colorbalance=rs=0.12:rm=0.1:gs=0.03,eq=saturation=1.35:contrast=1.1:gamma=1.05,vignette=angle=PI/4"
-            "mist" -> "eq=contrast=0.9:saturation=0.8:brightness=0.1,boxblur=luma_radius=3:luma_power=1,blend=all_mode=screen:opacity=0.3"
-            "cinematic" -> "curves=preset=increase_contrast,eq=saturation=0.85:contrast=1.2:gamma=0.95,colorbalance=rs=0.04:bs=0.06"
+            "mist" -> "eq=contrast=0.9:saturation=0.8:brightness=0.1,boxblur=luma_radius=3:luma_power=1,tblend=all_mode=screen:all_opacity=0.3"
+            "cinematic" -> "curves=preset=strong_contrast,eq=saturation=0.85:contrast=1.2:gamma=0.95,colorbalance=rs=0.04:bs=0.06"
             "teal" -> "colorbalance=bs=0.15:bm=0.1:gs=0.03,eq=saturation=1.1:contrast=1.1"
             "orange" -> "colorbalance=rs=0.15:rm=0.12,eq=saturation=1.2:contrast=1.1:gamma=1.05"
             "lomo" -> "vignette=angle=PI/3,eq=saturation=1.5:contrast=1.3:gamma=0.9"
@@ -1375,7 +1377,7 @@ class VideoProcessor @Inject constructor(
             "agfa" -> "eq=saturation=1.2:contrast=1.1,colorbalance=rs=0.06:bs=0.03"
             "ilford" -> "format=gray,eq=contrast=1.2:gamma=1.05"
             "portra" -> "eq=saturation=0.95:contrast=1.05:gamma=1.02,colorbalance=rs=0.04:gs=0.02:bs=0.02"
-            "velvia" -> "eq=saturation=1.5:contrast=1.2,vibrance=0.3"
+            "velvia" -> "eq=saturation=1.5:contrast=1.2"
             "provia" -> "eq=saturation=1.1:contrast=1.05"
             "astia" -> "eq=saturation=1.0:contrast=1.0:gamma=1.05,colorbalance=rs=0.03:bs=0.03"
             "monochrome" -> "format=gray,eq=contrast=1.3:gamma=0.9"
@@ -1387,11 +1389,11 @@ class VideoProcessor @Inject constructor(
             "dark" -> "eq=brightness=-0.08:contrast=1.15:gamma=0.95"
             "soft" -> "eq=contrast=0.9:saturation=0.9:brightness=0.05,boxblur=luma_radius=2:luma_power=1"
             "sharp" -> "eq=contrast=1.3:saturation=1.2,unsharp=5:5:1:5:5:0"
-            "dreamy" -> "eq=saturation=1.1:brightness=0.08:contrast=0.95,boxblur=luma_radius=4:luma_power=1,blend=all_mode=screen:opacity=0.3"
-            "glow" -> "eq=brightness=0.1:contrast=1.1,boxblur=luma_radius=6:luma_power=1,blend=all_mode=screen:opacity=0.4"
+            "dreamy" -> "eq=saturation=1.1:brightness=0.08:contrast=0.95,boxblur=luma_radius=4:luma_power=1,tblend=all_mode=screen:all_opacity=0.3"
+            "glow" -> "eq=brightness=0.1:contrast=1.1,boxblur=luma_radius=6:luma_power=1,tblend=all_mode=screen:all_opacity=0.4"
             "haze" -> "eq=contrast=0.85:saturation=0.8:brightness=0.12,boxblur=luma_radius=3:luma_power=1"
             "matte" -> "eq=saturation=0.85:contrast=0.9:brightness=0.05,curves=preset=lighter"
-            "litho" -> "format=gray,eq=contrast=1.6:gamma=0.8,curves=preset=stronger"
+            "litho" -> "format=gray,eq=contrast=1.6:gamma=0.8,curves=preset=strong_contrast"
             "sepia_warm" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=temp=1.15:saturation=1.1"
             "sepia_cool" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=temp=0.85:saturation=0.9"
             "red_boost" -> "colorbalance=rs=0.2:rm=0.15,eq=saturation=1.2:contrast=1.1"
@@ -1474,26 +1476,26 @@ class VideoProcessor @Inject constructor(
         val m = mode.lowercase().replace(" ", "_")
         return when (m) {
             "none", "normal" -> ""
-            "multiply" -> "blend=all_mode=multiply"
-            "screen" -> "blend=all_mode=screen"
-            "overlay" -> "blend=all_mode=overlay"
-            "darken" -> "blend=all_mode=darken"
-            "lighten" -> "blend=all_mode=lighten"
-            "color_dodge" -> "blend=all_mode=lighten"
-            "color_burn" -> "blend=all_mode=darken"
-            "hard_light" -> "blend=all_mode=overlay"
-            "soft_light" -> "blend=all_mode=softlight"
-            "difference" -> "blend=all_mode=difference"
-            "exclusion" -> "blend=all_mode=exclusion"
+            "multiply" -> "tblend=all_mode=multiply"
+            "screen" -> "tblend=all_mode=screen"
+            "overlay" -> "tblend=all_mode=overlay"
+            "darken" -> "tblend=all_mode=darken"
+            "lighten" -> "tblend=all_mode=lighten"
+            "color_dodge" -> "tblend=all_mode=lighten"
+            "color_burn" -> "tblend=all_mode=darken"
+            "hard_light" -> "tblend=all_mode=overlay"
+            "soft_light" -> "tblend=all_mode=softlight"
+            "difference" -> "tblend=all_mode=difference"
+            "exclusion" -> "tblend=all_mode=exclusion"
             "hue" -> "eq=saturation=1.3"
             "saturation" -> "eq=saturation=1.5"
             "color" -> "eq=saturation=1.2:contrast=1.1"
             "luminosity" -> "eq=contrast=1.2:brightness=0.05"
-            "addition" -> "blend=all_mode=addition"
-            "phoenix" -> "blend=all_mode=phoenix"
-            "reflect" -> "blend=all_mode=reflect"
-            "glow" -> "blend=all_mode=glow"
-            "negation" -> "blend=all_mode=negation"
+            "addition" -> "tblend=all_mode=addition"
+            "phoenix" -> "tblend=all_mode=phoenix"
+            "reflect" -> "tblend=all_mode=reflect"
+            "glow" -> "tblend=all_mode=glow"
+            "negation" -> "tblend=all_mode=negation"
             else -> ""
         }
     }
@@ -1543,7 +1545,7 @@ class VideoProcessor @Inject constructor(
             e.contains("flash") || e.contains("strobe") ->
                 listOf("eq=brightness='0.3*abs(sin(t*8))'")
             e.contains("neon") && e.contains("glow") ->
-                listOf("eq=saturation=2.0:contrast=1.3,colorbalance=rs=0.1:bs=0.15:rm=0.08:bm=0.08,boxblur=luma_radius=3:luma_power=1,blend=all_mode=screen")
+                listOf("eq=saturation=2.0:contrast=1.3,colorbalance=rs=0.1:bs=0.15:rm=0.08:bm=0.08,boxblur=luma_radius=3:luma_power=1,tblend=all_mode=screen")
             e.contains("neon") ->
                 listOf("eq=saturation=2.0:contrast=1.3,colorbalance=rs=0.1:bs=0.15:rm=0.08:bm=0.08")
             e.contains("vignette") && e.contains("heavy") ->
@@ -1581,7 +1583,7 @@ class VideoProcessor @Inject constructor(
             e.contains("lens_flare") ->
                 listOf("eq=brightness=0.08:contrast=1.1", "vignette=angle=PI/4")
             e.contains("bloom") ->
-                listOf("eq=brightness=0.08:contrast=1.1", "boxblur=luma_radius=6:luma_power=1", "blend=all_mode=screen:opacity=0.4")
+                listOf("eq=brightness=0.08:contrast=1.1", "boxblur=luma_radius=6:luma_power=1", "tblend=all_mode=screen:all_opacity=0.4")
             e.contains("hdr") ->
                 listOf("eq=saturation=1.3:contrast=1.3", "unsharp=5:5:1.5:5:5:0")
             e.contains("vaporwave") ->
@@ -1593,7 +1595,7 @@ class VideoProcessor @Inject constructor(
             e.contains("vapor") ->
                 listOf("eq=saturation=0.8:brightness=0.1", "boxblur=luma_radius=4:luma_power=1", "colorbalance=bs=0.08")
             e.contains("dream") ->
-                listOf("eq=saturation=1.1:brightness=0.08:contrast=0.95", "boxblur=luma_radius=4:luma_power=1", "blend=all_mode=screen:opacity=0.3")
+                listOf("eq=saturation=1.1:brightness=0.08:contrast=0.95", "boxblur=luma_radius=4:luma_power=1", "tblend=all_mode=screen:all_opacity=0.3")
             e.contains("night_vision") ->
                 listOf("format=gray", "eq=brightness=0.3:contrast=1.3", "colorchannelmixer=.2:.7:.1", "noise=alls=12:allf=t+u")
             e.contains("thermal") ->
@@ -1695,7 +1697,7 @@ class VideoProcessor @Inject constructor(
             e.contains("ai_denoise") ->
                 listOf("hqdn3d=4:3:4:3")
             e.contains("ai_deblur") ->
-                listOf("unsharp=7:7:1.5:7:7:0.0", "smartblur=lr=1:lt=-5")
+                listOf("unsharp=7:7:1.5:7:7:0.0", "unsharp=5:5:1.0:5:5:0")
             e.contains("ai_super_res") ->
                 listOf("scale=iw*2:ih*2:flags=lanczos", "unsharp=7:7:1.2:7:7:0")
             e.contains("ai_upscale") ->
@@ -1712,6 +1714,21 @@ class VideoProcessor @Inject constructor(
                 listOf("lenscorrection=k1=0:k2=0")
             e.contains("ai_relight") ->
                 listOf("eq=brightness=0.08:contrast=1.05", "curves=preset=lighter")
+            // ── v6.3.0 Anime & artistic effects (user-requested) ──
+            e == "anime" || e.contains("anime") ->
+                listOf("unsharp=5:5:2.0:5:5:0", "eq=saturation=1.8:contrast=1.3:brightness=0.03", "hqdn3d=2:1:2:1", "colorbalance=rs=0.05:bs=0.05:gs=0.03")
+            e.contains("cel") && e.contains("shade") ->
+                listOf("unsharp=7:7:2.5:7:7:0", "eq=saturation=2.0:contrast=1.4", "hqdn3d=3:2:3:2")
+            e.contains("manga") ->
+                listOf("format=gray", "unsharp=7:7:3:7:7:0", "eq=contrast=1.6:brightness=0.05", "noise=alls=3:allf=t")
+            e.contains("ghibli") ->
+                listOf("eq=saturation=1.4:contrast=1.15:brightness=0.05", "colorbalance=rs=0.06:gs=0.04:bs=0.06", "unsharp=3:3:1.0:3:3:0", "boxblur=luma_radius=1:luma_power=1")
+            e.contains("comic") ->
+                listOf("unsharp=5:5:2.0:5:5:0", "eq=saturation=1.6:contrast=1.4", "hqdn3d=1:1:1:1")
+            e.contains("painting") || e.contains("paint") ->
+                listOf("eq=saturation=1.3:contrast=0.9:brightness=0.05", "boxblur=luma_radius=2:luma_power=1", "unsharp=3:3:0.5:3:3:0")
+            e.contains("vintage_film") || e.contains("retro_film") ->
+                listOf("curves=preset=vintage", "eq=saturation=0.85:contrast=1.1:brightness=0.03", "noise=alls=12:allf=t+u", "vignette=angle=PI/4")
             else -> listOf()
         }
     }
@@ -2038,7 +2055,7 @@ class VideoProcessor @Inject constructor(
             "bloom" -> listOf(
                 "eq=brightness=0.06:contrast=1.1",
                 "boxblur=luma_radius=6:luma_power=1",
-                "blend=all_mode=screen:opacity=0.4"
+                "tblend=all_mode=screen:all_opacity=0.4"
             )
             // Reels — vibrant social grade
             "reels" -> listOf(

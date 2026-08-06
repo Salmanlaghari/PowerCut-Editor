@@ -75,7 +75,7 @@ object EffectCatalog {
         VisualEffect("none", "None", "🚫", ""),
         // Color grade & tone
         VisualEffect("vivid", "Vivid", "🌈", "eq=saturation=1.5:contrast=1.1"),
-        VisualEffect("cinematic", "Cinematic", "🎬", "curves=preset=increase_contrast,eq=saturation=0.9"),
+        VisualEffect("cinematic", "Cinematic", "🎬", "curves=preset=strong_contrast,eq=saturation=0.9"),
         VisualEffect("tealorange", "Teal & Orange", "🟠", "colormatrix=bt709,eq=saturation=1.3"),
         VisualEffect("noir", "Noir", "🖤", "hue=s=0,eq=contrast=1.3:brightness=-0.05"),
         VisualEffect("vintage", "Vintage", "📼", "curves=preset=lighter,eq=saturation=0.7:brightness=0.05"),
@@ -92,8 +92,8 @@ object EffectCatalog {
         VisualEffect("polaroid", "Polaroid", "🖼️", "eq=saturation=0.8:brightness=0.1,curves=preset=lighter"),
         VisualEffect("kodak", "Kodak", "🎞️", "eq=saturation=1.2:contrast=1.1:brightness=0.02"),
         // Light & glow
-        VisualEffect("glow", "Glow", "✨", "gblur=sigma=2,blend=all_mode=screen"),
-        VisualEffect("bloom", "Bloom", "🌟", "gblur=sigma=4,blend=all_mode=screen:opacity=0.5"),
+        VisualEffect("glow", "Glow", "✨", "gblur=sigma=2,tblend=all_mode=screen"),
+        VisualEffect("bloom", "Bloom", "🌟", "gblur=sigma=4,tblend=all_mode=screen:all_opacity=0.5"),
         VisualEffect("dreamy", "Dreamy", "💭", "gblur=sigma=3,eq=brightness=0.08:saturation=1.2"),
         VisualEffect("softfocus", "Soft Focus", "💠", "gblur=sigma=1.2"),
         VisualEffect("sharpen", "Sharpen", "🔪", "unsharp=5:5:1.0:5:5:0.0"),
@@ -130,7 +130,7 @@ object EffectCatalog {
         VisualEffect("thermal", "Thermal", "🌡️", "eq=saturation=2.5:contrast=1.4,geq=r='255-lum(X,Y)':g='abs(lum(X,Y)-128)*2':b='lum(X,Y)'", isPro = true),
         VisualEffect("xray", "X-Ray", "🦴", "negate,hue=s=0,eq=contrast=1.3"),
         // Light leaks & overlays
-        VisualEffect("lightleak", "Light Leak", "🌞", "eq=brightness=0.1:saturation=1.2,blend=all_mode=screen"),
+        VisualEffect("lightleak", "Light Leak", "🌞", "eq=brightness=0.1:saturation=1.2,tblend=all_mode=screen"),
         VisualEffect("filmgrain", "Film Grain", "🎞️", "noise=alls=12:allf=t"),
         VisualEffect("dust", "Dust", "🫧", "noise=aps=10:apf=t"),
         VisualEffect("scratch", "Scratch", "🪛", "noise=cps=8:cpf=t"),
@@ -146,7 +146,7 @@ object EffectCatalog {
         VisualEffect("polaroid2", "Instant", "📸", "eq=saturation=0.85:brightness=0.08:contrast=0.95,vignette=PI/6"),
         // HDR & dynamic
         VisualEffect("hdr", "HDR", "🔆", "eq=contrast=1.15:saturation=1.25:brightness=0.03", isPro = true),
-        VisualEffect("dramatic", "Dramatic", "🎭", "curves=preset=increase_contrast,eq=contrast=1.3:saturation=1.1"),
+        VisualEffect("dramatic", "Dramatic", "🎭", "curves=preset=strong_contrast,eq=contrast=1.3:saturation=1.1"),
         VisualEffect("clarity", "Clarity", "🔍", "unsharp=5:5:1.2:5:5:0.0,eq=contrast=1.1"),
         VisualEffect("matte", "Matte", "🪞", "eq=contrast=0.9:brightness=0.04:saturation=0.95"),
         // Color pop & isolation
