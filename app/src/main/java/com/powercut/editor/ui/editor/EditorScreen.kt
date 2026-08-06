@@ -66,9 +66,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -176,21 +174,6 @@ fun EditorScreen(
     onUpdateImageEditorExposure: (Float) -> Unit,
     onResetImageEditor: () -> Unit,
 
-    // Extended text styling callbacks
-    onToggleTextBold: () -> Unit = {},
-    onToggleTextItalic: () -> Unit = {},
-    onToggleTextShadow: () -> Unit = {},
-    onToggleTextOutline: () -> Unit = {},
-    onToggleTextGlow: () -> Unit = {},
-    onToggleTextNeon: () -> Unit = {},
-    onUpdateTextBgColor: (String) -> Unit = {},
-    onUpdateTextBgOpacity: (Float) -> Unit = {},
-    onUpdateTextFontSize: (Float) -> Unit = {},
-    onUpdateTextColor: (String) -> Unit = {},
-    onUpdateTextStyle: (String) -> Unit = {},
-    onUpdateTextPositionX: (Float) -> Unit = {},
-    onUpdateTextPositionY: (Float) -> Unit = {},
-
     // Orientation callbacks
     onUpdateOrientationMode: (String) -> Unit,
     onToggleVerticalSafeZone: () -> Unit,
@@ -208,6 +191,23 @@ fun EditorScreen(
     onOpenEffects: () -> Unit = {},
     onOpenStickers: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exportProgress by remember { mutableStateOf(0f) }
+    var isExporting by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    val exportEngine = remember { ExportEngine() }
+
+    // PRIORITY 1 FIX: Cancel any running export when the editor screen is
+    // disposed (e.g. user navigates away, activity finishes). This prevents
+    // the native worker thread from touching freed memory.
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                exportEngine.cancel()
+                exportEngine.destroy()
+            } catch (e: Exception) {
+                // Safe to ignore — engine may already be destroyed.
     // EditorScreen is deprecated — app uses NextGenEditorScreen.
     // This stub prevents MethodTooLarge compilation error.
     NextGenEditorScreen(
@@ -282,35 +282,4 @@ fun EditorScreen(
         onOpenEffects = onOpenEffects,
         onOpenStickers = onOpenStickers
     )
-}
-
-// -------------------------------------------------------------
-// REUSABLE TIMELINE BOTTOM TOOL ITEM
-// -------------------------------------------------------------
-@Composable
-fun BottomToolItem(
-    emoji: String,
-    label: String,
-    isActive: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isActive) NeonOrange.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(emoji, fontSize = 16.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = label,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isActive) NeonOrange else Color.Gray
-            )
-        }
-    }
 }
