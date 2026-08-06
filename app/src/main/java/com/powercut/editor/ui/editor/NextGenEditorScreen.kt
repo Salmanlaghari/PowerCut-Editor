@@ -1179,7 +1179,7 @@ private fun EditingCompletePage(
 @Composable
 private fun SummaryItem(emoji: String, label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(p.emoji, fontSize = 16.sp)
+        Text(emoji, fontSize = 16.sp)
         Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text(label, fontSize = 8.sp, color = Color.Gray)
     }
