@@ -66,9 +66,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -176,21 +174,6 @@ fun EditorScreen(
     onUpdateImageEditorExposure: (Float) -> Unit,
     onResetImageEditor: () -> Unit,
 
-    // Extended text styling callbacks
-    onToggleTextBold: () -> Unit = {},
-    onToggleTextItalic: () -> Unit = {},
-    onToggleTextShadow: () -> Unit = {},
-    onToggleTextOutline: () -> Unit = {},
-    onToggleTextGlow: () -> Unit = {},
-    onToggleTextNeon: () -> Unit = {},
-    onUpdateTextBgColor: (String) -> Unit = {},
-    onUpdateTextBgOpacity: (Float) -> Unit = {},
-    onUpdateTextFontSize: (Float) -> Unit = {},
-    onUpdateTextColor: (String) -> Unit = {},
-    onUpdateTextStyle: (String) -> Unit = {},
-    onUpdateTextPositionX: (Float) -> Unit = {},
-    onUpdateTextPositionY: (Float) -> Unit = {},
-
     // Orientation callbacks
     onUpdateOrientationMode: (String) -> Unit,
     onToggleVerticalSafeZone: () -> Unit,
@@ -257,15 +240,6 @@ fun EditorScreen(
         }
     }
 
-    // ═══ BGM (Background Music) ExoPlayer — second player for background music ═══
-    val bgmPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ONE
-            volume = 0.5f
-        }
-    }
-    var bgmPrepared by remember { mutableStateOf(false) }
-
     var isPlaying by remember { mutableStateOf(false) }
     var currentPlaybackTime by remember { mutableStateOf(0L) }
 
@@ -292,50 +266,18 @@ fun EditorScreen(
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             exoPlayer.play()
-            if (bgmPrepared) bgmPlayer.play()
             while (isPlaying) {
                 currentPlaybackTime = exoPlayer.currentPosition
                 kotlinx.coroutines.delay(100)
             }
         } else {
             exoPlayer.pause()
-            bgmPlayer.pause()
             // Pauses editing/playback for 3+ seconds auto-save trigger!
             kotlinx.coroutines.delay(3000)
             if (!isPlaying) {
                 onSaveDraft()
             }
         }
-    }
-
-    // ═══ BGM: React to backgroundMusicPath changes — prepare the BGM player ═══
-    LaunchedEffect(project.backgroundMusicPath) {
-        val bgmPath = project.backgroundMusicPath
-        if (!bgmPath.isNullOrBlank()) {
-            try {
-                val bgmUri = if (bgmPath.startsWith("content://") || bgmPath.startsWith("file://")) {
-                    android.net.Uri.parse(bgmPath)
-                } else {
-                    android.net.Uri.fromFile(java.io.File(bgmPath))
-                }
-                bgmPlayer.setMediaItem(MediaItem.fromUri(bgmUri))
-                bgmPlayer.prepare()
-                bgmPrepared = true
-                // If already playing, start BGM too
-                if (isPlaying) bgmPlayer.play()
-            } catch (e: Exception) {
-                bgmPrepared = false
-            }
-        } else {
-            bgmPlayer.stop()
-            bgmPlayer.clearMediaItems()
-            bgmPrepared = false
-        }
-    }
-
-    // ═══ BGM: Sync BGM volume from project state ═══
-    LaunchedEffect(project.backgroundMusicVolume) {
-        bgmPlayer.volume = project.backgroundMusicVolume
     }
 
     // React to changes in Mute state and Volume
@@ -348,11 +290,10 @@ fun EditorScreen(
         exoPlayer.playbackParameters = PlaybackParameters(project.speedFactor)
     }
 
-    // Clean up players on leave
+    // Clean up player on leave
     DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
-            bgmPlayer.release()
         }
     }
 
@@ -568,32 +509,20 @@ fun EditorScreen(
                     )
                 }
 
-                // Live text overlay — only show when user has set text (no default hardcoded text)
-                if (!project.activeTextOverlay.isNullOrBlank()) {
-                    val textBg = try {
-                        Color(android.graphics.Color.parseColor(project.textBgColor))
-                    } catch (_: Exception) { Color.Transparent }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp)
-                            .background(
-                                if (textBg.alpha > 0.01f) textBg.copy(alpha = project.textBgOpacity)
-                                else Color.Black.copy(alpha = 0.5f),
-                                RoundedCornerShape(6.dp)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = project.activeTextOverlay!!,
-                            color = try {
-                                Color(android.graphics.Color.parseColor(project.textColorHex))
-                            } catch (_: Exception) { Color.White },
-                            fontSize = project.textFontSize.sp,
-                            fontWeight = if (project.textBold) FontWeight.Bold else FontWeight.Normal,
-                            fontStyle = if (project.textItalic) FontStyle.Italic else FontStyle.Normal
-                        )
-                    }
+                // Sample text overlay centered at bottom
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = project.activeTextOverlay ?: "PowerCut ✨",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 // Top-Right Zoom + Fullscreen icons overlay
@@ -699,7 +628,7 @@ fun EditorScreen(
         }
 
         // 4. TOOL CATEGORIES LIST (Horizontal Scrolling Tab Bar wrapper)
-        val categories = listOf("Edit", "Audio", "Text", "Stickers", "Overlay", "AI", "🎬Chroma", "🧹Erase", "🎨ImgEdit", "📐Orient", "🖼️Studio")
+        val categories = listOf("Edit", "Audio", "Text", "Stickers", "Overlay", "AI", "🎬Chroma", "🧹Erase", "🎨ImgEdit", "📐Orient")
         var activeCategory by remember { mutableStateOf("Edit") }
         var selectedBottomTool by remember { mutableStateOf("Trim") }
 
@@ -974,291 +903,43 @@ fun EditorScreen(
                         }
                     }
                     "Text" -> {
-                        // Sub-tab state for text tool
-                        var textSubTab by remember { mutableStateOf("content") }
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Sub-tab bar
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            var textInput by remember { mutableStateOf(project.activeTextOverlay ?: "") }
+                            OutlinedTextField(
+                                value = textInput,
+                                onValueChange = {
+                                    textInput = it
+                                    onUpdateTextOverlay(if (it.isBlank()) null else it)
+                                },
+                                placeholder = { Text("Burn Subtitle Text...", fontSize = 9.sp, color = Color.Gray) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonOrange,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+
+                            // Text animations Row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                listOf("content" to "📝", "color" to "🎨", "style" to "✏️", "position" to "📍", "anim" to "✨").forEach { (id, emoji) ->
-                                    val isSel = textSubTab == id
+                                Text("ANIMATION:", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                listOf("None", "Fade", "Typewriter", "Bounce", "Zoom").forEach { anim ->
+                                    val isSel = project.textAnimationType.lowercase() == anim.lowercase()
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(if (isSel) NeonOrange.copy(alpha = 0.18f) else Color.Transparent)
-                                            .border(1.dp, if (isSel) NeonOrange.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
-                                            .clickable { textSubTab = id }
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                            .weight(1f)
+                                            .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
+                                            .clickable { onUpdateTextAnimation(anim) }
+                                            .padding(4.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text(emoji, fontSize = 11.sp)
-                                    }
-                                }
-                            }
-
-                            when (textSubTab) {
-                                "content" -> {
-                                    // Text input
-                                    var textInput by remember { mutableStateOf(project.activeTextOverlay ?: "") }
-                                    OutlinedTextField(
-                                        value = textInput,
-                                        onValueChange = {
-                                            textInput = it
-                                            onUpdateTextOverlay(if (it.isBlank()) null else it)
-                                        },
-                                        placeholder = { Text("Type your text...", fontSize = 9.sp, color = Color.Gray) },
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = NeonOrange,
-                                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-                                            focusedTextColor = Color.White,
-                                            unfocusedTextColor = Color.White
-                                        ),
-                                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-
-                                    // Font size slider
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("FONT SIZE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                        Text("${project.textFontSize.toInt()}sp", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                                    }
-                                    Slider(
-                                        value = project.textFontSize,
-                                        onValueChange = onUpdateTextFontSize,
-                                        valueRange = 8f..80f,
-                                        colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
-                                        modifier = Modifier.height(20.dp)
-                                    )
-                                }
-                                "color" -> {
-                                    // Color picker — 15 colors
-                                    Text("TEXT COLOR", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    val textColors = listOf(
-                                        "#FFFFFF", "#000000", "#FF0000", "#00FF00", "#0000FF",
-                                        "#FFFF00", "#FF6B35", "#7C5CFF", "#2DD4BF", "#FF3D7F",
-                                        "#FFD700", "#FF69B4", "#00CED1", "#FF4500", "#9370DB"
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        textColors.forEach { color ->
-                                            val isSel = project.textColorHex == color
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .clip(CircleShape)
-                                                    .background(try { Color(android.graphics.Color.parseColor(color)) } catch (_: Exception) { Color.White })
-                                                    .border(
-                                                        width = if (isSel) 2.dp else 1.dp,
-                                                        color = if (isSel) Color.White else Color.White.copy(alpha = 0.2f),
-                                                        shape = CircleShape
-                                                    )
-                                                    .clickable { onUpdateTextColor(color) }
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(2.dp))
-
-                                    // Text background color
-                                    Text("TEXT BG COLOR", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    val bgColors = listOf(
-                                        "#00000000", "#CC000000", "#99000000", "#CCFF6B35", "#CC7C5CFF",
-                                        "#CC2DD4BF", "#CCFF3D7F", "#CCFFD700", "#CCFFFFFF"
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        bgColors.forEach { color ->
-                                            val isSel = project.textBgColor == color
-                                            val displayColor = try { Color(android.graphics.Color.parseColor(color)) } catch (_: Exception) { Color.Transparent }
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .clip(CircleShape)
-                                                    .background(displayColor)
-                                                    .border(
-                                                        width = if (isSel) 2.dp else 1.dp,
-                                                        color = if (isSel) NeonOrange else Color.White.copy(alpha = 0.2f),
-                                                        shape = CircleShape
-                                                    )
-                                                    .clickable { onUpdateTextBgColor(color) }
-                                            )
-                                        }
-                                    }
-
-                                    // Bg opacity slider
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("BG OPACITY", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                        Text("${(project.textBgOpacity * 100).toInt()}%", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                                    }
-                                    Slider(
-                                        value = project.textBgOpacity,
-                                        onValueChange = onUpdateTextBgOpacity,
-                                        valueRange = 0f..1f,
-                                        colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan),
-                                        modifier = Modifier.height(18.dp)
-                                    )
-                                }
-                                "style" -> {
-                                    // Style toggles: Bold, Italic, Shadow, Outline, Glow, Neon
-                                    Text("TEXT STYLE", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    val styleToggles = listOf(
-                                        Triple("Bold", project.textBold, onToggleTextBold),
-                                        Triple("Italic", project.textItalic, onToggleTextItalic),
-                                        Triple("Shadow", project.textShadow, onToggleTextShadow),
-                                        Triple("Outline", project.textOutline, onToggleTextOutline),
-                                        Triple("Glow", project.textGlow, onToggleTextGlow),
-                                        Triple("Neon", project.textNeon, onToggleTextNeon)
-                                    )
-                                    styleToggles.chunked(3).forEach { row ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            row.forEach { (label, isActive, toggle) ->
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(30.dp)
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(if (isActive) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f))
-                                                        .border(1.dp, if (isActive) NeonOrange else Color.White.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
-                                                        .clickable { toggle() },
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isActive) NeonOrange else Color.White)
-                                                }
-                                            }
-                                            repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(2.dp))
-
-                                    // Text style presets
-                                    Text("STYLE PRESETS", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        listOf("classic", "modern", "handwritten", "display", "mono", "serif").forEach { style ->
-                                            val isSel = project.textStyleId == style
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(14.dp))
-                                                    .background(if (isSel) CyberCyan.copy(alpha = 0.18f) else Color.Transparent)
-                                                    .border(1.dp, if (isSel) CyberCyan.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
-                                                    .clickable { onUpdateTextStyle(style) }
-                                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                Text(style.replaceFirstChar { it.uppercase() }, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.LightGray)
-                                            }
-                                        }
-                                    }
-                                }
-                                "position" -> {
-                                    // X/Y position controls
-                                    Text("TEXT POSITION", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("X: ${(project.textPositionX * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                                    }
-                                    Slider(
-                                        value = project.textPositionX,
-                                        onValueChange = onUpdateTextPositionX,
-                                        valueRange = 0f..1f,
-                                        colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan),
-                                        modifier = Modifier.height(20.dp)
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("Y: ${(project.textPositionY * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                                    }
-                                    Slider(
-                                        value = project.textPositionY,
-                                        onValueChange = onUpdateTextPositionY,
-                                        valueRange = 0f..1f,
-                                        colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan),
-                                        modifier = Modifier.height(20.dp)
-                                    )
-
-                                    // Quick position presets
-                                    Text("QUICK POSITIONS", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    val positions = listOf(
-                                        "Top" to (0.5f to 0.1f),
-                                        "Center" to (0.5f to 0.5f),
-                                        "Bottom" to (0.5f to 0.85f),
-                                        "Top-L" to (0.15f to 0.1f),
-                                        "Top-R" to (0.85f to 0.1f),
-                                        "Bot-L" to (0.15f to 0.85f),
-                                        "Bot-R" to (0.85f to 0.85f)
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        positions.forEach { (label, pos) ->
-                                            val isSel = project.textPositionX == pos.first && project.textPositionY == pos.second
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(14.dp))
-                                                    .background(if (isSel) NeonOrange.copy(alpha = 0.18f) else Color.Transparent)
-                                                    .border(1.dp, if (isSel) NeonOrange.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(14.dp))
-                                                    .clickable {
-                                                        onUpdateTextPositionX(pos.first)
-                                                        onUpdateTextPositionY(pos.second)
-                                                    }
-                                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.LightGray)
-                                            }
-                                        }
-                                    }
-                                }
-                                "anim" -> {
-                                    // 20+ animation types
-                                    Text("TEXT ANIMATION", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                    val animations = listOf(
-                                        "None", "Fade", "Typewriter", "Bounce", "Zoom", "Slide Left", "Slide Right",
-                                        "Slide Up", "Slide Down", "Pop", "Spin", "Wave", "Glitch", "Pulse",
-                                        "Flicker", "Blur In", "Scale Up", "Elastic", "Rubber", "Jello", "Heartbeat", "Swing"
-                                    )
-                                    animations.chunked(4).forEach { row ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            row.forEach { anim ->
-                                                val isSel = project.textAnimationType.lowercase() == anim.lowercase()
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(28.dp)
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f))
-                                                        .clickable { onUpdateTextAnimation(anim) }
-                                                        .padding(2.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(anim, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White, maxLines = 1)
-                                                }
-                                            }
-                                            repeat(4 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
-                                        }
+                                        Text(anim, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
                                     }
                                 }
                             }
@@ -1464,94 +1145,56 @@ fun EditorScreen(
                             onToggleAutoReframe = { onToggleAutoReframe() }
                         )
                     }
-                    "🖼️Studio" -> {
-                        com.powercut.editor.ui.editor.tools.ImageStudioPanel(
-                            brightness = project.imageEditorBrightness,
-                            contrast = project.imageEditorContrast,
-                            saturation = project.imageEditorSaturation,
-                            exposure = project.imageEditorExposure,
-                            temperature = project.imageEditorTemperature,
-                            vignette = project.imageEditorVignette,
-                            grain = project.imageEditorGrain,
-                            fade = project.imageEditorFade,
-                            highlights = project.imageEditorHighlights,
-                            shadows = project.imageEditorShadows,
-                            blur = project.imageEditorBlur,
-                            sharpen = project.imageEditorSharpen,
-                            onUpdateBrightness = { onUpdateImageEditorBrightness(it) },
-                            onUpdateContrast = { onUpdateImageEditorContrast(it) },
-                            onUpdateSaturation = { onUpdateImageEditorSaturation(it) },
-                            onUpdateExposure = { onUpdateImageEditorExposure(it) },
-                            onUpdateTemperature = { onUpdateImageEditorTemperature(it) },
-                            onUpdateVignette = { onUpdateImageEditorVignette(it) },
-                            onUpdateGrain = { onUpdateImageEditorGrain(it) },
-                            onUpdateFade = { onUpdateImageEditorFade(it) },
-                            onUpdateHighlights = { onUpdateImageEditorHighlights(it) },
-                            onUpdateShadows = { onUpdateImageEditorShadows(it) },
-                            onUpdateBlur = { onUpdateImageEditorBlur(it) },
-                            onUpdateSharpen = { onUpdateImageEditorSharpen(it) },
-                            onResetAll = { onResetImageEditor() }
-                        )
-                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // 5. LIVE MULTI-TRACK TIMELINE — real playhead, real layers
+        // 5. PROFESSIONAL MULTI-TRACK TIMELINE
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .background(Color(0xFF14141A))
+                .background(Color(0xFF14141A)) // Dark slate timeline background
                 .border(1.dp, Color.White.copy(alpha = 0.05f))
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ═══ LIVE TIME RULER — ticks based on actual video duration ═══
-                val durationSec = (project.durationMs / 1000).coerceAtLeast(1)
-                val tickCount = (durationSec / 5).coerceIn(2, 20)
-                val scrollState = rememberScrollState()
-
+                // Time Ruler (0s to 30s ticks)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(28.dp)
                         .background(Color.Black.copy(alpha = 0.25f))
-                        .horizontalScroll(scrollState)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    for (i in 0..tickCount) {
-                        val sec = i * 5
-                        Text(
-                            text = "${sec}s",
-                            fontSize = 9.sp,
-                            color = if (sec <= currentPlaybackTime / 1000) NeonOrange else Color.Gray,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(end = (300f / tickCount).dp)
-                        )
+                    listOf("0s", "5s", "10s", "15s", "20s", "25s", "30s").forEach { tick ->
+                        Text(tick, fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                // ═══ MULTI-TRACK LAYERS ═══
+                // Scrolling Tracks wrapper
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // ── TRACK 1: VIDEO (Orange) ──
+                    // Track 1: Video Track (Orange gradient clips with transitions)
                     Row(
-                        modifier = Modifier.fillMaxWidth().height(32.dp).padding(horizontal = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(34.dp)
+                            .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("🎬", fontSize = 10.sp, modifier = Modifier.width(24.dp))
+                        // Clip 1
                         Box(
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(0.45f)
                                 .fillMaxHeight()
                                 .background(
                                     Brush.horizontalGradient(listOf(NeonOrange, Color(0xFFFF7043))),
@@ -1559,136 +1202,107 @@ fun EditorScreen(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = project.videoPath.substringAfterLast('/').take(20),
-                                fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold
-                            )
+                            Text("Clip 1.mp4", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
-                    }
 
-                    // ── TRACK 2: AUDIO / BGM (Cyan) ──
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("🎵", fontSize = 10.sp, modifier = Modifier.width(24.dp))
+                        // Transition Block
                         Box(
                             modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .background(
-                                    Brush.horizontalGradient(listOf(CyberCyan.copy(alpha = 0.2f), CyberCyan.copy(alpha = 0.05f))),
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .border(1.dp, CyberCyan.copy(alpha = 0.25f), RoundedCornerShape(6.dp)),
+                                .size(18.dp)
+                                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (project.backgroundMusicPath != null) {
-                                // Show waveform bars when BGM is set
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    listOf(8,14,10,18,12,6,16,20,14,10,16,18,8,12,14,6,10,16).forEach { h ->
-                                        Box(
-                                            modifier = Modifier.width(3.dp).height(h.dp)
-                                                .background(Brush.verticalGradient(listOf(CyberCyan, CyberCyan.copy(0.3f))), RoundedCornerShape(2.dp))
+                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Trans", tint = Color.White, modifier = Modifier.size(10.dp))
+                        }
+
+                        // Clip 2
+                        Box(
+                            modifier = Modifier
+                                .weight(0.45f)
+                                .fillMaxHeight()
+                                .background(
+                                    Brush.horizontalGradient(listOf(Color(0xFFFF7043), NeonOrange)),
+                                    RoundedCornerShape(6.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Clip 2.mp4", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Track 2: Audio Track (Cyan gradient with simulated waveform bars)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(28.dp)
+                            .padding(horizontal = 16.dp)
+                            .background(
+                                Brush.horizontalGradient(listOf(CyberCyan.copy(alpha = 0.15f), CyberCyan.copy(alpha = 0.05f))),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .border(1.dp, CyberCyan.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Waveform bars
+                            listOf(10, 18, 12, 22, 14, 8, 20, 24, 16, 12, 18, 22, 10, 14, 20, 8, 16, 24).forEach { height ->
+                                Box(
+                                    modifier = Modifier
+                                        .width(4.dp)
+                                        .height(height.dp)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(CyberCyan, CyberCyan.copy(alpha = 0.3f))
+                                            ),
+                                            RoundedCornerShape(2.dp)
                                         )
-                                    }
-                                }
-                            } else {
-                                Text("No BGM", fontSize = 9.sp, color = Color.Gray)
-                            }
-                        }
-                    }
-
-                    // ── TRACK 3: TEXT OVERLAY (Purple) — only when text is set ──
-                    if (!project.activeTextOverlay.isNullOrBlank()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("📝", fontSize = 10.sp, modifier = Modifier.width(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .background(
-                                        Brush.horizontalGradient(listOf(Color(0xFFAB47BC), Color(0xFFBA68C8))),
-                                        RoundedCornerShape(6.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = project.activeTextOverlay!!.take(20),
-                                    fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                     }
 
-                    // ── TRACK 4: EFFECTS (Green) — only when effect/filter is active ──
-                    if (project.selectedEffect != "none" || project.selectedFilter != "none") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    // Track 3: Text track (Purple gradient clip)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp)
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.weight(0.2f))
+                        Box(
+                            modifier = Modifier
+                                .weight(0.6f)
+                                .fillMaxHeight()
+                                .background(
+                                    Brush.horizontalGradient(listOf(Color(0xFFAB47BC), Color(0xFFBA68C8))),
+                                    RoundedCornerShape(6.dp)
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text("✨", fontSize = 10.sp, modifier = Modifier.width(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .background(
-                                        Brush.horizontalGradient(listOf(Color(0xFF66BB6A), Color(0xFF43A047))),
-                                        RoundedCornerShape(6.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (project.selectedEffect != "none") "FX: ${project.selectedEffect}" else "Filter: ${project.selectedFilter}",
-                                    fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Text("Subtitle.srt", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
-                    }
-
-                    // ── TRACK 5: STICKERS (Yellow) — only when sticker is active ──
-                    if (project.stickerType != "none") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(24.dp).padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("😀", fontSize = 10.sp, modifier = Modifier.width(24.dp))
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .background(
-                                        Brush.horizontalGradient(listOf(Color(0xFFFFCA28), Color(0xFFFFB300))),
-                                        RoundedCornerShape(6.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("Sticker: ${project.stickerType}", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                        Spacer(modifier = Modifier.weight(0.2f))
                     }
                 }
             }
 
-            // ═══ LIVE PLAYHEAD — moves with currentPlaybackTime ═══
-            val playheadFraction = if (project.durationMs > 0) {
-                (currentPlaybackTime.toFloat() / project.durationMs.toFloat()).coerceIn(0f, 1f)
-            } else 0f
-
+            // Vertical Playhead Line with glow head
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(2.dp)
-                    .align(Alignment.TopStart)
-                    .offset(x = (playheadFraction * 1000).toInt().dp)
-                    .background(Brush.verticalGradient(listOf(NeonOrange, Color.Transparent)))
+                    .align(Alignment.Center)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(NeonOrange, Color.Transparent)
+                        )
+                    )
             ) {
+                // Playhead head knob
                 Box(
                     modifier = Modifier
                         .size(10.dp)
