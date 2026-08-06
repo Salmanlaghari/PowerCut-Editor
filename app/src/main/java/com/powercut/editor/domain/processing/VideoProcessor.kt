@@ -2215,9 +2215,9 @@ class VideoProcessor @Inject constructor(
         // Phase 2: Accent line at top of caption bar
         ff.add("drawbox=x=iw*0.1:y=ih*0.815:w=iw*0.8:h=3:color=cyan@0.8:t=fill:enable='between(t,0.3,${duration})'")
         // Phase 3: Main caption text with fade-in animation
-        ff.add("drawtext=text='${captionText}':x=(w-text_w)/2:y=ih*0.85:fontsize='min(28\,ih/25)':fontcolor=white@'min(1\,t*3)':box=0:enable='between(t,0.5,${duration})'${fontClause}")
+        ff.add("drawtext=text='${captionText}':x=(w-text_w)/2:y=ih*0.85:fontsize='min(28\\,ih/25)':fontcolor=white@'min(1\\,t*3)':box=0:enable='between(t,0.5,${duration})'${fontClause}")
         // Phase 4: Subtitle attribution line
-        ff.add("drawtext=text='Made with SpellType':x=(w-text_w)/2:y=ih*0.90:fontsize='min(14\,ih/45)':fontcolor=white@0.5:box=0:enable='between(t,1.0,${duration})'${fontClause}")
+        ff.add("drawtext=text='Made with SpellType':x=(w-text_w)/2:y=ih*0.90:fontsize='min(14\\,ih/45)':fontcolor=white@0.5:box=0:enable='between(t,1.0,${duration})'${fontClause}")
 
         return ff
     }
