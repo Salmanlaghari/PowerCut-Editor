@@ -19,7 +19,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset as GeomOffset
-import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.geometry.Size as GeomSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -756,9 +756,9 @@ fun NextGenEditorScreen(
 
                     Box(
                         modifier = Modifier.align(
-                                Alignment(
-                                    (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
-                                    (project.textPositionY * 2f - 1f).coerceIn(-1f, 1f)
+                                BiasAlignment(
+                                    horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
+                                    verticalBias = (project.textPositionY * 2f - 1f).coerceIn(-1f, 1f)
                                 )
                             )
                             .graphicsLayer {
@@ -868,9 +868,9 @@ fun NextGenEditorScreen(
                 if (project.activeTextOverlay != null && layerTextVisible) {
                     Box(
                         modifier = Modifier.align(
-                            Alignment(
-                                (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
-                                ((project.textPositionY - 0.15f) * 2f - 1f).coerceIn(-1f, 1f)
+                            BiasAlignment(
+                                horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
+                                verticalBias = ((project.textPositionY - 0.15f) * 2f - 1f).coerceIn(-1f, 1f)
                             )
                         )
                             .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
