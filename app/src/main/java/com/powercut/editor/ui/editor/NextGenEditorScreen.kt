@@ -539,7 +539,15 @@ fun NextGenEditorScreen(
         project.imageEditorContrast,
         project.imageEditorSaturation,
         project.imageEditorTemperature,
-        project.imageEditorExposure
+        project.imageEditorExposure,
+        project.imageEditorVignette,
+        project.imageEditorGrain,
+        project.imageEditorFade,
+        project.imageEditorHighlights,
+        project.imageEditorShadows,
+        project.imageEditorBlur,
+        project.imageEditorSharpen,
+        project.selectedEffect
     ) {
         // v4.6.0: preview matrix for the active Premium Look (HDR/iPhone/Bright/
         // Cinema/Magic). Composed in so the look is VISIBLE in real-time preview,
@@ -551,7 +559,12 @@ fun NextGenEditorScreen(
         val s = project.imageEditorSaturation
         val t = project.imageEditorTemperature
         val e = project.imageEditorExposure
-        val hasAdjustments = b != 1f || c != 1f || s != 1f || t != 1f || e != 1f
+        val vi = project.imageEditorVignette
+        val gr = project.imageEditorGrain
+        val fa = project.imageEditorFade
+        val hi = project.imageEditorHighlights
+        val sh = project.imageEditorShadows
+        val hasAdjustments = b != 1f || c != 1f || s != 1f || t != 1f || e != 1f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
 
         if (!hasAdjustments && lookMatrix == null) {
             colorFilter
@@ -578,14 +591,26 @@ fun NextGenEditorScreen(
             val tempBlue = 1f - (t - 1f) * 0.25f
             val expScale = e
 
+            // Fade: lifts blacks (adds to all channels equally)
+            val fadeAdd = fa * 60f
+            // Highlights: brighten upper range
+            val hlAdd = hi * 40f
+            // Shadows: lift darks
+            val shAdd = sh * 30f
+
             val adjMatrix = ColorMatrix(floatArrayOf(
-                contrastScale * tempRed * expScale, 0f, 0f, 0f, brightnessShift + contrastShift,
-                0f, contrastScale * expScale, 0f, 0f, brightnessShift + contrastShift,
-                0f, 0f, contrastScale * tempBlue * expScale, 0f, brightnessShift + contrastShift,
+                contrastScale * tempRed * expScale, 0f, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
+                0f, contrastScale * expScale, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
+                0f, 0f, contrastScale * tempBlue * expScale, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
                 0f, 0f, 0f, 1f, 0f
             ))
             val satMatrix = ColorMatrix().apply { setToSaturation(s) }
             adjMatrix *= satMatrix
+            // Grain: approximate by slight random-like desaturation + contrast bump
+            if (gr > 0f) {
+                val grainSat = ColorMatrix().apply { setToSaturation((1f - gr * 0.3f).coerceAtLeast(0.5f)) }
+                adjMatrix *= grainSat
+            }
 
             // v4.6.0: compose the premium look preview matrix on top of adjustments
             if (lookMatrix != null) {
@@ -703,13 +728,159 @@ fun NextGenEditorScreen(
                     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
                 }
 
-                // Image overlay
-                if (project.imageOverlayPath != null && layerImageVisible) {
+                // ── Live Adjustment Overlays ──
+                // Vignette overlay: radial darkening at edges
+                if (project.imageEditorVignette > 0f) {
                     Box(
-                        modifier = Modifier.fillMaxSize(project.imageOverlayScale).align(Alignment.Center),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier.fillMaxSize()
+                            .drawWithContent {
+                                drawContent()
+                                drawRect(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = project.imageEditorVignette * 0.7f)),
+                                        center = center,
+                                        radius = size.maxDimension * 0.7f
+                                    )
+                                )
+                            }
+                    )
+                }
+                // Fade overlay: lift blacks
+                if (project.imageEditorFade > 0f) {
+                    Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = project.imageEditorFade * 0.15f)))
+                }
+                // Grain overlay: noise dots approximation
+                if (project.imageEditorGrain > 0f) {
+                    val grainAlpha = (project.imageEditorGrain * 0.2f).coerceAtMost(0.3f)
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                            .drawWithContent {
+                                drawContent()
+                                // Draw random-looking dots for grain effect
+                                for (i in 0..40) {
+                                    val x = (i * 97 + 31) % size.width.toInt()
+                                    val y = (i * 53 + 17) % size.height.toInt()
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = grainAlpha),
+                                        radius = 1.5f,
+                                        center = GeomOffset(x.toFloat(), y.toFloat())
+                                    )
+                                }
+                            }
+                    )
+                }
+                // Selected effect overlay (VHS scanlines, glitch, etc.)
+                if (project.selectedEffect != "none") {
+                    val effectOverlayAlpha = 0.12f
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                            .drawWithContent {
+                                drawContent()
+                                when (project.selectedEffect) {
+                                    "vhs", "scanline", "crt", "old_film" -> {
+                                        // VHS scanlines
+                                        for (i in 0..20) {
+                                            val y = size.height * i / 20f
+                                            drawRect(
+                                                color = Color.Black.copy(alpha = effectOverlayAlpha),
+                                                topLeft = GeomOffset(0f, y),
+                                                size = GeomSize(size.width, size.height * 0.02f)
+                                            )
+                                        }
+                                    }
+                                    "vignette" -> {
+                                        drawRect(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
+                                                center = center,
+                                                radius = size.maxDimension * 0.6f
+                                            )
+                                        )
+                                    }
+                                    "film_grain", "lofi" -> {
+                                        for (i in 0..30) {
+                                            val x = (i * 137 + 53) % size.width.toInt()
+                                            val y = (i * 89 + 29) % size.height.toInt()
+                                            drawCircle(
+                                                color = Color.White.copy(alpha = 0.1f),
+                                                radius = 1f,
+                                                center = GeomOffset(x.toFloat(), y.toFloat())
+                                            )
+                                        }
+                                    }
+                                    "night_vision" -> {
+                                        drawRect(color = Color(0xFF00FF00).copy(alpha = 0.08f))
+                                    }
+                                    "thermal" -> {
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(Color(0xFFFF0000).copy(alpha = 0.06f), Color(0xFF0000FF).copy(alpha = 0.06f))
+                                            )
+                                        )
+                                    }
+                                    else -> { /* no overlay for other effects */ }
+                                }
+                            }
+                    )
+                }
+                // Chroma key overlay: show green screen indicator
+                if (project.greenScreenEnabled) {
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                            .border(2.dp, Color(0xFF00FF00).copy(alpha = 0.4f))
+                    )
+                    Box(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+                            .background(Color(0xFF00AA00).copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Text("🖼️", fontSize = 32.sp)
+                        Text("🟢 Chroma", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Image overlay — show actual image with position/scale/opacity
+                if (project.imageOverlayPath != null && layerImageVisible) {
+                    val overlayBitmap = remember(project.imageOverlayPath) {
+                        try {
+                            val path = project.imageOverlayPath!!
+                            if (path.startsWith("content://") || path.startsWith("file://")) {
+                                val uri = android.net.Uri.parse(path)
+                                val inputStream = context.contentResolver.openInputStream(uri)
+                                inputStream?.use { android.graphics.BitmapFactory.decodeStream(it) }
+                            } else {
+                                android.graphics.BitmapFactory.decodeFile(path)
+                            }
+                        } catch (e: Exception) { null }
+                    }
+                    if (overlayBitmap != null) {
+                        val painter = androidx.compose.ui.graphics.painter.BitmapPainter(
+                            androidx.compose.ui.graphics.asImageBitmap(overlayBitmap)
+                        )
+                        androidx.compose.foundation.Image(
+                            painter = painter,
+                            contentDescription = "Image overlay",
+                            modifier = Modifier
+                                .fillMaxSize(project.imageOverlayScale)
+                                .align(
+                                    BiasAlignment(
+                                        horizontalBias = (project.imageOverlayX * 2f - 1f).coerceIn(-1f, 1f),
+                                        verticalBias = (project.imageOverlayY * 2f - 1f).coerceIn(-1f, 1f)
+                                    )
+                                )
+                                .graphicsLayer { alpha = project.imageOverlayOpacity }
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize(project.imageOverlayScale).align(
+                                BiasAlignment(
+                                    horizontalBias = (project.imageOverlayX * 2f - 1f).coerceIn(-1f, 1f),
+                                    verticalBias = (project.imageOverlayY * 2f - 1f).coerceIn(-1f, 1f)
+                                )
+                            ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🖼️", fontSize = 32.sp)
+                        }
                     }
                 }
 
@@ -887,7 +1058,7 @@ fun NextGenEditorScreen(
                         )
                             .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
                             .border(1.dp, CyberCyan.copy(0.5f), RoundedCornerShape(6.dp))
-                            .clickable { selectedTool = 6 }
+                            .clickable { selectedTool = 5; isPanelExpanded = true }
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -903,7 +1074,7 @@ fun NextGenEditorScreen(
                         modifier = Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = 8.dp)
                             .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
                             .border(1.dp, NeonOrange.copy(0.5f), RoundedCornerShape(6.dp))
-                            .clickable { selectedTool = 5 }
+                            .clickable { selectedTool = 8; isPanelExpanded = true }
                             .padding(horizontal = 6.dp, vertical = 3.dp)
                     ) {
                         Text("✏️ Edit sticker", fontSize = 7.sp, color = NeonOrange, fontWeight = FontWeight.Bold)
@@ -961,11 +1132,12 @@ fun NextGenEditorScreen(
             layerTextVisible = layerTextVisible,
             layerImageVisible = layerImageVisible,
             layerStickerVisible = layerStickerVisible,
-            onToggleVideoLayer = { layerVideoVisible = !layerVideoVisible },
-            onToggleAudioLayer = { layerAudioVisible = !layerAudioVisible },
-            onToggleTextLayer = { layerTextVisible = !layerTextVisible },
-            onToggleImageLayer = { layerImageVisible = !layerImageVisible },
-            onToggleStickerLayer = { layerStickerVisible = !layerStickerVisible },
+            selectedTool = selectedTool,
+            onToggleVideoLayer = { layerVideoVisible = !layerVideoVisible; selectedTool = 0; isPanelExpanded = true },
+            onToggleAudioLayer = { layerAudioVisible = !layerAudioVisible; selectedTool = 4; isPanelExpanded = true },
+            onToggleTextLayer = { layerTextVisible = !layerTextVisible; selectedTool = 5; isPanelExpanded = true },
+            onToggleImageLayer = { layerImageVisible = !layerImageVisible; selectedTool = 12; isPanelExpanded = true },
+            onToggleStickerLayer = { layerStickerVisible = !layerStickerVisible; selectedTool = 8; isPanelExpanded = true },
             onSeekTo = { seekMs ->
                 exoPlayer.seekTo(seekMs)
                 currentPlaybackTime = seekMs
@@ -1342,6 +1514,7 @@ private fun CapCutTimeline(
     layerTextVisible: Boolean,
     layerImageVisible: Boolean,
     layerStickerVisible: Boolean,
+    selectedTool: Int = -1,
     onToggleVideoLayer: () -> Unit,
     onToggleAudioLayer: () -> Unit,
     onToggleTextLayer: () -> Unit,
@@ -1443,18 +1616,17 @@ private fun CapCutTimeline(
 
             // Tracks
             Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                // Video track
+                // Video track — show real filename from project.videoPath
+                val videoFileName = project.videoPath.substringAfterLast("/").substringBeforeLast(".").take(18)
                 TimelineTrackRow(
-                    label = "🎬", isActive = layerVideoVisible, onToggle = onToggleVideoLayer,
+                    label = "🎬", isActive = layerVideoVisible || selectedTool == 0, onToggle = onToggleVideoLayer,
                     content = {
-                        Box(Modifier.weight(0.45f).fillMaxHeight().background(Brush.horizontalGradient(listOf(NeonOrange, Color(0xFFFF7043))), RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) { Text("Video 1", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold) }
-                        Box(Modifier.size(12.dp).background(Color.White.copy(0.15f), RoundedCornerShape(2.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Default.AutoAwesome, "T", tint = Color.White, modifier = Modifier.size(7.dp)) }
-                        Box(Modifier.weight(0.45f).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color(0xFFFF7043), NeonOrange)), RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) { Text("Video 2", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold) }
+                        Box(Modifier.weight(1f).fillMaxHeight().background(Brush.horizontalGradient(listOf(NeonOrange, Color(0xFFFF7043))), RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) { Text(videoFileName.ifBlank { "Video" }, fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 )
                 // Audio track
                 TimelineTrackRow(
-                    label = "🔊", isActive = layerAudioVisible, onToggle = onToggleAudioLayer,
+                    label = "🔊", isActive = layerAudioVisible || selectedTool == 4, onToggle = onToggleAudioLayer,
                     content = {
                         Box(Modifier.weight(1f).fillMaxHeight().background(Brush.horizontalGradient(listOf(CyberCyan.copy(0.2f), CyberCyan.copy(0.08f))), RoundedCornerShape(3.dp)).border(1.dp, CyberCyan.copy(0.25f), RoundedCornerShape(3.dp))) {
                             Row(Modifier.fillMaxSize().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1465,7 +1637,7 @@ private fun CapCutTimeline(
                 )
                 // Text track
                 TimelineTrackRow(
-                    label = "📝", isActive = layerTextVisible, onToggle = onToggleTextLayer,
+                    label = "📝", isActive = layerTextVisible || selectedTool == 5, onToggle = onToggleTextLayer,
                     content = {
                         Spacer(Modifier.weight(0.15f))
                         Box(Modifier.weight(0.7f).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color(0xFFAB47BC), Color(0xFFBA68C8))), RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) { Text(project.activeTextOverlay?.take(12) ?: "Subtitle", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold) }
@@ -1474,7 +1646,7 @@ private fun CapCutTimeline(
                 )
                 // Image track
                 TimelineTrackRow(
-                    label = "🖼️", isActive = layerImageVisible, onToggle = onToggleImageLayer,
+                    label = "🖼️", isActive = layerImageVisible || selectedTool == 12, onToggle = onToggleImageLayer,
                     content = {
                         if (project.imageOverlayPath != null) {
                             Box(Modifier.weight(0.5f).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color(0xFF4CAF50), Color(0xFF81C784))), RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) { Text("Image", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold) }
@@ -1486,7 +1658,7 @@ private fun CapCutTimeline(
                 )
                 // Sticker track
                 TimelineTrackRow(
-                    label = "⭐", isActive = layerStickerVisible, onToggle = onToggleStickerLayer,
+                    label = "⭐", isActive = layerStickerVisible || selectedTool == 8, onToggle = onToggleStickerLayer,
                     content = {
                         if (project.stickerType != "none") {
                             Spacer(Modifier.weight(0.3f))
@@ -1896,7 +2068,7 @@ private fun CapCutToolPanel(
             when (selectedTool) {
                 0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame)
                 1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
-                2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve)
+                2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve, onToggleReverse, onUpdateFreezeFrame)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
                 4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) }, onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic)
                 5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation, onUpdateTextStyle, onUpdateTextPositionX, onUpdateTextPositionY, onUpdateTextColor, onUpdateTextFontSize)
@@ -2371,7 +2543,7 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
 
 // ─── 2. SPEED PANEL ────────────────────────────────────────────
 @Composable
-private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, onUpdateSpeedCurve: (String) -> Unit) {
+private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, onUpdateSpeedCurve: (String) -> Unit, onToggleReverse: () -> Unit = {}, onUpdateFreezeFrame: (Long) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LiveAnimatedHeader("SPEED", "⚡", NeonOrange)
 
@@ -2402,10 +2574,27 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
         // Speed curves
         Text("SPEED CURVE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("Standard", "Montage", "Hero", "Flash", "Custom").forEach { c ->
+            listOf("Standard", "Montage", "Hero", "Flash", "Smooth").forEach { c ->
                 val sel = project.speedCurve.lowercase() == c.lowercase()
                 Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.15f) else Color.White.copy(0.03f), RoundedCornerShape(6.dp)).clickable { onUpdateSpeedCurve(if (sel) "constant" else c) }.padding(4.dp), contentAlignment = Alignment.Center) {
                     Text(c, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                }
+            }
+        }
+
+        // Reverse toggle
+        Row(Modifier.fillMaxWidth().background(if (project.isReverseEnabled) CyberCyan.copy(0.15f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (project.isReverseEnabled) CyberCyan.copy(0.3f) else Color.Transparent, RoundedCornerShape(6.dp)).clickable { onToggleReverse() }.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("🔄 REVERSE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isReverseEnabled) CyberCyan else Color.White)
+            Text(if (project.isReverseEnabled) "ON" else "OFF", fontSize = 8.sp, color = if (project.isReverseEnabled) CyberCyan else Color.Gray)
+        }
+
+        // Freeze frame duration
+        Text("FREEZE FRAME", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            listOf(0L to "Off", 250L to "0.25s", 500L to "0.5s", 1000L to "1s", 2000L to "2s", 3000L to "3s").forEach { (ms, label) ->
+                val sel = project.freezeFrameMs == ms
+                Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFreezeFrame(ms) }.padding(3.dp), contentAlignment = Alignment.Center) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                 }
             }
         }
