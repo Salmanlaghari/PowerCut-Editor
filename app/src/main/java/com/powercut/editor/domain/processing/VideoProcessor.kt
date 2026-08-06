@@ -642,6 +642,15 @@ class VideoProcessor @Inject constructor(
         textPositionY: Float = 0.85f,
         textColorHex: String = "#FFFFFF",
         textFontSize: Float = 42f,
+        textStyleId: String = "classic",
+        textBold: Boolean = false,
+        textItalic: Boolean = false,
+        textShadow: Boolean = false,
+        textOutline: Boolean = false,
+        textGlow: Boolean = false,
+        textNeon: Boolean = false,
+        textBgColor: String = "#00000000",
+        textBgOpacity: Float = 0.5f,
         stickerType: String = "none",
         activeTemplateId: String = "none",
         visualizerStyle: String = "none",
@@ -957,7 +966,7 @@ class VideoProcessor @Inject constructor(
 
         // Text overlay with animation
         if (!activeTextOverlay.isNullOrBlank()) {
-            val textFilter = buildTextOverlay(activeTextOverlay, textAnimationType, finalDuration, textPositionX, textPositionY, textColorHex, textFontSize)
+            val textFilter = buildTextOverlay(activeTextOverlay, textAnimationType, finalDuration, textPositionX, textPositionY, textColorHex, textFontSize, textStyleId, textBold, textItalic, textShadow, textOutline, textGlow, textNeon, textBgColor, textBgOpacity)
             if (textFilter.isNotEmpty()) vfFilters.add(textFilter)
         }
 
@@ -1970,7 +1979,16 @@ class VideoProcessor @Inject constructor(
         posX: Float = 0.5f,
         posY: Float = 0.85f,
         colorHex: String = "#FFFFFF",
-        fontSize: Float = 42f
+        fontSize: Float = 42f,
+        textStyleId: String = "classic",
+        textBold: Boolean = false,
+        textItalic: Boolean = false,
+        textShadow: Boolean = false,
+        textOutline: Boolean = false,
+        textGlow: Boolean = false,
+        textNeon: Boolean = false,
+        textBgColor: String = "#00000000",
+        textBgOpacity: Float = 0.5f
     ): String {
         val safeText = text.replace("'", "\\'").replace(":", "\\:")
         val anim = animation.lowercase().replace(" ", "_")
@@ -1986,7 +2004,21 @@ class VideoProcessor @Inject constructor(
         val xExpr = "w*${String.format("%.3f", posX)}-text_w/2"
         val yExpr = "h*${String.format("%.3f", posY)}-text_h/2"
         val fs = fontSize.toInt().coerceIn(8, 200)
-        val base = "drawtext=text='$safeText':fontsize=$fs:fontcolor=$fontColor:box=1:boxcolor=black@0.5:x=($xExpr):y=($yExpr)${fontFileClause()}"
+        // Build style-specific box/flags
+        val shadowFlag = if (textShadow) ":shadowx=3:shadowy=3:shadowcolor=black@0.8" else ""
+        val outlineFlag = if (textOutline) ":borderw=3:bordercolor=black" else ""
+        val boldFlag = if (textBold) ":bold=1" else ""
+        val italicFlag = if (textItalic) ":italic=1" else ""
+        val glowFlag = if (textGlow) ":fontcolor_expr=0x${fcHex}@'0.7+0.3*sin(t*4)'" else ""
+        val neonFlag = if (textNeon) ":fontcolor_expr=0x${fcHex}@'0.5+0.5*sin(t*6)'" else ""
+        // Background box
+        val bgBox = if (textBgColor != "#00000000") {
+            val bgHex = textBgColor.removePrefix("#")
+            val bgArgb = if (bgHex.length == 8) bgHex else "FF$bgHex"
+            val bgR = bgArgb.substring(2, 4); val bgG = bgArgb.substring(4, 6); val bgB = bgArgb.substring(6, 8)
+            ":box=1:boxcolor=0x${bgR}${bgG}${bgB}@${textBgOpacity}"
+        } else ":box=1:boxcolor=black@0.5"
+        val base = "drawtext=text='$safeText':fontsize=$fs:fontcolor=$fontColor$bgBox:x=($xExpr):y=($yExpr)${fontFileClause()}$shadowFlag$outlineFlag$boldFlag$italicFlag$glowFlag$neonFlag"
         return when (anim) {
             "none", "fade_in", "fade" -> "$base:alpha='if(lt(t,1)\\,t\\,1)'"
             "fade_out" -> "$base:alpha='if(gt(t,${duration - 1})\\,${duration}-t\\,1)'"

@@ -79,6 +79,7 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
@@ -566,7 +567,7 @@ fun NextGenEditorScreen(
         val fa = project.imageEditorFade
         val hi = project.imageEditorHighlights
         val sh = project.imageEditorShadows
-        val hasAdjustments = b != 1f || c != 1f || s != 1f || t != 1f || e != 1f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
+        val hasAdjustments = b != 0f || c != 1f || s != 1f || t != 0f || e != 1f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
 
         if (!hasAdjustments && lookMatrix == null) {
             colorFilter
@@ -586,11 +587,11 @@ fun NextGenEditorScreen(
             }
         } else {
             // Build a combined matrix: adjustments applied on top of filter
-            val brightnessShift = (b - 1f) * 100f
+            val brightnessShift = b * 100f
             val contrastScale = c
             val contrastShift = (1f - c) * 128f
-            val tempRed = 1f + (t - 1f) * 0.25f
-            val tempBlue = 1f - (t - 1f) * 0.25f
+            val tempRed = 1f + t * 0.25f
+            val tempBlue = 1f - t * 0.25f
             val expScale = e
 
             // Fade: lifts blacks (adds to all channels equally)
@@ -980,11 +981,36 @@ fun NextGenEditorScreen(
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Parse text color from hex
+                            val parsedTextColor = try {
+                                Color(android.graphics.Color.parseColor(project.textColorHex))
+                            } catch (e: Exception) { Color.White }
+                            // Apply text styles from project
+                            val displayColor = when {
+                                project.textNeon -> parsedTextColor.copy(alpha = 0.6f + 0.4f * t)
+                                project.textGlow -> parsedTextColor.copy(alpha = 0.8f + 0.2f * t)
+                                else -> parsedTextColor
+                            }
                             Text(
                                 text = project.activeTextOverlay!!,
-                                color = textColor,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
+                                color = displayColor,
+                                fontSize = (project.textFontSize / 2f).coerceIn(8f, 48f).sp,
+                                fontWeight = if (project.textBold) FontWeight.Black else FontWeight.Bold,
+                                fontStyle = if (project.textItalic) androidx.compose.ui.text.font.FontStyle.Italic else null,
+                                modifier = Modifier
+                                    .then(
+                                        if (project.textShadow) Modifier.drawBehind {
+                                            drawContext.canvas.nativeCanvas.apply {
+                                                val paint = android.graphics.Paint().apply {
+                                                    color = android.graphics.Color.BLACK
+                                                    setShadowLayer(8f, 2f, 2f, android.graphics.Color.BLACK)
+                                                }
+                                                drawContext.canvas.nativeCanvas.drawText(
+                                                    project.activeTextOverlay!!, 0f, 0f, paint
+                                                )
+                                            }
+                                        } else Modifier
+                                    )
                             )
                             if (showCursor) {
                                 Spacer(Modifier.width(2.dp))
@@ -994,12 +1020,97 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // Sticker overlay
+                // Sticker overlay — supports ALL 100+ sticker IDs
                 if (project.stickerType != "none" && layerStickerVisible) {
-                    val stickerEmoji = when (project.stickerType) {
-                        "fire" -> "🔥"; "star" -> "⭐"; "heart" -> "❤️"; "glow" -> "⚡"
-                        "diamond" -> "💎"; "music" -> "🎵"; "crown" -> "👑"; "sparkle" -> "💫"
-                        else -> ""
+                    val stickerEmoji = when {
+                        project.stickerType.startsWith("fire") || project.stickerType == "sm_fire" -> "🔥"
+                        project.stickerType.startsWith("star") || project.stickerType == "ls_star" || project.stickerType == "sy_blackstar" -> "⭐"
+                        project.stickerType.contains("heart") || project.stickerType == "sm_heart" -> "❤️"
+                        project.stickerType.contains("glow") || project.stickerType == "sy_sparkle" -> "✨"
+                        project.stickerType.contains("diamond") || project.stickerType == "sy_diamond" -> "💎"
+                        project.stickerType.contains("music") -> "🎵"
+                        project.stickerType.contains("crown") || project.stickerType == "sm_crown" -> "👑"
+                        project.stickerType.contains("sparkle") || project.stickerType == "ls_dizzy" -> "💫"
+                        project.stickerType.contains("rocket") || project.stickerType == "sm_rocket" -> "🚀"
+                        project.stickerType.contains("trophy") || project.stickerType == "sm_trophy" -> "🏆"
+                        project.stickerType.contains("party") || project.stickerType == "sm_party" -> "🎉"
+                        project.stickerType.contains("100") || project.stickerType == "sm_100" -> "💯"
+                        project.stickerType.contains("like") || project.stickerType == "sm_like" -> "👍"
+                        project.stickerType.contains("clap") || project.stickerType == "sm_clap" -> "👏"
+                        project.stickerType.contains("ok") || project.stickerType == "sm_ok" -> "👌"
+                        project.stickerType.contains("money") || project.stickerType.contains("dollar") -> "💰"
+                        project.stickerType.contains("camera") || project.stickerType.contains("video") || project.stickerType.contains("instagram") -> "📸"
+                        project.stickerType.contains("message") || project.stickerType == "sm_message" -> "💬"
+                        project.stickerType.contains("search") || project.stickerType == "sm_search" -> "🔍"
+                        project.stickerType.contains("share") || project.stickerType == "sm_share" -> "📢"
+                        project.stickerType.contains("link") || project.stickerType == "sm_link" -> "🔗"
+                        project.stickerType.contains("coffee") || project.stickerType == "ls_coffee" -> "☕"
+                        project.stickerType.contains("tea") || project.stickerType == "ls_tea" -> "🍵"
+                        project.stickerType.contains("pizza") || project.stickerType == "ls_pizza" -> "🍔"
+                        project.stickerType.contains("icecream") || project.stickerType == "ls_icecream" -> "🍦"
+                        project.stickerType.contains("flower") || project.stickerType == "ls_flower" -> "🌼"
+                        project.stickerType.contains("rose") || project.stickerType == "ls_rose" -> "🌹"
+                        project.stickerType.contains("earth") || project.stickerType == "ls_earth" -> "🌍"
+                        project.stickerType.contains("moon") || project.stickerType == "ls_moon" -> "🌙"
+                        project.stickerType.contains("sun") || project.stickerType == "ls_sun" -> "☀️"
+                        project.stickerType.contains("snow") || project.stickerType == "ls_snow" -> "❄️"
+                        project.stickerType.contains("palm") || project.stickerType == "ls_palm" -> "🌴"
+                        project.stickerType.contains("sunflower") || project.stickerType == "ls_sunflower" -> "🌻"
+                        project.stickerType.contains("beer") || project.stickerType == "ls_beer" -> "🍻"
+                        project.stickerType.contains("wine") || project.stickerType == "ls_wine" -> "🍷"
+                        project.stickerType.contains("happy") || project.stickerType == "em_happy" -> "😀"
+                        project.stickerType.contains("smile") || project.stickerType == "em_smile" -> "😃"
+                        project.stickerType.contains("joy") || project.stickerType == "em_joy" -> "😄"
+                        project.stickerType.contains("blush") || project.stickerType == "em_blush" -> "😊"
+                        project.stickerType.contains("love") || project.stickerType == "em_love" -> "😍"
+                        project.stickerType.contains("kiss") || project.stickerType == "em_kiss" -> "😘"
+                        project.stickerType.contains("wink") || project.stickerType == "em_wink" -> "😜"
+                        project.stickerType.contains("rofl") || project.stickerType == "em_rofl" -> "🤣"
+                        project.stickerType.contains("tears") || project.stickerType == "em_tears" -> "😂"
+                        project.stickerType.contains("cry") || project.stickerType == "em_cry" -> "😭"
+                        project.stickerType.contains("scream") || project.stickerType == "em_scream" -> "😱"
+                        project.stickerType.contains("angry") || project.stickerType == "em_angry" -> "😡"
+                        project.stickerType.contains("cool") || project.stickerType == "em_cool" -> "😎"
+                        project.stickerType.contains("partyface") || project.stickerType == "em_partyface" -> "🥳"
+                        project.stickerType.contains("stareyes") || project.stickerType == "em_stareyes" -> "🤩"
+                        project.stickerType.contains("pray") || project.stickerType == "em_pray" -> "🙏"
+                        project.stickerType.contains("rock") || project.stickerType == "em_rock" -> "🤘"
+                        project.stickerType.contains("ribbon") || project.stickerType == "cs_ribbon" -> "🎀"
+                        project.stickerType.contains("gift") || project.stickerType == "cs_gift" -> "🎁"
+                        project.stickerType.contains("confetti") || project.stickerType == "cs_confetti" -> "🎊"
+                        project.stickerType.contains("masks") || project.stickerType == "cs_masks" -> "🎭"
+                        project.stickerType.contains("palette") || project.stickerType == "cs_palette" -> "🎨"
+                        project.stickerType.contains("mic") || project.stickerType == "cs_mic" -> "🎤"
+                        project.stickerType.contains("headphone") || project.stickerType == "cs_headphone" -> "🎧"
+                        project.stickerType.contains("bell") || project.stickerType == "cs_bell" -> "🔔"
+                        project.stickerType.contains("clock") || project.stickerType == "cs_clock" -> "🕓"
+                        project.stickerType.contains("idea") || project.stickerType == "cs_idea" -> "💡"
+                        project.stickerType.contains("check") || project.stickerType == "sy_check" -> "✔️"
+                        project.stickerType.contains("cross") || project.stickerType == "sy_cross" -> "✖️"
+                        project.stickerType.contains("plus") || project.stickerType == "sy_plus" -> "➕"
+                        project.stickerType.contains("redcircle") || project.stickerType == "sy_redcircle" -> "🔴"
+                        project.stickerType.contains("orangecircle") || project.stickerType == "sy_orangecircle" -> "🟠"
+                        project.stickerType.contains("yellowcircle") || project.stickerType == "sy_yellowcircle" -> "🟡"
+                        project.stickerType.contains("greencircle") || project.stickerType == "sy_greencircle" -> "🟢"
+                        project.stickerType.contains("shootingstar") || project.stickerType == "ls_shootingstar" -> "🌠"
+                        project.stickerType.contains("dango") || project.stickerType == "ls_dango" -> "🍡"
+                        project.stickerType.contains("grapes") || project.stickerType == "ls_grapes" -> "🍇"
+                        project.stickerType.contains("apple") || project.stickerType == "ls_apple" -> "🍏"
+                        project.stickerType.contains("watermelon") || project.stickerType == "ls_watermelon" -> "🍉"
+                        project.stickerType.contains("cookie") || project.stickerType == "ls_cookie" -> "🍪"
+                        project.stickerType.contains("fries") || project.stickerType == "ls_fries" -> "🍟"
+                        project.stickerType.contains("teapot") || project.stickerType == "ls_teapot" -> "🫖"
+                        project.stickerType.contains("crescent") || project.stickerType == "ls_crescent" -> "🌙"
+                        project.stickerType.contains("dizzysym") || project.stickerType == "sy_dizzysym" -> "💫"
+                        project.stickerType.contains("starcross") || project.stickerType == "sy_starcross" -> "✪"
+                        project.stickerType.contains("whitestar") || project.stickerType == "sy_whitestar" -> "☆"
+                        project.stickerType.contains("minus") || project.stickerType == "sy_minus" -> "➖"
+                        project.stickerType.contains("divide") || project.stickerType == "sy_divide" -> "➗"
+                        project.stickerType.contains("scroll") || project.stickerType == "cs_scroll" -> "📜"
+                        project.stickerType.contains("glasses") || project.stickerType == "cs_glasses" -> "👓"
+                        project.stickerType.contains("speaker") || project.stickerType == "cs_speaker" -> "🔈"
+                        project.stickerType.contains("music2") || project.stickerType == "cs_music2" -> "🎶"
+                        else -> "⭐" // fallback
                     }
                     if (stickerEmoji.isNotEmpty()) {
                         Text(stickerEmoji, fontSize = 48.sp, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp))
@@ -2240,7 +2351,7 @@ private fun EditPanel(
                 // Reset button
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.End) {
                     Box(Modifier.background(Color.White.copy(0.06f), RoundedCornerShape(6.dp)).clickable {
-                        onUpdateBrightness(0.5f); onUpdateContrast(1f); onUpdateSaturation(1f)
+                        onUpdateBrightness(0f); onUpdateContrast(1f); onUpdateSaturation(1f)
                         onUpdateSharpen(0f); onUpdateTemperature(0f); onUpdateFade(0f)
                         onUpdateVignette(0f); onUpdateGrain(0f)
                         android.widget.Toast.makeText(ctx, "Adjustments reset!", android.widget.Toast.LENGTH_SHORT).show()
