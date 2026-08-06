@@ -32,6 +32,15 @@ data class VideoProject(
     val textPositionY: Float = 0.85f,
     val textColorHex: String = "#FFFFFF",
     val textFontSize: Float = 24f,
+    // Extended text styling
+    val textBold: Boolean = false,
+    val textItalic: Boolean = false,
+    val textShadow: Boolean = false,
+    val textOutline: Boolean = false,
+    val textGlow: Boolean = false,
+    val textNeon: Boolean = false,
+    val textBgColor: String = "#00000000",   // ARGB hex, transparent default
+    val textBgOpacity: Float = 0.5f,
     val stickerType: String = "none",
 
     // Advanced Exclusive features

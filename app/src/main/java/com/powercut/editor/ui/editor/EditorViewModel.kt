@@ -229,6 +229,14 @@ class EditorViewModel @Inject constructor(
         json.put("textPositionY", project.textPositionY)
         json.put("textColorHex", project.textColorHex)
         json.put("textFontSize", project.textFontSize)
+        json.put("textBold", project.textBold)
+        json.put("textItalic", project.textItalic)
+        json.put("textShadow", project.textShadow)
+        json.put("textOutline", project.textOutline)
+        json.put("textGlow", project.textGlow)
+        json.put("textNeon", project.textNeon)
+        json.put("textBgColor", project.textBgColor)
+        json.put("textBgOpacity", project.textBgOpacity.toDouble())
         json.put("stickerType", project.stickerType)
         json.put("activeTemplateId", project.activeTemplateId)
         json.put("visualizerStyle", project.visualizerStyle)
@@ -323,6 +331,14 @@ class EditorViewModel @Inject constructor(
             textPositionY = json.optDouble("textPositionY", 0.85).toFloat(),
             textColorHex = json.optString("textColorHex", "#FFFFFF"),
             textFontSize = json.optDouble("textFontSize", 24.0).toFloat(),
+            textBold = json.optBoolean("textBold", false),
+            textItalic = json.optBoolean("textItalic", false),
+            textShadow = json.optBoolean("textShadow", false),
+            textOutline = json.optBoolean("textOutline", false),
+            textGlow = json.optBoolean("textGlow", false),
+            textNeon = json.optBoolean("textNeon", false),
+            textBgColor = json.optString("textBgColor", "#00000000"),
+            textBgOpacity = json.optDouble("textBgOpacity", 0.5).toFloat(),
             stickerType = json.optString("stickerType", "none"),
             activeTemplateId = json.optString("activeTemplateId", "none"),
             visualizerStyle = json.optString("visualizerStyle", "none"),
@@ -783,6 +799,38 @@ class EditorViewModel @Inject constructor(
         projectRepository.updateProject { project ->
             project.copy(textFontSize = size.coerceIn(8f, 120f))
         }
+    }
+
+    fun toggleTextBold() {
+        projectRepository.updateProject { it.copy(textBold = !it.textBold) }
+    }
+
+    fun toggleTextItalic() {
+        projectRepository.updateProject { it.copy(textItalic = !it.textItalic) }
+    }
+
+    fun toggleTextShadow() {
+        projectRepository.updateProject { it.copy(textShadow = !it.textShadow) }
+    }
+
+    fun toggleTextOutline() {
+        projectRepository.updateProject { it.copy(textOutline = !it.textOutline) }
+    }
+
+    fun toggleTextGlow() {
+        projectRepository.updateProject { it.copy(textGlow = !it.textGlow) }
+    }
+
+    fun toggleTextNeon() {
+        projectRepository.updateProject { it.copy(textNeon = !it.textNeon) }
+    }
+
+    fun updateTextBgColor(hex: String) {
+        projectRepository.updateProject { it.copy(textBgColor = hex) }
+    }
+
+    fun updateTextBgOpacity(opacity: Float) {
+        projectRepository.updateProject { it.copy(textBgOpacity = opacity.coerceIn(0f, 1f)) }
     }
 
     fun updateStickerType(sticker: String) {

@@ -451,6 +451,41 @@ fun NextGenEditorScreen(
     LaunchedEffect(project.speedFactor) { exoPlayer.playbackParameters = PlaybackParameters(project.speedFactor); playbackSpeed = project.speedFactor }
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
+    // ═══ BGM (Background Music) ExoPlayer — second player for background music ═══
+    val bgmPlayer = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
+    var bgmPrepared by remember { mutableStateOf(false) }
+
+    // Prepare BGM when backgroundMusicPath changes
+    LaunchedEffect(project.backgroundMusicPath) {
+        val bgmPath = project.backgroundMusicPath
+        if (!bgmPath.isNullOrBlank()) {
+            val bgmUri = if (bgmPath.startsWith("content://") || bgmPath.startsWith("file://"))
+                Uri.parse(bgmPath) else Uri.fromFile(java.io.File(bgmPath))
+            bgmPlayer.setMediaItem(MediaItem.fromUri(bgmUri))
+            bgmPlayer.prepare()
+            bgmPrepared = true
+            if (isPlaying) bgmPlayer.play()
+        } else {
+            bgmPlayer.stop()
+            bgmPlayer.clearMediaItems()
+            bgmPrepared = false
+        }
+    }
+
+    // Sync BGM play/pause with video
+    LaunchedEffect(isPlaying) {
+        if (isPlaying && bgmPrepared) bgmPlayer.play()
+        else bgmPlayer.pause()
+    }
+
+    // Sync BGM volume
+    LaunchedEffect(project.backgroundMusicVolume) {
+        bgmPlayer.volume = project.backgroundMusicVolume
+    }
+
+    // Release BGM player on dispose
+    DisposableEffect(Unit) { onDispose { bgmPlayer.release() } }
+
     // ─── Filter Matrix ────────────────────────────────────────
     val colorFilter = remember(project.selectedFilter) {
         val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
@@ -798,30 +833,7 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // ══ Ultra Redesign v2: PROMINENT 8K LIVE PREVIEW BADGE ══
-                // Restored and made MORE prominent — top-right corner with
-                // animated pulse glow, signature gradient, and LIVE indicator.
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .background(
-                            Brush.horizontalGradient(listOf(Color(0xFFFF5A3C), Color(0xFF9D4EDD))),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .background(Color(0xFF34D399), CircleShape)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("8K LIVE", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 1.sp)
-                    }
-                }
+                // ══ Clean preview — no hardcoded badges ══
                 // Resolution badge top-left
                 Box(
                     modifier = Modifier
@@ -1919,31 +1931,31 @@ private fun CapCutToolPanel(
                     onUndoEraser = onUndoEraser,
                     onResetEraser = onResetEraser
                 )
-                16 -> com.powercut.editor.ui.editor.tools.ImageEditorPanel(
+                16 -> com.powercut.editor.ui.editor.tools.ImageStudioPanel(
                     brightness = project.imageEditorBrightness,
                     contrast = project.imageEditorContrast,
                     saturation = project.imageEditorSaturation,
-                    blur = project.imageEditorBlur,
-                    sharpen = project.imageEditorSharpen,
+                    exposure = project.imageEditorExposure,
                     temperature = project.imageEditorTemperature,
                     vignette = project.imageEditorVignette,
                     grain = project.imageEditorGrain,
                     fade = project.imageEditorFade,
                     highlights = project.imageEditorHighlights,
                     shadows = project.imageEditorShadows,
-                    exposure = project.imageEditorExposure,
+                    blur = project.imageEditorBlur,
+                    sharpen = project.imageEditorSharpen,
                     onUpdateBrightness = onUpdateImageEditorBrightness,
                     onUpdateContrast = onUpdateImageEditorContrast,
                     onUpdateSaturation = onUpdateImageEditorSaturation,
-                    onUpdateBlur = onUpdateImageEditorBlur,
-                    onUpdateSharpen = onUpdateImageEditorSharpen,
+                    onUpdateExposure = onUpdateImageEditorExposure,
                     onUpdateTemperature = onUpdateImageEditorTemperature,
                     onUpdateVignette = onUpdateImageEditorVignette,
                     onUpdateGrain = onUpdateImageEditorGrain,
                     onUpdateFade = onUpdateImageEditorFade,
                     onUpdateHighlights = onUpdateImageEditorHighlights,
                     onUpdateShadows = onUpdateImageEditorShadows,
-                    onUpdateExposure = onUpdateImageEditorExposure,
+                    onUpdateBlur = onUpdateImageEditorBlur,
+                    onUpdateSharpen = onUpdateImageEditorSharpen,
                     onResetAll = onResetImageEditor
                 )
                 17 -> com.powercut.editor.ui.editor.tools.OrientationToolsPanel(
