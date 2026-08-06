@@ -198,7 +198,7 @@ class RoyaltyFreeMusicGenerator @Inject constructor(
                 val noteCount = spec.progression[chordIdx].size
                 val inputLabels = (chordMixIdx until chordMixIdx + noteCount).joinToString("") { "[$it:a]" }
                 val mixLabel = "[chord$chordIdx]"
-                fcParts.add("$inputLabelsamix=inputs=$noteCount:duration=longest$mixLabel")
+                fcParts.add("${inputLabels}amix=inputs=$noteCount:duration=longest$mixLabel")
                 chordMixIdx += noteCount
                 chordMixLabels.add(mixLabel)
             }
