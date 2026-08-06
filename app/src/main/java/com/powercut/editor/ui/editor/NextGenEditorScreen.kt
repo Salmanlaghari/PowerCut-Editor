@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -73,6 +74,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +85,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1176,7 +1179,7 @@ private fun EditingCompletePage(
 @Composable
 private fun SummaryItem(emoji: String, label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 16.sp)
+        Text(p.emoji, fontSize = 16.sp)
         Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text(label, fontSize = 8.sp, color = Color.Gray)
     }
@@ -1806,7 +1809,9 @@ private fun CapCutToolPanel(
     onUpdatePremiumLook: (String) -> Unit = {},
     onUpdateKeyframeAnim: (String) -> Unit = {},
     onUpdateAiFeature: (String) -> Unit = {},
-    onUpdateSocialPreset: (String) -> Unit = {}
+    onUpdateSocialPreset: (String) -> Unit = {},
+    onProTier: () -> Unit = {},
+    onPremiumStudio: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -2766,9 +2771,9 @@ private fun TextPanel(
                 // Visual 3x3 position grid
                 Text("QUICK POSITIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 val positions = listOf(
-                    "TL" to 0.15f to 0.15f, "TC" to 0.5f to 0.15f, "TR" to 0.85f to 0.15f,
-                    "ML" to 0.15f to 0.5f, "C" to 0.5f to 0.5f, "MR" to 0.85f to 0.5f,
-                    "BL" to 0.15f to 0.85f, "BC" to 0.5f to 0.85f, "BR" to 0.85f to 0.85f
+                    "TL" to Pair(0.15f, 0.15f), "TC" to Pair(0.5f, 0.15f), "TR" to Pair(0.85f, 0.15f),
+                    "ML" to Pair(0.15f, 0.5f), "C" to Pair(0.5f, 0.5f), "MR" to Pair(0.85f, 0.5f),
+                    "BL" to Pair(0.15f, 0.85f), "BC" to Pair(0.5f, 0.85f), "BR" to Pair(0.85f, 0.85f)
                 )
                 // Build 3x3 grid
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -2809,7 +2814,7 @@ private fun TextPanel(
                 // Quick presets
                 Text("PRESET POSITIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf("Top" to 0.5f to 0.1f, "Bottom" to 0.5f to 0.9f, "Center" to 0.5f to 0.5f, "Lower Third" to 0.5f to 0.75f, "Upper Third" to 0.5f to 0.25f, "Left Edge" to 0.1f to 0.5f, "Right Edge" to 0.9f to 0.5f).forEach { (label, coords) ->
+                    listOf("Top" to Pair(0.5f, 0.1f), "Bottom" to Pair(0.5f, 0.9f), "Center" to Pair(0.5f, 0.5f), "Lower Third" to Pair(0.5f, 0.75f), "Upper Third" to Pair(0.5f, 0.25f), "Left Edge" to Pair(0.1f, 0.5f), "Right Edge" to Pair(0.9f, 0.5f)).forEach { (label, coords) ->
                         val (px, py) = coords
                         Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdatePosX(px); onUpdatePosY(py) }.padding(horizontal = 6.dp, vertical = 4.dp)) {
                             Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -3894,6 +3899,7 @@ private data class Quad(val emoji: String, val name: String, val id: String, val
 
 
 // ─── 12. IMAGE PANEL ───────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ImagePanel(
     project: VideoProject,
@@ -3982,12 +3988,11 @@ private fun ImagePanel(
                 Box(Modifier.fillMaxWidth().height(80.dp).background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, CyberCyan.copy(0.2f), RoundedCornerShape(8.dp))) {
                     // 3x3 grid for position selection
                     val positions = listOf(
-                        "↖ TL" to 0.15f to 0.15f, "↑ TC" to 0.5f to 0.15f, "↖ TR" to 0.85f to 0.15f,
-                        "← ML" to 0.15f to 0.5f, "● C" to 0.5f to 0.5f, "→ MR" to 0.85f to 0.5f,
-                        "↙ BL" to 0.15f to 0.85f, "↓ BC" to 0.5f to 0.85f, "↘ BR" to 0.85f to 0.85f
+                        "↖ TL" to Pair(0.15f, 0.15f), "↑ TC" to Pair(0.5f, 0.15f), "↖ TR" to Pair(0.85f, 0.15f),
+                        "← ML" to Pair(0.15f, 0.5f), "● C" to Pair(0.5f, 0.5f), "→ MR" to Pair(0.85f, 0.5f),
+                        "↙ BL" to Pair(0.15f, 0.85f), "↓ BC" to Pair(0.5f, 0.85f), "↘ BR" to Pair(0.85f, 0.85f)
                     )
-                    positions.forEach { (labelxy) ->
-                        val (label, xy) = labelxy
+                    positions.forEach { (label, xy) ->
                         val (x, y) = xy
                         val sel = kotlin.math.abs(project.imageOverlayX - x) < 0.1f && kotlin.math.abs(project.imageOverlayY - y) < 0.1f
                         Box(Modifier.offset(x = (x * 280).dp - 20.dp, y = (y * 80).dp - 12.dp).size(40.dp).background(if (sel) CyberCyan.copy(0.3f) else Color.White.copy(0.08f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, CyberCyan, RoundedCornerShape(6.dp)).clickable {
@@ -4663,9 +4668,9 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
 
 // Shared infinite pulse animation driver for in-editor premium panels
 @Composable
-private fun rememberPulse(): Float {
+private fun rememberPulse(): State<Float> {
     val transition = rememberInfiniteTransition(label = "pulse")
-    val pulse by transition.animateFloat(
+    return transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -4674,7 +4679,6 @@ private fun rememberPulse(): Float {
         ),
         label = "pulseVal"
     )
-    return pulse
 }
 
 // v6.2.0: Reusable live animated header for all tool panels
@@ -4690,7 +4694,7 @@ private fun LiveAnimatedHeader(title: String, icon: String, accentColor: Color =
         Canvas(Modifier.fillMaxSize().padding(3.dp)) {
             val w = size.width
             val h = size.height
-            val t = pulse
+            val t = pulse.value
             // Animated flowing wave background
             val path = androidx.compose.ui.graphics.Path().apply {
                 moveTo(0f, h * 0.7f)
@@ -4916,47 +4920,45 @@ private fun PresetsPanel(project: VideoProject, onUpdateSocialPreset: (String) -
 
         Text("EXPORT PRESETS FOR EVERY PLATFORM", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
 
+        data class SocialPreset(val emoji: String, val name: String, val id: String, val spec: String)
         val presets = listOf(
-            "📱" to "Instagram Post" to "ig_post" to "1:1 · 1080×1080",
-            "📱" to "Instagram Story" to "ig_story" to "9:16 · 1080×1920",
-            "📱" to "Instagram Reel" to "ig_reel" to "9:16 · 1080×1920",
-            "🎵" to "TikTok" to "tiktok" to "9:16 · 1080×1920",
-            "📺" to "YouTube Short" to "yt_short" to "9:16 · 1080×1920",
-            "📺" to "YouTube Video" to "yt_video" to "16:9 · 1920×1080",
-            "📘" to "Facebook Post" to "fb_post" to "1:1 · 1080×1080",
-            "📘" to "Facebook Story" to "fb_story" to "9:16 · 1080×1920",
-            "💬" to "WhatsApp Status" to "wa_status" to "9:16 · 1080×1920",
-            "🐦" to "X / Twitter" to "twitter" to "16:9 · 1920×1080",
-            "📌" to "Pinterest" to "pinterest" to "2:3 · 1000×1500",
-            "💼" to "LinkedIn" to "linkedin" to "1.91:1 · 1200×627",
-            "🎬" to "Cinema 4K" to "cinema_4k" to "16:9 · 3840×2160",
-            "🎮" to "Gaming 8K" to "gaming_8k" to "16:9 · 7680×4320",
-            "📺" to "TV Broadcast" to "tv_broadcast" to "16:9 · 1920×1080",
-            "🖼️" to "Portrait" to "portrait" to "2:3 · 1080×1620",
-            "🖼️" to "Landscape" to "landscape" to "3:2 · 1620×1080",
-            "⬜" to "Square" to "square" to "1:1 · 1080×1080"
+            SocialPreset("📱", "Instagram Post", "ig_post", "1:1 · 1080×1080"),
+            SocialPreset("📱", "Instagram Story", "ig_story", "9:16 · 1080×1920"),
+            SocialPreset("📱", "Instagram Reel", "ig_reel", "9:16 · 1080×1920"),
+            SocialPreset("🎵", "TikTok", "tiktok", "9:16 · 1080×1920"),
+            SocialPreset("📺", "YouTube Short", "yt_short", "9:16 · 1080×1920"),
+            SocialPreset("📺", "YouTube Video", "yt_video", "16:9 · 1920×1080"),
+            SocialPreset("📘", "Facebook Post", "fb_post", "1:1 · 1080×1080"),
+            SocialPreset("📘", "Facebook Story", "fb_story", "9:16 · 1080×1920"),
+            SocialPreset("💬", "WhatsApp Status", "wa_status", "9:16 · 1080×1920"),
+            SocialPreset("🐦", "X / Twitter", "twitter", "16:9 · 1920×1080"),
+            SocialPreset("📌", "Pinterest", "pinterest", "2:3 · 1000×1500"),
+            SocialPreset("💼", "LinkedIn", "linkedin", "1.91:1 · 1200×627"),
+            SocialPreset("🎬", "Cinema 4K", "cinema_4k", "16:9 · 3840×2160"),
+            SocialPreset("🎮", "Gaming 8K", "gaming_8k", "16:9 · 7680×4320"),
+            SocialPreset("📺", "TV Broadcast", "tv_broadcast", "16:9 · 1920×1080"),
+            SocialPreset("🖼️", "Portrait", "portrait", "2:3 · 1080×1620"),
+            SocialPreset("🖼️", "Landscape", "landscape", "3:2 · 1620×1080"),
+            SocialPreset("⬜", "Square", "square", "1:1 · 1080×1080")
         )
 
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            presets.forEach { (emojiName, idSpec) ->
-                val (emojiName2, id) = emojiName to idSpec.first
-                val (emoji, name) = emojiName2
-                val spec = idSpec.second
-                val sel = project.socialPreset == id
+            presets.forEach { p ->
+                val sel = project.socialPreset == p.id
                 Box(Modifier.weight(1f).fillMaxWidth(0.48f)
                     .background(if (sel) SignaturePurple.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp))
                     .border(if (sel) 1.5.dp else 0.dp, if (sel) SignaturePurple else Color.Transparent, RoundedCornerShape(8.dp))
                     .clickable {
-                        onUpdateSocialPreset(if (sel) "none" else id)
-                        android.widget.Toast.makeText(ctx, "Preset: $name\n$spec", android.widget.Toast.LENGTH_SHORT).show()
+                        onUpdateSocialPreset(if (sel) "none" else p.id)
+                        android.widget.Toast.makeText(ctx, "Preset: ${p.name}\n${p.spec}", android.widget.Toast.LENGTH_SHORT).show()
                     }.padding(6.dp)) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(emoji, fontSize = 16.sp)
+                            Text(p.emoji, fontSize = 16.sp)
                             Spacer(Modifier.width(4.dp))
-                            Text(name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignaturePurple else Color.White, maxLines = 1)
+                            Text(p.name, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignaturePurple else Color.White, maxLines = 1)
                         }
-                        Text(spec, fontSize = 5.sp, color = Color.Gray, maxLines = 1)
+                        Text(p.spec, fontSize = 5.sp, color = Color.Gray, maxLines = 1)
                     }
                 }
             }

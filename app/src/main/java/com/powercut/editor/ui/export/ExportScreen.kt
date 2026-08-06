@@ -440,8 +440,8 @@ fun ExportScreen(
                                             .clip(CircleShape)
                                             .background(
                                                 if (isCurrent) Brush.sweepGradient(listOf(NeonOrange, SignaturePurple))
-                                                else if (isActive) CyberCyan.copy(0.6f)
-                                                else Color.White.copy(0.1f)
+                                                else if (isActive) androidx.compose.ui.graphics.SolidColor(CyberCyan.copy(0.6f))
+                                                else androidx.compose.ui.graphics.SolidColor(Color.White.copy(0.1f))
                                             )
                                     )
                                     Spacer(Modifier.height(4.dp))

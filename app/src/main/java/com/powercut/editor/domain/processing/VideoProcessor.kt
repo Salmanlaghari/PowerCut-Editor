@@ -636,6 +636,10 @@ class VideoProcessor @Inject constructor(
         speedCurve: String = "constant",
         activeTextOverlay: String? = null,
         textAnimationType: String = "none",
+        textPositionX: Float = 0.5f,
+        textPositionY: Float = 0.85f,
+        textColorHex: String = "#FFFFFF",
+        textFontSize: Float = 42f,
         stickerType: String = "none",
         activeTemplateId: String = "none",
         visualizerStyle: String = "none",
@@ -934,7 +938,7 @@ class VideoProcessor @Inject constructor(
 
         // Text overlay with animation
         if (!activeTextOverlay.isNullOrBlank()) {
-            val textFilter = buildTextOverlay(activeTextOverlay, textAnimationType, finalDuration)
+            val textFilter = buildTextOverlay(activeTextOverlay, textAnimationType, finalDuration, textPositionX, textPositionY, textColorHex, textFontSize)
             if (textFilter.isNotEmpty()) vfFilters.add(textFilter)
         }
 
