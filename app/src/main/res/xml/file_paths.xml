@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-cache-path name="powercut_exports" path="PowerCutExports/" />
+    <cache-path name="cache" path="." />
+    <external-files-path name="movies" path="Movies/" />
+    <external-path name="external_movies" path="Movies/PowerCut/" />
+    <files-path name="files" path="." />
+</paths>

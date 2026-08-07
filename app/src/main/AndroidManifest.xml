@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:targetApi="30" />
+
+    <!-- ============================================================ -->
+    <!-- LONG-EXPORT RELIABILITY PERMISSIONS (v4.2)                   -->
+    <!-- These let the export run in the background for 1+ hour       -->
+    <!-- without Android killing the process.                         -->
+    <!-- ============================================================ -->
+
+    <!-- Core foreground-service permission (Android 9+). Required to show
+         the persistent "Exporting…" notification that keeps the app alive. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Android 14 (API 34) requires a typed foreground-service permission
+         matching the service type. We use dataSync (background data
+         processing) which is the correct type for long video transcode
+         jobs at compileSdk 34. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- Keeps the CPU running while the screen is off so FFmpeg does not
+         stall. Acquired for the whole duration of the export. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Keeps Wi-Fi active during long uploads/exports that may pull
+         background music or watermark assets over the network. -->
+    <uses-permission android:name="android.permission.WIFI_LOCK" />
+
+    <!-- Android 13+ (API 33) requires runtime permission to post the
+         foreground notification. Without it the notification (and
+         therefore the foreground service) silently fails on 13+. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- (Optional) Lets us read the battery temperature to detect thermal
+         throttling and pause encoding before the SoC shuts down. -->
+    <uses-permission android:name="android.permission.BATTERY_STATS" tools:ignore="ProtectedPermissions" />
+
+    <application
+        android:name="com.powercut.editor.PowerCutApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PowerCutEditor"
+        android:requestLegacyExternalStorage="true"
+        tools:targetApi="34">
+
+        <!-- Real Google AdMob Application ID -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-8178045957849630~8312514526" />
+
+        <activity
+            android:name="com.powercut.editor.MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:theme="@style/Theme.PowerCutEditor">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ============================================================ -->
+        <!-- EXPORT FOREGROUND SERVICE (v4.2)                             -->
+        <!-- Runs the FFmpeg encode job in the background so that the     -->
+        <!-- export survives app minimisation, screen-off, and Doze.      -->
+        <!-- We use foregroundServiceType="dataSync" (background data     -->
+        <!-- processing) which is valid from API 29 and is the correct    -->
+        <!-- type for long video transcode jobs at compileSdk 34. The     -->
+        <!-- newer "mediaProcessing" type requires compileSdk 35 / AGP    -->
+        <!-- 8.3+, which this project does not target yet.                -->
+        <!-- ============================================================ -->
+        <service
+            android:name="com.powercut.editor.domain.export.ExportForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- FileProvider for social media sharing of exported videos -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PowerCut Editor</string>
+    <string name="motto">Sab se Tez Sab se Taqatwar</string>
+    <string name="app_title">PowerCut – Sab se Tez Sab se Taqatwar</string>
+    <string name="select_video">Select Video</string>
+    <string name="trim_video">Instant Trim</string>
+    <string name="export_video">Export</string>
+    <string name="resolution">Resolution</string>
+    <string name="quality">Quality</string>
+    <string name="no_watermark">No Watermark</string>
+    <string name="instant_trim_desc">Cut files in milliseconds without re-encoding</string>
+    <string name="export_4k">Ultra HD 4K</string>
+    <string name="export_8k">Extreme HD 8K</string>
+    <string name="export_1080p">Full HD 1080p</string>
+    <string name="apply_filter">Apply AI Filters</string>
+    <string name="gpu_filter_sepia">Sepia Glow</string>
+    <string name="gpu_filter_grayscale">Vintage Mono</string>
+    <string name="gpu_filter_invert">Neon Invert</string>
+    <string name="gpu_filter_none">No Filter</string>
+    <string name="language_toggle">اردو / English</string>
+    <string name="current_language">English</string>
+    <string name="video_processing">Processing Video...</string>
+    <string name="video_exporting">Exporting high quality, watermark-free video...</string>
+    <string name="export_success">Video exported successfully!</string>
+    <string name="export_failed">Export failed</string>
+    <string name="timeline">Timeline</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="start_time">Start Time</string>
+    <string name="end_time">End Time</string>
+    <string name="home">Home</string>
+    <string name="editor">Editor</string>
+    <string name="done">Done</string>
+    <string name="error_file_open">Could not open video file</string>
+
+    <!-- Phase 1: Dashboard, Navigation, Settings -->
+    <string name="new_project">New Project</string>
+    <string name="recent_projects">Recent Projects</string>
+    <string name="templates">Templates</string>
+    <string name="settings">Settings</string>
+    <string name="aspect_ratio">Aspect Ratio</string>
+    <string name="app_intro_desc">Next-Gen Professional Video Editor</string>
+    <string name="select_theme">Theme</string>
+    <string name="theme_dark">Dark Mode</string>
+    <string name="theme_light">Light Mode</string>
+    <string name="theme_system">System Default</string>
+    <string name="fps_settings">Default Frame Rate</string>
+    <string name="storage_path">Storage Location</string>
+    <string name="hardware_acceleration">Hardware Acceleration (GPU)</string>
+
+    <!-- Phase 2: Playback & Preview Options -->
+    <string name="frame_step_1">Frame +1</string>
+    <string name="frame_step_10">Frame +10</string>
+    <string name="loop_playback">Loop Playback</string>
+    <string name="ab_repeat">A-B Repeat</string>
+    <string name="safe_areas">Safe Area Guides</string>
+    <string name="grid_overlay">Grid Overlay (Thirds)</string>
+    <string name="rulers_guides">Rulers &amp; Alignment</string>
+    <string name="zoom_fit">Zoom to Fit</string>
+    <string name="zoom_100">Zoom 100%</string>
+    <string name="zoom_200">Zoom 200%</string>
+    <string name="compare_mode">Before / After Split</string>
+    <string name="snapshot">Snapshot Frame</string>
+    <string name="fullscreen">Fullscreen Preview</string>
+    <string name="histogram">Histogram Overlay</string>
+    <string name="audio_waveform">Audio Waveform</string>
+    <string name="mute_track">Mute Track</string>
+    <string name="solo_track">Solo Track</string>
+    <string name="lock_track">Lock Track</string>
+
+    <!-- Phase 3: Core Tools & Adjustments -->
+    <string name="split_video">Split Video</string>
+    <string name="delete_video">Delete</string>
+    <string name="duplicate_video">Duplicate</string>
+    <string name="reverse_video">Reverse</string>
+    <string name="freeze_frame">Freeze Frame</string>
+    <string name="brightness">Brightness</string>
+    <string name="contrast">Contrast</string>
+    <string name="saturation">Saturation</string>
+    <string name="exposure">Exposure</string>
+    <string name="sharpness">Sharpness</string>
+    <string name="blur">Blur Intensity</string>
+    <string name="vignette">Vignette</string>
+    <string name="add_text_label">Text Style</string>
+    <string name="transitions_title">Transitions</string>
+    <string name="filters_title">Filters</string>
+    <string name="speed_title">Speed Control</string>
+
+    <!-- Phase 4: AI Corrections & Content -->
+    <string name="ai_color">AI Auto Color</string>
+    <string name="ai_low_light">AI Low Light Enhance</string>
+    <string name="ai_noise_reduction">AI Audio De-noise</string>
+    <string name="ai_upscale">AI 4K/8K Upscale</string>
+    <string name="ai_captions">AI Auto Captions</string>
+    <string name="ai_background_remove">AI Background Eraser</string>
+    <string name="ai_skin_smooth">AI Face Retouch</string>
+
+    <!-- Phase 5: Extras -->
+    <string name="mp3_to_video">MP3 to Video Beats</string>
+    <string name="video_to_gif">Video to GIF</string>
+    <string name="video_compressor">Video Compressor</string>
+    <string name="video_merger">Video Merger</string>
+    <string name="slideshow_maker">Slideshow Maker</string>
+
+    <!-- Professional Features strings (Consolidated) -->
+    <string name="rotate_flip">Rotate &amp; Flip</string>
+    <string name="rotate">Rotate</string>
+    <string name="flip_h">Flip H</string>
+    <string name="flip_v">Flip V</string>
+    <string name="crop">Crop Preset</string>
+    <string name="speed_curve">Speed Curve</string>
+    <string name="curve_constant">Constant</string>
+    <string name="curve_montage">Montage (2.5x)</string>
+    <string name="curve_hero">Hero (4x)</string>
+    <string name="curve_flash">Flash (8x)</string>
+    <string name="text_overlays">Text &amp; Stickers</string>
+    <string name="add_text">Add Text Overlay</string>
+    <string name="sticker">Add 3D Sticker</string>
+    <string name="scrubber">Frame Scrubber</string>
+    <string name="templates_title">Ready Templates</string>
+    <string name="visualizer">Audio Visualizer</string>
+    <string name="convert_mp3">Beat Sync Visualizer</string>
+    <string name="shapes_masks">3D Masks</string>
+    <string name="audio_mixer">Audio Mixer</string>
+    <string name="video_volume">Video Volume</string>
+    <string name="bgm_volume">Music Volume</string>
+    <string name="add_bgm">Add Background Music</string>
+    <string name="transitions">Transitions</string>
+    <string name="transition_none">None</string>
+    <string name="transition_fade">Fade In/Out</string>
+    <string name="transition_slide">Slide</string>
+    <string name="transition_dissolve">Dissolve</string>
+    <string name="auto_captions">Auto Captions</string>
+    <string name="captions_off">Off</string>
+    <string name="captions_en">English</string>
+    <string name="captions_ur">Urdu (اردو)</string>
+    <string name="silence_remover">Silence Remover</string>
+
+    <!-- v4.2 Long-Export Reliability: foreground service notification -->
+    <string name="export_notif_title">PowerCut Export</string>
+    <string name="export_notif_channel_name">Video Export</string>
+    <string name="export_notif_channel_desc">Shows progress while exporting long videos in the background.</string>
+
+    <!-- v4.4.0 Premium Looks / HDR / iPhone / Magic / MP3->MP4 Converter -->
+    <string name="premium_looks">Premium Looks</string>
+    <string name="premium_looks_count">54+ real grades</string>
+    <string name="look_bright">Bright</string>
+    <string name="look_hdr">HDR</string>
+    <string name="look_iphone">iPhone</string>
+    <string name="look_cinema">Cinema</string>
+    <string name="look_magic">Magic</string>
+    <string name="magic_effects">Magic / Animated Effects</string>
+    <string name="mp3_to_mp4_converter">FFmpeg Media Converter (MP3 → MP4)</string>
+    <string name="mp3_to_mp4_pick_audio">Pick an audio file to convert to MP4</string>
+    <string name="mp3_to_mp4_converting">Converting audio to MP4…</string>
+    <string name="premium_3d_masks">Premium 3D Cinematic Masks</string>
+</resources>
