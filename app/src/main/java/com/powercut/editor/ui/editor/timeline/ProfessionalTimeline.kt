@@ -314,7 +314,7 @@ fun TimelineClipItem(
             }
             .pointerInput(clip.id) {
                 detectDragGestures(
-                    onDragStart = { dragOffsetMs = 0 },
+                    onDragStart = { dragOffsetMs = 0L },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         val deltaMs = (dragAmount.x / pxPerMs).toLong()
@@ -332,7 +332,7 @@ fun TimelineClipItem(
                     },
                     onDragEnd = {
                         onMoved(clip.startTimeMs + dragOffsetMs)
-                        dragOffsetMs = 0
+                        dragOffsetMs = 0L
                     }
                 )
             }
@@ -365,7 +365,7 @@ fun TimelineClipItem(
                             },
                             onDragEnd = {
                                 onTrimmed(clip.trimStartMs + trimStartOffsetMs, clip.trimEndMs)
-                                trimStartOffsetMs = 0
+                                trimStartOffsetMs = 0L
                             }
                         )
                     }
@@ -389,7 +389,7 @@ fun TimelineClipItem(
                             },
                             onDragEnd = {
                                 onTrimmed(clip.trimStartMs, clip.trimEndMs + trimEndOffsetMs)
-                                trimEndOffsetMs = 0
+                                trimEndOffsetMs = 0L
                             }
                         )
                     }
