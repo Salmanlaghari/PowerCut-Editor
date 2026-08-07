@@ -1,5 +1,7 @@
 package com.powercut.editor.ui.editor.timeline
 
+import androidx.compose.ui.graphics.toArgb
+import android.graphics.Paint
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -437,11 +439,4 @@ private fun findSnapPoint(
         if (abs(currentTime - clipEnd) < threshold) return clipEnd
     }
     return null
-}
-
-private fun Color.toArgb(): Int {
-    return (this.alpha * 255.0f + 0.5f).toInt() shl 24 or
-           (this.red * 255.0f + 0.5f).toInt() shl 16 or
-           (this.green * 255.0f + 0.5f).toInt() shl 8 or
-           (this.blue * 255.0f + 0.5f).toInt()
 }
