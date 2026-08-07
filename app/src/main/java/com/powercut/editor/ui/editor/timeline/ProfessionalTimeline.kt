@@ -180,7 +180,7 @@ fun TimelineRuler(
                     timeStr,
                     x + 8f,
                     24f,
-                    android.graphics.Paint().apply {
+                    Paint().apply {
                         color = textSecondary.toArgb()
                         textSize = 24f
                         isAntiAlias = true
