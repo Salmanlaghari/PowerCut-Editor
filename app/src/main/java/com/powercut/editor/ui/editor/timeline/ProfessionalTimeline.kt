@@ -88,7 +88,7 @@ fun ProfessionalTimeline(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .height(108.dp)
             .background(BackgroundPrimary)
             .pointerInput(Unit) {
                 detectTransformGestures { _, _, zoom, _ ->
@@ -118,7 +118,7 @@ fun ProfessionalTimeline(
                     pxPerMs = pxPerMs,
                     modifier = Modifier
                         .width(with(density) { (timelineDurationMs * pxPerMs).toDp() })
-                        .height(30.dp)
+                        .height(18.dp)
                 )
                 
                 // 2. Multiple Tracks
@@ -133,8 +133,8 @@ fun ProfessionalTimeline(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         project.timeline.tracks.forEach { track ->
                             TimelineTrackRow(
@@ -241,7 +241,7 @@ fun TimelineTrackRow(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(32.dp)
             .background(SurfaceVariant.copy(alpha = 0.2f))
             .drawBehind {
                 drawLine(

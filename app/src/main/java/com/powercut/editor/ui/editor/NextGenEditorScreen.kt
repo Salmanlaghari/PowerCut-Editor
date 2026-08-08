@@ -695,7 +695,8 @@ fun NextGenEditorScreen(
                     modifier = Modifier.fillMaxSize().graphicsLayer(
                         scaleX = if (project.isFlippedHorizontal) -1f else 1f,
                         scaleY = if (project.isFlippedVertical) -1f else 1f,
-                        rotationZ = project.rotationDegrees
+                        rotationZ = project.rotationDegrees,
+                        colorFilter = combinedColorFilter
                     )
                 )
                 // Live color filter overlay — applies the combined cinematic filter
@@ -1257,7 +1258,7 @@ fun NextGenEditorScreen(
             onClipSelected = { clip -> onSelectClip(clip.id) },
             onClipMoved = { clip, newStart -> onMoveClip(clip.id, newStart) },
             onClipTrimmed = { clip, newStart, newEnd -> onTrimClip(clip.id, newStart, newEnd) },
-            modifier = Modifier.fillMaxWidth().height(300.dp)
+            modifier = Modifier.fillMaxWidth().height(180.dp)
         )
 
         // ─── 5. TOOL PANEL (expandable) ───────────────────────
