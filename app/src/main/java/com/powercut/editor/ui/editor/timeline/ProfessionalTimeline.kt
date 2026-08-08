@@ -71,7 +71,7 @@ fun ProfessionalTimeline(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(300.dp)
+            .height(180.dp)
             .background(BackgroundPrimary)
             .pointerInput(Unit) {
                 detectTransformGestures { _, _, zoom, _ ->

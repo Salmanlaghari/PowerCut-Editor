@@ -1624,7 +1624,7 @@ private fun CapCutToolBar(
         "👑" to "Pro", "✨" to "Studio"
     )
     Row(
-        modifier = Modifier.fillMaxWidth().height(72.dp)
+        modifier = Modifier.fillMaxWidth().height(56.dp)
             .glassmorphic(shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp), backColor = Color(0xFF0F0F1A).copy(alpha = 0.95f))
             .border(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFFF5A3C).copy(alpha = 0.3f), Color(0xFF9D4EDD).copy(alpha = 0.3f))), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
             .horizontalScroll(rememberScrollState())
@@ -1657,14 +1657,14 @@ private fun CapCutToolBar(
                     .clickable {
                         onToolSelected(idx)
                     }
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(emoji, fontSize = 18.sp)
+                    Text(emoji, fontSize = 16.sp)
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        name, fontSize = 8.sp, fontWeight = FontWeight.Black,
+                        name, fontSize = 7.sp, fontWeight = FontWeight.Black,
                         color = if (isPremium) Color.White else if (isActive) Color(0xFFFF5A3C) else Color.Gray,
                         letterSpacing = 0.5.sp
                     )
