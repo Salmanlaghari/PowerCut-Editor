@@ -92,17 +92,24 @@ void ExportEngine::apply_watermark(RGBAFrame* frame) {
   int x_pos = frame->width - 24;  // right-aligned, 24px margin
   int y_pos = frame->height - 24 - 36;  // bottom, 24px margin, font height 36
 
+  const char* font_arg =
+  #if defined(__ANDROID__)
+    "fontfile='/system/fonts/Roboto-Bold.ttf'";
+  #else
+    "font='Sans'";
+  #endif
+
   snprintf(filter_desc, sizeof(filter_desc),
     "drawtext="
     "text='PowerCut':"
-    "fontfile='/system/fonts/Roboto-Bold.ttf':"
+    "%s:"
     "x=%d:y=%d:"
     "fontsize=36:"
-    "fontcolor=white@0.65:"        // semi-transparent white
-    "shadowcolor=black@0.6:"       // dark shadow
-    "shadowx=2:shadowy=2:"         // 2px offset shadow
+    "fontcolor=white@0.65:"
+    "shadowcolor=black@0.6:"
+    "shadowx=2:shadowy=2:"
     "box=0",
-    x_pos, y_pos);
+    font_arg, x_pos, y_pos);
 
   AVFilterGraph* graph=avfilter_graph_alloc();
   AVFilterContext* src_ctx=nullptr,*sink_ctx=nullptr;
@@ -266,11 +273,15 @@ void ExportEngine::worker(){
     // src_time() applies speed ramps and trim so we get the right source frame
     // for this timeline position — NOT just global_t - offset.
     std::vector<RGBAFrame*> source_frames;
+    source_frames.reserve(segs.size());
     for(auto& s : segs){
       // Only decode video/text/sticker segments (skip pure audio tracks)
       if(s.track_type <= 3){
-        auto* fr = global_decoder_farm->get_original_frame(s.mat_id, s.src_time(t));
-        if(fr) source_frames.push_back(fr);
+        RGBAFrame* fr = nullptr;
+        if(global_decoder_farm) fr = global_decoder_farm->get_original_frame(s.mat_id, s.src_time(t));
+        source_frames.push_back(fr);
+      } else {
+        source_frames.push_back(nullptr);
       }
     }
 

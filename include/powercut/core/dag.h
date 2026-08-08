@@ -7,6 +7,7 @@
 // cleanly. PowerCutDAG represents the render graph: clips, filters, transitions,
 // text overlays — evaluated per-frame at a given microsecond timestamp.
 // =============================================================================
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -100,6 +101,16 @@ struct DAGSegment {
         return local;
     }
 
+    // Check whether this segment is active at the given timeline time.
+    bool active_at(TimeMicros t) const {
+        if (t < src_offset) return false;
+        if (trim_end <= 0) return true;
+        TimeMicros elapsed = t - src_offset;
+        if (speed > 0.001) elapsed = (TimeMicros)((double)elapsed / speed);
+        elapsed += trim_start;
+        return elapsed < trim_end;
+    }
+
     // Resolve all animated transform params at time t.
     double scale_at(TimeMicros t) const { return interpolate_keyframes(kf_scale, t); }
     double pos_x_at(TimeMicros t) const { return interpolate_keyframes(kf_pos_x, t); }
@@ -173,8 +184,16 @@ public:
     // Evaluate the DAG at time t, returning the active segments.
     // Segments are returned sorted by track_index ascending (bottom→top Z-order).
     std::vector<DAGSegment> evaluate(TimeMicros t) const {
-        (void)t;
-        return segments_;
+        std::vector<DAGSegment> active;
+        active.reserve(segments_.size());
+        for (const auto& seg : segments_) {
+            if (seg.active_at(t)) active.push_back(seg);
+        }
+        std::sort(active.begin(), active.end(),
+                  [](const DAGSegment& a, const DAGSegment& b) {
+                      return a.track_index < b.track_index;
+                  });
+        return active;
     }
 
     // Evaluate all active audio segments at timeline time t.
@@ -183,6 +202,10 @@ public:
         for (const auto& seg : audio_segments_) {
             if (seg.active_at(t)) active.push_back(seg);
         }
+        std::sort(active.begin(), active.end(),
+                  [](const AudioSegment& a, const AudioSegment& b) {
+                      return a.track_index < b.track_index;
+                  });
         return active;
     }
 
