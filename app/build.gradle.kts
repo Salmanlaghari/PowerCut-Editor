@@ -9,12 +9,12 @@ plugins {
 
 android {
     namespace = "com.powercut.editor"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.powercut.editor"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 18
         versionName = "6.3.0"
 

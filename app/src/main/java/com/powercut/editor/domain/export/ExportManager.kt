@@ -858,7 +858,7 @@ class ExportManager @Inject constructor(
 
                 // v5.0.0 FIX: Return the path with the SAME filename we used for DISPLAY_NAME.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    "Movies/PowerCut/$fileName"
+                    uri.toString()
                 } else {
                     uri.path ?: "Movies/PowerCut/$fileName"
                 }

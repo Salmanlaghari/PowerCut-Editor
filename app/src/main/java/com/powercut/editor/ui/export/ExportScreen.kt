@@ -518,7 +518,6 @@ fun ExportScreen(
                         } else {
                             // Relative path like "Movies/PowerCut/xxx.mp4" -> query MediaStore
                             val fileName = pathStr.substringAfterLast("/")
-                            val projection = arrayOf(android.provider.MediaStore.Video.Media._ID, android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
                             val cursor = ctx.contentResolver.query(
                                 android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                                 arrayOf(android.provider.MediaStore.Video.Media._ID),

@@ -53,7 +53,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PowerCutEditor"
         android:requestLegacyExternalStorage="true"
-        tools:targetApi="34">
+        tools:targetApi="36">
 
         <!-- Real Google AdMob Application ID -->
         <meta-data
@@ -75,16 +75,14 @@
         <!-- EXPORT FOREGROUND SERVICE (v4.2)                             -->
         <!-- Runs the FFmpeg encode job in the background so that the     -->
         <!-- export survives app minimisation, screen-off, and Doze.      -->
-        <!-- We use foregroundServiceType="dataSync" (background data     -->
-        <!-- processing) which is valid from API 29 and is the correct    -->
-        <!-- type for long video transcode jobs at compileSdk 34. The     -->
-        <!-- newer "mediaProcessing" type requires compileSdk 35 / AGP    -->
-        <!-- 8.3+, which this project does not target yet.                -->
+        <!-- We use foregroundServiceType="dataSync|mediaProcessing"      -->
+        <!-- to support modern Android versions with long media processing -->
+        <!-- workloads.                                                 -->
         <!-- ============================================================ -->
         <service
             android:name="com.powercut.editor.domain.export.ExportForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|mediaProcessing" />
 
         <!-- FileProvider for social media sharing of exported videos -->
         <provider

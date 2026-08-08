@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.data.*
 import com.powercut.editor.ui.theme.*
+import kotlinx.coroutines.flow.collect
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToLong
@@ -52,20 +54,35 @@ fun ProfessionalTimeline(
     
     val scrollState = rememberScrollState()
     
-    // Synchronization: Update scroll position when currentTimeMs changes (e.g., during playback)
+    val timelineDurationMs = maxOf(
+        project.durationMs,
+        project.timeline.tracks.flatMap { it.clips.map { clip -> clip.startTimeMs + clip.durationMs } }.maxOrNull() ?: 0L,
+        600_000L
+    )
+
+    // Synchronization: Update scroll position when currentTimeMs changes (e.g., during playback).
+    // Do not fight the user while they are actively dragging/scrolling.
     LaunchedEffect(currentTimeMs, pxPerMs) {
-        val targetScroll = (currentTimeMs * pxPerMs).toInt()
-        if (abs(scrollState.value - targetScroll) > 1) {
-            scrollState.scrollTo(targetScroll)
+        if (!scrollState.isScrollInProgress) {
+            val safeTimeMs = currentTimeMs.coerceIn(0L, timelineDurationMs)
+            val targetScroll = (safeTimeMs * pxPerMs).toInt().coerceIn(0, scrollState.maxValue)
+            if (abs(scrollState.value - targetScroll) > 2) {
+                scrollState.scrollTo(targetScroll)
+            }
         }
     }
-    
-    // Synchronization: Update currentTimeMs when user scrolls
-    LaunchedEffect(scrollState.value) {
-        val newTime = (scrollState.value / pxPerMs).toLong()
-        if (newTime != currentTimeMs) {
-            onSeek(newTime)
-        }
+
+    // Synchronization: Update currentTimeMs only while the user is actively scrolling.
+    LaunchedEffect(scrollState, pxPerMs) {
+        snapshotFlow { scrollState.value }
+            .collect { scrollValue ->
+                if (scrollState.isScrollInProgress) {
+                    val newTime = (scrollValue / pxPerMs).toLong().coerceIn(0L, timelineDurationMs)
+                    if (newTime != currentTimeMs) {
+                        onSeek(newTime)
+                    }
+                }
+            }
     }
 
     BoxWithConstraints(
@@ -97,10 +114,10 @@ fun ProfessionalTimeline(
             Column(modifier = Modifier.fillMaxHeight()) {
                 // 1. High-Precision Time Ruler
                 TimelineRuler(
-                    durationMs = 600_000, // Show up to 10 mins (extend as needed)
+                    durationMs = timelineDurationMs,
                     pxPerMs = pxPerMs,
                     modifier = Modifier
-                        .width(with(density) { (600_000 * pxPerMs).toDp() })
+                        .width(with(density) { (timelineDurationMs * pxPerMs).toDp() })
                         .height(30.dp)
                 )
                 
@@ -108,7 +125,7 @@ fun ProfessionalTimeline(
                 Box(modifier = Modifier.weight(1f)) {
                     // Vertical Grid Lines
                     TimelineGrid(
-                        durationMs = 600_000,
+                        durationMs = timelineDurationMs,
                         pxPerMs = pxPerMs,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -290,11 +307,11 @@ fun TimelineClipItem(
     var trimStartOffsetMs by remember { mutableStateOf(0L) }
     var trimEndOffsetMs by remember { mutableStateOf(0L) }
 
-    val currentStartMs = clip.startTimeMs + dragOffsetMs
-    val currentDurationMs = clip.durationMs + trimEndOffsetMs - trimStartOffsetMs
-    
+val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
+    val currentDurationMs = maxOf(clip.durationMs + trimEndOffsetMs - trimStartOffsetMs, 1L)
+
     val displayStartPx = currentStartMs * pxPerMs
-    val displayWidthPx = currentDurationMs * pxPerMs
+    val displayWidthPx = maxOf(displayStartPx + currentDurationMs * pxPerMs, displayStartPx + with(density) { 20.dp.toPx() }) - displayStartPx
 
     Box(
         modifier = Modifier
@@ -317,13 +334,14 @@ fun TimelineClipItem(
                     onDragStart = { dragOffsetMs = 0L },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        val deltaMs = (dragAmount.x / pxPerMs).toLong()
-                        dragOffsetMs += deltaMs
-                        
+                        val requestedDeltaMs = (dragAmount.x / pxPerMs).toLong()
+                        val nextStartMs = (clip.startTimeMs + dragOffsetMs + requestedDeltaMs).coerceAtLeast(0L)
+                        dragOffsetMs = nextStartMs - clip.startTimeMs
+
                         // Snapping logic
-                        val snappedTime = findSnapPoint(currentStartMs, allClips, clip.id, snappingThresholdMs)
+                        val snappedTime = findSnapPoint(nextStartMs, allClips, clip.id, snappingThresholdMs)
                         if (snappedTime != null) {
-                            val snapDelta = snappedTime - currentStartMs
+                            val snapDelta = snappedTime - nextStartMs
                             if (abs(snapDelta) < snappingThresholdMs) {
                                 dragOffsetMs += snapDelta
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -331,7 +349,7 @@ fun TimelineClipItem(
                         }
                     },
                     onDragEnd = {
-                        onMoved(clip.startTimeMs + dragOffsetMs)
+                        onMoved((clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L))
                         dragOffsetMs = 0L
                     }
                 )
@@ -360,11 +378,13 @@ fun TimelineClipItem(
                         detectDragGestures(
                             onDrag = { change, dragAmount ->
                                 change.consume()
-                                val deltaMs = (dragAmount.x / pxPerMs).toLong()
-                                trimStartOffsetMs += deltaMs
+                                val requestedDeltaMs = (dragAmount.x / pxPerMs).toLong()
+                                val nextStart = clip.trimStartMs + trimStartOffsetMs + requestedDeltaMs
+                                trimStartOffsetMs = (nextStart.coerceAtLeast(0L).coerceAtMost(clip.trimEndMs - 1L) - clip.trimStartMs)
                             },
                             onDragEnd = {
-                                onTrimmed(clip.trimStartMs + trimStartOffsetMs, clip.trimEndMs)
+                                val newTrimStart = (clip.trimStartMs + trimStartOffsetMs).coerceAtLeast(0L).coerceAtMost(clip.trimEndMs - 1L)
+                                onTrimmed(newTrimStart, clip.trimEndMs)
                                 trimStartOffsetMs = 0L
                             }
                         )
@@ -384,11 +404,13 @@ fun TimelineClipItem(
                         detectDragGestures(
                             onDrag = { change, dragAmount ->
                                 change.consume()
-                                val deltaMs = (dragAmount.x / pxPerMs).toLong()
-                                trimEndOffsetMs += deltaMs
+                                val requestedDeltaMs = (dragAmount.x / pxPerMs).toLong()
+                                val nextEnd = clip.trimEndMs + trimEndOffsetMs + requestedDeltaMs
+                                trimEndOffsetMs = (nextEnd.coerceIn(clip.trimStartMs + 1L, clip.mediaDurationMs) - clip.trimEndMs)
                             },
                             onDragEnd = {
-                                onTrimmed(clip.trimStartMs, clip.trimEndMs + trimEndOffsetMs)
+                                val newTrimEnd = (clip.trimEndMs + trimEndOffsetMs).coerceIn(clip.trimStartMs + 1L, clip.mediaDurationMs)
+                                onTrimmed(clip.trimStartMs, newTrimEnd)
                                 trimEndOffsetMs = 0L
                             }
                         )

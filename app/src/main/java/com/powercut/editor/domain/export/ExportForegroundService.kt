@@ -127,18 +127,25 @@ class ExportForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(tag, "onStartCommand — starting foreground export")
 
+        if (exportJob?.isActive == true) {
+            Log.d(tag, "Export already running — ignoring duplicate start request")
+            return START_NOT_STICKY
+        }
+
         // Promote to foreground IMMEDIATELY (must happen within 5s on Android 12+).
         val notification = buildNotification("Preparing export…", 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+: declare the foreground service type as dataSync
-            // (background data processing). This is the correct type for long
-            // video transcode jobs at compileSdk 34. The newer "mediaProcessing"
-            // type requires compileSdk 35 / AGP 8.3+ which this project does
-            // not target yet. dataSync is valid from API 29 onward.
+            // Android 10+: declare the foreground service type for long
+            // video transcode jobs. On API 34+ use mediaProcessing plus dataSync.
+            val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            }
             startForeground(
                 NOTIF_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                serviceType
             )
         } else {
             startForeground(NOTIF_ID, notification)
@@ -186,6 +193,7 @@ class ExportForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(tag, "onDestroy — releasing locks and cancelling scope")
+        stopForeground(STOP_FOREGROUND_REMOVE)
         exportJob?.cancel()
         serviceScope.cancel()
         try {

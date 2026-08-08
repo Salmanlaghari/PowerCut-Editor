@@ -441,16 +441,20 @@ fun NextGenEditorScreen(
             .setLoadControl(loadControl)
             .build().apply { repeatMode = Player.REPEAT_MODE_ONE }
     }
-    LaunchedEffect(project.videoPath) {
+    DisposableEffect(project.videoPath) {
         val uri = if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
             Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
         exoPlayer.prepare()
-        exoPlayer.addListener(object : Player.Listener {
+        val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) onDurationRetrieved(exoPlayer.duration)
             }
-        })
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+        }
     }
     LaunchedEffect(isPlaying) {
         if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(16) } }
