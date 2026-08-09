@@ -592,4 +592,102 @@ bool ExportEngine::mux(){
   if(!(m->fc->oformat->flags&AVFMT_NOFILE)&&m->fc->pb) avio_closep(&m->fc->pb);
   return true;
 }
+// ===========================================================================
+// JNI FUNCTION: Get Rendered Frame for Preview
+//
+// Returns a single RGBA frame from the PowerCutDAG at a specific time.
+// This is used by the UI to display a preview of the edit.
+// ===========================================================================
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_powercut_Engine_getRenderedFrame(JNIEnv* env, jobject, jlong dag_ptr, jlong time_micros, jint width, jint height) {
+    // ✅ FIXED: Validate dimensions to prevent DoS/OOM
+    const int MAX_DIMENSION = 4096;
+    const int MIN_DIMENSION = 1;
+    if (width < MIN_DIMENSION || width > MAX_DIMENSION || height < MIN_DIMENSION || height > MAX_DIMENSION) {
+        jclass exClass = env->FindClass("java/lang/IllegalArgumentException");
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Invalid frame dimensions: %dx%d (must be %d-%d)",
+                 width, height, MIN_DIMENSION, MAX_DIMENSION);
+        env->ThrowNew(exClass, msg);
+        return nullptr;
+    }
+
+    // ✅ FIXED: Validate pointer and throw exception instead of returning null
+    PowerCutDAG* dag = reinterpret_cast<PowerCutDAG*>(dag_ptr);
+    if (!dag || !global_compositor) {
+        jclass exClass = env->FindClass("java/lang/IllegalStateException");
+        env->ThrowNew(exClass, "Invalid DAG pointer or compositor not initialized");
+        return nullptr;
+    }
+
+    TimeMicros t = time_micros;
+    auto segs = dag->evaluate(t);
+    std::vector<RGBAFrame*> source_frames;
+    source_frames.reserve(segs.size());
+    for (auto& s : segs) {
+        if (s.track_type <= 3) {
+            RGBAFrame* fr = nullptr;
+            if (global_decoder_farm) fr = global_decoder_farm->get_original_frame(s.mat_id, s.src_time(t));
+            source_frames.push_back(fr);
+        } else {
+            source_frames.push_back(nullptr);
+        }
+    }
+
+    RGBAFrame* out = global_compositor->render_full(segs, source_frames, t, width, height);
+    if (!out) {
+        out = new RGBAFrame();
+        out->width = width;
+        out->height = height;
+        // ✅ FIXED: Overflow-safe allocation
+        size_t stride = (size_t)width * 4;
+        size_t total_size = stride * (size_t)height;
+        // Check for overflow
+        if (total_size / stride != (size_t)height) {
+            jclass exClass = env->FindClass("java/lang/OutOfMemoryError");
+            env->ThrowNew(exClass, "Frame size calculation overflow");
+            delete out;
+            return nullptr;
+        }
+        // Check reasonable size limit (100MB max)
+        const size_t MAX_FRAME_SIZE = 100 * 1024 * 1024;
+        if (total_size > MAX_FRAME_SIZE) {
+            jclass exClass = env->FindClass("java/lang/IllegalArgumentException");
+            env->ThrowNew(exClass, "Frame size exceeds maximum allowed (100MB)");
+            delete out;
+            return nullptr;
+        }
+        out->stride = (int)stride;
+        out->data = (uint8_t*)calloc(total_size, 1);
+        if (!out->data) {
+            jclass exClass = env->FindClass("java/lang/OutOfMemoryError");
+            env->ThrowNew(exClass, "Failed to allocate frame buffer");
+            delete out;
+            return nullptr;
+        }
+    }
+
+    // Note: Watermark is not applied for preview frames.
+    // ✅ FIXED: Safe Java array allocation with overflow check
+    size_t array_size = (size_t)out->width * (size_t)out->height * 4;
+    if (array_size > INT32_MAX) {
+        jclass exClass = env->FindClass("java/lang/OutOfMemoryError");
+        env->ThrowNew(exClass, "Result array too large for Java");
+        out->release();
+        for (auto fr : source_frames) { if (fr) fr->release(); }
+        return nullptr;
+    }
+
+    jbyteArray result = env->NewByteArray((jsize)array_size);
+    if (!result) {
+        out->release();
+        for (auto fr : source_frames) { if (fr) fr->release(); }
+        return nullptr;
+    }
+    env->SetByteArrayRegion(result, 0, (jsize)array_size, (jbyte*)out->data);
+    out->release();
+    for (auto fr : source_frames) { if (fr) fr->release(); }
+    return result;
+}
+
 }  // namespace PowerCut
