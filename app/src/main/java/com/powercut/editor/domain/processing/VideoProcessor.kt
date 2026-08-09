@@ -1413,7 +1413,7 @@ class VideoProcessor @Inject constructor(
                     startMs = c.trimStartMs,
                     endMs = c.trimEndMs,
                     resolution = resolution,
-                    filter = project.colorGrade,
+                    filter = project.selectedFilter,
                     isMuted = project.isMuted,
                     speedFactor = c.speedFactor,
                     aspectPreset = project.aspectPreset,
@@ -1479,9 +1479,9 @@ class VideoProcessor @Inject constructor(
 
             // Apply project-level color grade / effects on the concatenated output
             val postFilters = mutableListOf<String>()
-            val colorChain = colorGradeChain(project.colorGrade)
+            val colorChain = colorGradeChain(project.selectedFilter)
             if (colorChain.isNotEmpty()) postFilters.add(colorChain)
-            val premiumChain = premiumLookChain(project.premiumLookId)
+            val premiumChain = premiumLookChain(project.activePremiumLook)
             if (premiumChain.isNotEmpty()) premiumChain.forEach { postFilters.add(it) }
             val blendFilter = blendModeChain(project.blendMode)
             if (blendFilter.isNotEmpty()) postFilters.add(blendFilter)

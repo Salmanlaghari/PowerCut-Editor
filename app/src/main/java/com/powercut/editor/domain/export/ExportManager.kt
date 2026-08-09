@@ -487,8 +487,14 @@ class ExportManager @Inject constructor(
                 )
                 if (multiOk && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                     _progress.value = 90
-                    saveToGallery(tempOutputPath, project)
-                    _exportState.value = Resource.Success(tempOutputPath)
+                    val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                    if (galleryPath != null) {
+                        _progress.value = 100
+                        _exportState.value = Resource.Success(galleryPath)
+                    } else {
+                        _progress.value = 100
+                        _exportState.value = Resource.Success(tempOutputPath)
+                    }
                     return
                 } else {
                     Log.w(tag, "Multi-clip export failed, falling back to single-clip")
