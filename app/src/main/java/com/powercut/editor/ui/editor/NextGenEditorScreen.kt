@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -724,9 +725,7 @@ fun NextGenEditorScreen(
                             // adjustments matrix directly to the video surface so
                             // the preview shows the REAL processed pixels, not a
                             // fake tint overlay. This makes preview == export.
-                            if (combinedColorFilter != null) {
-                                this.colorFilter = combinedColorFilter
-                            }
+
                         }
                 )
 
