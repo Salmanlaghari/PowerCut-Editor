@@ -105,6 +105,48 @@ class EditorViewModel @Inject constructor(
     private val _drafts = MutableStateFlow<List<DraftItem>>(emptyList())
     val drafts: StateFlow<List<DraftItem>> = _drafts.asStateFlow()
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // UNDO / REDO SYSTEM — snapshot-based (max 30 states)
+    // ═══════════════════════════════════════════════════════════════════════
+    private val _undoStack = java.util.ArrayDeque<VideoProject>(30)
+    private val _redoStack = java.util.ArrayDeque<VideoProject>(30)
+    private val _undoCount = MutableStateFlow(0)
+    val undoCount: StateFlow<Int> = _undoCount.asStateFlow()
+    private val _redoCount = MutableStateFlow(0)
+    val redoCount: StateFlow<Int> = _redoCount.asStateFlow()
+
+    /** Call before any project mutation to push the current state onto the undo stack. */
+    fun pushUndoState() {
+        val current = projectRepository.currentProject.value ?: return
+        if (_undoStack.size >= 30) _undoStack.pollLast()
+        _undoStack.push(current)
+        _redoStack.clear() // new change invalidates redo
+        _undoCount.value = _undoStack.size
+        _redoCount.value = 0
+    }
+
+    /** Undo: restore the previous project state. */
+    fun undo() {
+        val prev = _undoStack.pollFirst() ?: return
+        val current = projectRepository.currentProject.value ?: return
+        if (_redoStack.size >= 30) _redoStack.pollLast()
+        _redoStack.push(current)
+        projectRepository.setProject(prev)
+        _undoCount.value = _undoStack.size
+        _redoCount.value = _redoStack.size
+    }
+
+    /** Redo: restore the next project state. */
+    fun redo() {
+        val next = _redoStack.pollFirst() ?: return
+        val current = projectRepository.currentProject.value ?: return
+        if (_undoStack.size >= 30) _undoStack.pollLast()
+        _undoStack.push(current)
+        projectRepository.setProject(next)
+        _undoCount.value = _undoStack.size
+        _redoCount.value = _redoStack.size
+    }
+
     fun addClip(context: Context, uri: Uri) {
         val path = UriHelper.getPathFromUri(context, uri) ?: uri.toString()
         val name = path.substringAfterLast("/")
@@ -332,6 +374,25 @@ class EditorViewModel @Inject constructor(
         }
         timelineJson.put("tracks", tracksArray)
         json.put("timeline", timelineJson)
+        // v6.1.0 Keyframe Animation serialization
+        val kfTracksArray = JSONArray()
+        for (kt in project.keyframeTracks) {
+            val ktJson = JSONObject()
+            ktJson.put("clipId", kt.clipId)
+            val kfArray = JSONArray()
+            for (kf in kt.keyframes) {
+                val kfJson = JSONObject()
+                kfJson.put("timeMs", kf.timeMs)
+                kfJson.put("property", kf.property)
+                kfJson.put("value", kf.value.toDouble())
+                kfJson.put("easing", kf.easing.name)
+                kfArray.put(kfJson)
+            }
+            ktJson.put("keyframes", kfArray)
+            kfTracksArray.put(ktJson)
+        }
+        json.put("keyframeTracks", kfTracksArray)
+        json.put("activeKeyframePreset", project.activeKeyframePreset)
 
         val clipsArray = JSONArray()
         for (clip in clipsList) {
@@ -480,7 +541,28 @@ class EditorViewModel @Inject constructor(
                         }
                     } ?: emptyList()
                 )
-            } ?: VideoTimeline()
+            } ?: VideoTimeline(),
+            // v6.1.0 Keyframe Animation
+            keyframeTracks = json.optJSONArray("keyframeTracks")?.let { kfArr ->
+                (0 until kfArr.length()).map { i ->
+                    val kfJson = kfArr.getJSONObject(i)
+                    KeyframeTrack(
+                        clipId = kfJson.optString("clipId", ""),
+                        keyframes = kfJson.optJSONArray("keyframes")?.let { kArr ->
+                            (0 until kArr.length()).map { j ->
+                                val k = kArr.getJSONObject(j)
+                                Keyframe(
+                                    timeMs = k.optLong("timeMs", 0L),
+                                    property = k.optString("property", "position"),
+                                    value = k.optDouble("value", 0.0).toFloat(),
+                                    easing = KeyframeEasing.valueOf(k.optString("easing", KeyframeEasing.LINEAR.name))
+                                )
+                            }
+                        } ?: emptyList()
+                    )
+                }
+            } ?: emptyList(),
+            activeKeyframePreset = json.optString("activeKeyframePreset", "none")
         )
 
         val clipsList = mutableListOf<Clip>()
@@ -737,6 +819,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun updateTrim(startMs: Long, endMs: Long) {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(trimStartMs = startMs, trimEndMs = endMs)
         }
@@ -749,18 +832,21 @@ class EditorViewModel @Inject constructor(
     }
 
     fun updateFilter(filterId: String) {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(selectedFilter = filterId)
         }
     }
 
     fun toggleMute() {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(isMuted = !project.isMuted)
         }
     }
 
     fun updateSpeed(speedFactor: Float) {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(speedFactor = speedFactor)
         }
@@ -835,6 +921,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun updateRotation() {
+        pushUndoState()
         projectRepository.updateProject { project ->
             val nextDegrees = (project.rotationDegrees + 90f) % 360f
             project.copy(rotationDegrees = nextDegrees)
@@ -842,18 +929,21 @@ class EditorViewModel @Inject constructor(
     }
 
     fun toggleFlipHorizontal() {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(isFlippedHorizontal = !project.isFlippedHorizontal)
         }
     }
 
     fun toggleFlipVertical() {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(isFlippedVertical = !project.isFlippedVertical)
         }
     }
 
     fun updateCropPreset(crop: String) {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(cropPreset = crop)
         }
@@ -1019,6 +1109,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun updateSelectedEffect(effect: String) {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(selectedEffect = effect)
         }
@@ -1038,6 +1129,7 @@ class EditorViewModel @Inject constructor(
 
     // ===== GREEN SCREEN / CHROMA KEY =====
     fun toggleGreenScreen() {
+        pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(greenScreenEnabled = !project.greenScreenEnabled)
         }
@@ -1234,6 +1326,14 @@ class EditorViewModel @Inject constructor(
     fun updateZoom(zoom: Float) {
         projectRepository.updateProject { project ->
             project.copy(timeline = project.timeline.copy(zoomLevel = zoom))
+        }
+    }
+
+    // ── Keyframe animation preset support ──
+    fun updateKeyframePreset(preset: String) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            project.copy(activeKeyframePreset = preset)
         }
     }
 

@@ -3,6 +3,7 @@ package com.powercut.editor.ui.theme
 import android.app.Activity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -33,21 +34,49 @@ private val PremiumColorScheme = darkColorScheme(
     onError = Color.White
 )
 
+/**
+ * Light mode counterpart of the Premium 2027 NextGen Pro color scheme.
+ * Uses lighter backgrounds, darker text, and preserves the same accent colors
+ * (electric-violet, solar coral, aurora teal) for brand consistency.
+ */
+private val LightColorScheme = lightColorScheme(
+    primary = AccentSecondary,
+    onPrimary = Color.White,
+    secondary = AccentPrimary,
+    onSecondary = Color.White,
+    tertiary = AccentTertiary,
+    onTertiary = Color.Black,
+    background = Color(0xFFF6F8FC),
+    onBackground = Color(0xFF0F1117),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF0F1117),
+    surfaceVariant = Color(0xFFE8ECF4),
+    onSurfaceVariant = Color(0xFF4A5568),
+    outline = Color(0xFF0F1117).copy(alpha = 0.12f),
+    error = PremiumError,
+    onError = Color.White
+)
+
 @Composable
 fun PowerCutTheme(
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = PremiumColorScheme
+    val colorScheme = if (darkTheme) PremiumColorScheme else LightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             // Edge-to-edge transparent bars for a modern immersive editor
             window.statusBarColor = Color.Transparent.toArgb()
-            window.navigationBarColor = Color(0xFF07080D).toArgb()
+            if (darkTheme) {
+                window.navigationBarColor = Color(0xFF07080D).toArgb()
+            } else {
+                window.navigationBarColor = Color(0xFFF6F8FC).toArgb()
+            }
             val controller = WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = false
-            controller.isAppearanceLightNavigationBars = false
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

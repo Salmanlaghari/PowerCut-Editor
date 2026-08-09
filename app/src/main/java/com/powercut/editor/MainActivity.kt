@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
 
             // Enforce correct RTL/LTR direction dynamically for multi-lingual support
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                PowerCutTheme {
+                PowerCutTheme(darkTheme = isDarkTheme) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = if (isDarkTheme) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onBackground
@@ -471,7 +471,10 @@ class MainActivity : ComponentActivity() {
                                         onPremiumStudio = { showPremiumStudio = true },
                                         // v6.0.0 Effects & Stickers galleries
                                         onOpenEffects = { showEffectsGallery = true },
-                                        onOpenStickers = { showStickersGallery = true }
+                                        onOpenStickers = { showStickersGallery = true },
+                                        onUndo = { viewModel.undo() },
+                                        onRedo = { viewModel.redo() },
+                                        onUpdateKeyframeAnim = { preset -> viewModel.updateKeyframePreset(preset) }
                                     )
                                 } ?: viewModel.resetToHome()
                             }
