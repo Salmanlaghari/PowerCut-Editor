@@ -521,7 +521,11 @@ class ExportManager @Inject constructor(
                 hw = true,
                 twoPass = false,
                 faststart = true,
-                removeWatermark = project.isProTier
+                // FIX: Remove watermark if user has pro tier OR watched rewarded ad.
+                // project.watermarkPath is null when user watched ad (isNoWatermark=true).
+                // project.isProTier is true when user has pro subscription.
+                // Both conditions grant watermark-free export.
+                removeWatermark = project.isProTier || project.watermarkPath == null
             )
             nativeEngine.onProgress = { prog ->
                 if (prog.total > 0) {

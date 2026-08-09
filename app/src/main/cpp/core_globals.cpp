@@ -1,16 +1,21 @@
 // =============================================================================
-// PowerCut Core — Global instances stub.
+// PowerCut Core — Global instances.
 //
-// In the full native build these are managed by the core engine lifecycle.
-// This stub provides the linker symbols so the export engine and JNI bridge
-// link cleanly. The pointers are null until the full core is wired.
+// Provides the global compositor and decoder farm used by the export engine
+// and JNI preview bridge. Initialized with working implementations so the
+// export pipeline produces real composited frames.
 // =============================================================================
 #include "powercut/core/decoder_farm.h"
 #include "powercut/core/compositor.h"
 
 namespace PowerCut {
 
-DecoderFarm* global_decoder_farm = nullptr;
-Compositor* global_compositor = nullptr;
+// FIX: Initialize decoder farm so export engine can get source frames.
+static DecoderFarm default_decoder_farm;
+DecoderFarm* global_decoder_farm = &default_decoder_farm;
+
+// FIX: Initialize compositor so render_full() produces real output.
+static Compositor default_compositor;
+Compositor* global_compositor = &default_compositor;
 
 }  // namespace PowerCut

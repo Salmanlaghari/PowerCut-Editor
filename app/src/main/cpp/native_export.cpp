@@ -23,6 +23,7 @@
 #include "powercut/export/export_engine.h"
 #include "powercut/core/dag.h"
 #include "powercut/core/compositor.h"
+#include "powercut/core/decoder_farm.h"
 
 // PRIORITY 1 FIX: Progress callback JNI bridge.
 // The native worker thread needs to call back into Kotlin to report progress.
@@ -42,6 +43,9 @@ using PowerCut::AudioSegment;
 using PowerCut::EffectNode;
 using PowerCut::Keyframe;
 using PowerCut::TimeMicros;
+using PowerCut::RGBAFrame;
+using PowerCut::global_compositor;
+using PowerCut::global_decoder_farm;
 
 // ---------------------------------------------------------------------------
 // Detect whether the full export engine is available. When building only the
@@ -83,13 +87,12 @@ bool ExportEngine::start(PowerCutDAG* d, const ExportConfig& c) {
     if (m->run) return false;  // already running
     m->cfg = c;
     m->dag = d;
-    m->run = true;
-
-    // Launch the worker thread that evaluates the DAG per-frame.
-    // The full build decodes real video frames; this stub simulates the loop.
-    std::thread worker_thread([this]() { worker(); });
-    worker_thread.detach();
-    return true;
+    // FIX: In the stub build (no FFmpeg/LevelDB), return false immediately
+    // so the Kotlin layer falls back to the FFmpeg VideoProcessor pipeline.
+    // The stub cannot produce real output — running the worker loop would
+    // waste time producing empty frames. The full build (POWERCUT_FULL_
+    // EXPORT_ENGINE) returns true and runs the real encode.
+    return false;
 }
 
 void ExportEngine::cancel() { m->run = false; }
@@ -469,10 +472,36 @@ static PowerCutDAG* build_dag_from_project(JNIEnv* env, jobject projectObj) {
         segments.push_back(overlaySeg);
     }
 
+    // ---- Chroma-key / Green Screen segment (track 4) ----
+    bool greenScreenEnabled = read_bool_field(env, projectObj, cls, "greenScreenEnabled");
+    if (greenScreenEnabled) {
+        std::string greenScreenColor = read_string_field(env, projectObj, cls, "greenScreenColor");
+        jfloat greenScreenThreshold = read_float_field(env, projectObj, cls, "greenScreenThreshold");
+        std::string greenScreenBgPath = read_string_field(env, projectObj, cls, "greenScreenBackgroundPath");
+
+        DAGSegment chromaSeg;
+        chromaSeg.mat_id = 6;              // chroma-key material
+        chromaSeg.src_offset = 0;
+        chromaSeg.track_index = 0;         // applied to base video layer
+        chromaSeg.track_type = 4;          // chroma-key type
+        chromaSeg.speed = 1.0;
+        // Store chroma-key params as effect nodes
+        EffectNode chromaEff;
+        chromaEff.type = EffectNode::FILTER;
+        chromaEff.name = "chroma_key_" + greenScreenColor;
+        chromaEff.intensity = (double)greenScreenThreshold;
+        chromaSeg.effects.push_back(chromaEff);
+        segments.push_back(chromaSeg);
+    }
+
     dag->set_segments(std::move(segments));
 
     // ---- Audio segments (BUG 3: full audio mix) ----
     std::vector<AudioSegment> audio_segs;
+
+    // Pre-read background music path for ducking logic
+    std::string bgMusicPath = read_string_field(env, projectObj, cls, "backgroundMusicPath");
+    jfloat bgMusicVolume = read_float_field(env, projectObj, cls, "backgroundMusicVolume");
 
     // Main video audio (track 0)
     jfloat videoVolume = read_float_field(env, projectObj, cls, "videoVolume");
@@ -488,12 +517,17 @@ static PowerCutDAG* build_dag_from_project(JNIEnv* env, jobject projectObj) {
         mainAudio.fade_in = 0;
         mainAudio.fade_out = 0;
         mainAudio.speed = speed;         // audio follows video speed
+
+        // Audio ducking: reduce main volume when background music is playing
+        bool isAudioDucking = read_bool_field(env, projectObj, cls, "isAudioDuckingEnabled");
+        if (isAudioDucking && !bgMusicPath.empty()) {
+            mainAudio.volume *= 0.6;     // duck to 60% when music plays
+        }
+
         audio_segs.push_back(mainAudio);
     }
 
     // Background music (track 1)
-    std::string bgMusicPath = read_string_field(env, projectObj, cls, "backgroundMusicPath");
-    jfloat bgMusicVolume = read_float_field(env, projectObj, cls, "backgroundMusicVolume");
     if (!bgMusicPath.empty() && duration_us > 0) {
         AudioSegment musicAudio;
         musicAudio.mat_id = 5;           // background music material
@@ -662,6 +696,77 @@ Java_com_powercut_editor_export_ExportEngine_nativeRunning(
     if (handle == 0) return JNI_FALSE;
     auto* engine = reinterpret_cast<ExportEngine*>(handle);
     return engine->running() ? JNI_TRUE : JNI_FALSE;
+}
+
+// ---------------------------------------------------------------------------
+// JNI: Get a single rendered preview frame from the native compositor.
+// Builds a DAG from the project, evaluates at the given time, calls
+// compositor->render_full() with ALL layers, and returns RGBA bytes.
+// ---------------------------------------------------------------------------
+JNIEXPORT jbyteArray JNICALL
+Java_com_powercut_editor_export_ExportEngine_nativeGetRenderedFrame(
+    JNIEnv* env, jobject thiz, jobject dagObj, jlong timeMicros, jint width, jint height) {
+    (void)thiz;
+
+    // Validate dimensions
+    if (width < 1 || width > 4096 || height < 1 || height > 4096) return nullptr;
+    if (!global_compositor || !global_decoder_farm) return nullptr;
+
+    // Build DAG from project
+    PowerCutDAG* dag = build_dag_from_project(env, dagObj);
+    if (!dag) return nullptr;
+
+    // Evaluate segments at the given time
+    TimeMicros t = (TimeMicros)timeMicros;
+    auto segs = dag->evaluate(t);
+
+    // Decode source frames for all segments
+    std::vector<RGBAFrame*> source_frames;
+    source_frames.reserve(segs.size());
+    for (auto& s : segs) {
+        if (s.track_type <= 3) {
+            RGBAFrame* fr = global_decoder_farm->get_original_frame(s.mat_id, s.src_time(t));
+            source_frames.push_back(fr);
+        } else {
+            source_frames.push_back(nullptr);
+        }
+    }
+
+    // Render full composite with ALL effects
+    RGBAFrame* out = global_compositor->render_full(segs, source_frames, t, width, height);
+
+    if (!out || !out->data) {
+        // Cleanup source frames
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    // Convert to Java byte array (RGBA)
+    size_t array_size = (size_t)width * height * 4;
+    if (array_size > INT32_MAX) {
+        free(out->data); delete out;
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    jbyteArray result = env->NewByteArray((jsize)array_size);
+    if (!result) {
+        free(out->data); delete out;
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    env->SetByteArrayRegion(result, 0, (jsize)array_size, (const jbyte*)out->data);
+
+    // Cleanup
+    free(out->data); delete out;
+    for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+    delete dag;
+
+    return result;
 }
 
 }  // extern "C"

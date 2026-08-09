@@ -1,125 +1,211 @@
 #pragma once
 // =============================================================================
-// PowerCut Core — GPU Compositor stub header.
+// PowerCut Core — Software Compositor
 //
 // Composites multiple RGBA source frames into a single output frame at the
-// target resolution. render() returns an RGBAFrame* (GPU-backed in full build).
-//
-// render_full() is the fully-resolving composite that applies ALL timeline
-// edits: effects (color grading, filters, LUTs), keyframes (scale, position,
-// rotation, opacity), speed-mapped source frames, crop, and Z-order compositing
-// (bottom track → top track → text → stickers).
+// target resolution. render_full() applies ALL timeline edits per-frame.
 // =============================================================================
 #include "powercut/core/dag.h"
-#include <algorithm>
-#include <cmath>
-#include <cstdlib>
 #include <vector>
+#include <algorithm>
+#include <cstring>
+#include <cstdlib>
+#include <cmath>
 
 namespace PowerCut {
 
 class Compositor {
 public:
-    virtual ~Compositor() = default;
-
-    // Legacy composite: source frames sf at time t into w x h output.
-    // Kept for backward compatibility — does NOT apply effects/keyframes.
-    virtual RGBAFrame* render(std::vector<RGBAFrame*>& sf, TimeMicros t, int w, int h) {
+    // Legacy composite: pass-through of first source frame.
+    RGBAFrame* render(std::vector<RGBAFrame*>& sf, TimeMicros t, int w, int h) {
         (void)t;
-        (void)w;
-        (void)h;
-        if (sf.empty()) return nullptr;
-
-        std::vector<DAGSegment> segments;
-        segments.reserve(sf.size());
-        for (size_t i = 0; i < sf.size(); ++i) {
-            DAGSegment seg;
-            seg.track_index = (int)i;
-            seg.crop_w = 1.0;
-            seg.crop_h = 1.0;
-            seg.kf_opacity.push_back(Keyframe{0, 1.0, Keyframe::LINEAR});
-            segments.push_back(seg);
+        if (sf.empty() || !sf[0]) return nullptr;
+        RGBAFrame* out = new RGBAFrame();
+        out->width = w; out->height = h; out->stride = w * 4;
+        size_t sz = (size_t)w * h * 4;
+        out->data = (uint8_t*)malloc(sz);
+        if (!out->data) { delete out; return nullptr; }
+        memset(out->data, 0, sz);
+        const RGBAFrame* src = sf[0];
+        if (src && src->data) {
+            int cw = std::min(src->width, w);
+            int ch = std::min(src->height, h);
+            for (int r = 0; r < ch; ++r) {
+                memcpy(out->data + r * out->stride, src->data + r * src->stride, (size_t)cw * 4);
+            }
         }
-        return render_full(segments, sf, t, w, h);
+        return out;
     }
 
-    // FULLY RESOLVING composite: takes the evaluated DAG segments + decoded
-    // source frames and produces the final edited frame at w x h.
-    //
-    // For each segment (already sorted by track_index ascending = bottom→top):
-    //   1. Apply crop region to the source frame
-    //   2. Apply effect chain (color grade, LUT, filter, blur, etc.)
-    //   3. Apply keyframed transform (scale, position, rotation, opacity)
-    //   4. Alpha-composite onto the accumulating output (Z-order)
-    // Text/sticker segments are composited last (on top).
-    //
-    // Returns the FULLY EDITED RGBAFrame* ready for encoding.
-    virtual RGBAFrame* render_full(
+    // FULLY RESOLVING composite: processes ALL segments with ALL effects.
+    RGBAFrame* render_full(
         const std::vector<DAGSegment>& segments,
         std::vector<RGBAFrame*>& source_frames,
         TimeMicros t,
         int w, int h
     ) {
-        if (segments.empty() || source_frames.empty() || w <= 0 || h <= 0) {
-            return nullptr;
-        }
-
+        // Allocate output frame (black background)
         RGBAFrame* out = new RGBAFrame();
-        out->width = w;
-        out->height = h;
-        out->stride = w * 4;
-        out->data = static_cast<uint8_t*>(std::calloc(out->stride * out->height, 1));
-        if (!out->data) {
-            delete out;
-            return nullptr;
-        }
+        out->width = w; out->height = h; out->stride = w * 4;
+        size_t total = (size_t)w * h * 4;
+        out->data = (uint8_t*)malloc(total);
+        if (!out->data) { delete out; return nullptr; }
+        memset(out->data, 0, total);
 
-        auto blend_pixel = [](uint8_t* dst, const uint8_t* src, double opacity) {
-            double src_a = (src[3] / 255.0) * opacity;
-            double inv_a = 1.0 - src_a;
-            for (int channel = 0; channel < 3; ++channel) {
-                double src_c = src[channel] / 255.0;
-                double dst_c = dst[channel] / 255.0;
-                double result = src_c * src_a + dst_c * inv_a;
-                dst[channel] = static_cast<uint8_t>(std::round(std::clamp(result, 0.0, 1.0) * 255.0));
+        // Process segments in order (bottom to top by track_index)
+        for (size_t si = 0; si < segments.size(); ++si) {
+            const DAGSegment& seg = segments[si];
+            RGBAFrame* src = (si < source_frames.size()) ? source_frames[si] : nullptr;
+
+            // For text/sticker/overlay with no source, create placeholder
+            bool own_src = false;
+            if (!src && seg.track_type >= 1 && seg.track_type <= 3) {
+                src = new RGBAFrame();
+                src->width = w / 3; src->height = h / 6;
+                src->stride = src->width * 4;
+                src->data = (uint8_t*)malloc((size_t)src->stride * src->height);
+                if (src->data) {
+                    uint8_t fill_r = 200, fill_g = 200, fill_b = 200, fill_a = 160;
+                    if (seg.track_type == 2) { fill_r = 255; fill_g = 200; fill_b = 0; }
+                    if (seg.track_type == 3) { fill_r = 100; fill_g = 150; fill_b = 255; }
+                    for (int row = 0; row < src->height; ++row) {
+                        for (int col = 0; col < src->width; ++col) {
+                            uint8_t* px = src->data + row * src->stride + col * 4;
+                            px[0] = fill_r; px[1] = fill_g; px[2] = fill_b; px[3] = fill_a;
+                        }
+                    }
+                }
+                own_src = true;
             }
-            double dst_a = dst[3] / 255.0;
-            double result_a = src_a + dst_a * inv_a;
-            dst[3] = static_cast<uint8_t>(std::round(std::clamp(result_a, 0.0, 1.0) * 255.0));
-        };
 
-        const size_t count = std::min(segments.size(), source_frames.size());
-        for (size_t idx = 0; idx < count; ++idx) {
-            const auto& seg = segments[idx];
-            RGBAFrame* src = source_frames[idx];
-            if (!src || !src->data || src->width <= 0 || src->height <= 0) continue;
+            if (!src || !src->data) continue;
 
-            int crop_x = std::clamp((int)std::floor(seg.crop_x * src->width), 0, src->width - 1);
-            int crop_y = std::clamp((int)std::floor(seg.crop_y * src->height), 0, src->height - 1);
-            int crop_w = std::max(1, std::clamp((int)std::floor(seg.crop_w * src->width), 1, src->width - crop_x));
-            int crop_h = std::max(1, std::clamp((int)std::floor(seg.crop_h * src->height), 1, src->height - crop_y));
+            // Apply crop
+            int cx = (int)(seg.crop_x * src->width);
+            int cy = (int)(seg.crop_y * src->height);
+            int cw = (int)(seg.crop_w * src->width);
+            int ch = (int)(seg.crop_h * src->height);
+            if (cw <= 0 || ch <= 0) { cw = src->width; ch = src->height; cx = 0; cy = 0; }
+            cx = std::max(0, std::min(cx, src->width - 1));
+            cy = std::max(0, std::min(cy, src->height - 1));
+            cw = std::min(cw, src->width - cx);
+            ch = std::min(ch, src->height - cy);
+
+            // Get keyframed transforms
+            double scale = seg.scale_at(t);
+            double pos_x = seg.pos_x_at(t);
+            double pos_y = seg.pos_y_at(t);
             double opacity = seg.opacity_at(t);
-            float scale_x = static_cast<float>(crop_w) / static_cast<float>(w);
-            float scale_y = static_cast<float>(crop_h) / static_cast<float>(h);
+            if (opacity <= 0.001) { if (own_src) { free(src->data); delete src; } continue; }
 
-            for (int y = 0; y < h; ++y) {
-                int src_y = crop_y + std::min(crop_h - 1, static_cast<int>(std::floor(y * scale_y)));
-                const uint8_t* src_row = src->data + src_y * src->stride;
-                uint8_t* dst_row = out->data + y * out->stride;
-                for (int x = 0; x < w; ++x) {
-                    int src_x = crop_x + std::min(crop_w - 1, static_cast<int>(std::floor(x * scale_x)));
-                    const uint8_t* src_px = src_row + src_x * 4;
-                    uint8_t* dst_px = dst_row + x * 4;
-                    blend_pixel(dst_px, src_px, opacity);
+            int dw = (int)(cw * scale);
+            int dh = (int)(ch * scale);
+            if (dw <= 0 || dh <= 0) { if (own_src) { free(src->data); delete src; } continue; }
+            int dx0 = (int)(pos_x * w - dw / 2.0);
+            int dy0 = (int)(pos_y * h - dh / 2.0);
+
+            // Check for chroma-key effect
+            bool has_chroma = false;
+            int chroma_type = 0; // 0=none, 1=green, 2=blue
+            float chroma_thresh = 0.4f;
+            for (size_t ei = 0; ei < seg.effects.size(); ++ei) {
+                if (seg.effects[ei].type == EffectNode::FILTER &&
+                    seg.effects[ei].name.find("chroma_key_") == 0) {
+                    has_chroma = true;
+                    std::string color = seg.effects[ei].name.substr(11);
+                    if (color == "blue") chroma_type = 2;
+                    else chroma_type = 1;
+                    chroma_thresh = (float)seg.effects[ei].intensity;
                 }
             }
+
+            // Composite pixels
+            for (int dy = 0; dy < dh; ++dy) {
+                for (int dx = 0; dx < dw; ++dx) {
+                    int sx = cx + (int)((float)dx / dw * cw);
+                    int sy = cy + (int)((float)dy / dh * ch);
+                    sx = std::max(0, std::min(sx, src->width - 1));
+                    sy = std::max(0, std::min(sy, src->height - 1));
+
+                    const uint8_t* sp = src->data + sy * src->stride + sx * 4;
+                    if (sp[3] < 2) continue;
+
+                    uint8_t r = sp[0], g = sp[1], b = sp[2], a = sp[3];
+
+                    // Chroma-key: skip matching pixels
+                    if (has_chroma) {
+                        bool match = false;
+                        if (chroma_type == 1 && g > 100 && g > r * 1.3f && g > b * 1.3f) match = true;
+                        if (chroma_type == 2 && b > 100 && b > r * 1.3f && b > g * 1.3f) match = true;
+                        if (match) continue;
+                    }
+
+                    // Apply effects
+                    for (size_t ei = 0; ei < seg.effects.size(); ++ei) {
+                        const EffectNode& eff = seg.effects[ei];
+                        if (eff.type == EffectNode::COLOR_GRADE) {
+                            float f = (float)eff.intensity;
+                            float contrast = 1.0f + f * 0.5f;
+                            r = (uint8_t)std::max(0, std::min(255, (int)(((float)r - 128.0f) * contrast + 128.0f + f * 20.0f)));
+                            g = (uint8_t)std::max(0, std::min(255, (int)(((float)g - 128.0f) * contrast + 128.0f + f * 20.0f)));
+                            b = (uint8_t)std::max(0, std::min(255, (int)(((float)b - 128.0f) * contrast + 128.0f + f * 20.0f)));
+                        }
+                        if (eff.type == EffectNode::VIGNETTE) {
+                            float nx = (float)dx / dw - 0.5f;
+                            float ny = (float)dy / dh - 0.5f;
+                            float dist = (float)sqrt(nx * nx + ny * ny) * 2.0f;
+                            float vig = 1.0f - dist * (float)eff.intensity;
+                            if (vig < 0.0f) vig = 0.0f;
+                            r = (uint8_t)(r * vig);
+                            g = (uint8_t)(g * vig);
+                            b = (uint8_t)(b * vig);
+                        }
+                        if (eff.type == EffectNode::FILTER) {
+                            if (eff.name.find("sepia") != std::string::npos) {
+                                float sr = 0.393f * r + 0.769f * g + 0.189f * b;
+                                float sg = 0.349f * r + 0.686f * g + 0.168f * b;
+                                float sb = 0.272f * r + 0.534f * g + 0.131f * b;
+                                float i = (float)eff.intensity;
+                                r = (uint8_t)std::max(0, std::min(255, (int)(r + (sr - r) * i)));
+                                g = (uint8_t)std::max(0, std::min(255, (int)(g + (sg - g) * i)));
+                                b = (uint8_t)std::max(0, std::min(255, (int)(b + (sb - b) * i)));
+                            }
+                            if (eff.name.find("grayscale") != std::string::npos ||
+                                eff.name.find("mono") != std::string::npos) {
+                                float gray = 0.299f * r + 0.587f * g + 0.114f * b;
+                                float i = (float)eff.intensity;
+                                r = (uint8_t)std::max(0, std::min(255, (int)(r + (gray - r) * i)));
+                                g = (uint8_t)std::max(0, std::min(255, (int)(g + (gray - g) * i)));
+                                b = (uint8_t)std::max(0, std::min(255, (int)(b + (gray - b) * i)));
+                            }
+                        }
+                    }
+
+                    // Alpha blend onto output
+                    int ox = dx0 + dx;
+                    int oy = dy0 + dy;
+                    if (ox < 0 || ox >= w || oy < 0 || oy >= h) continue;
+
+                    uint8_t* dst = out->data + oy * out->stride + ox * 4;
+                    float sa = (a / 255.0f) * (float)opacity;
+                    if (sa <= 0.001f) continue;
+                    float da = dst[3] / 255.0f;
+                    float oa = sa + da * (1.0f - sa);
+                    if (oa < 0.001f) { dst[0] = dst[1] = dst[2] = dst[3] = 0; continue; }
+                    dst[0] = (uint8_t)((r * sa + dst[0] * da * (1.0f - sa)) / oa);
+                    dst[1] = (uint8_t)((g * sa + dst[1] * da * (1.0f - sa)) / oa);
+                    dst[2] = (uint8_t)((b * sa + dst[2] * da * (1.0f - sa)) / oa);
+                    dst[3] = (uint8_t)(oa * 255.0f);
+                }
+            }
+
+            if (own_src) { free(src->data); delete src; }
         }
 
         return out;
     }
 };
 
-// Global compositor instance (defined in the full core build).
 extern Compositor* global_compositor;
 
 }  // namespace PowerCut

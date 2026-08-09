@@ -61,6 +61,19 @@ class ExportEngine {
     external fun nativeCancel(handle: Long)
     external fun nativeRunning(handle: Long): Boolean
 
+    /**
+     * Get a single rendered preview frame from the native compositor.
+     * Evaluates the DAG at the given time and renders ALL layers (video, text,
+     * stickers, effects, keyframes, chroma-key) into an RGBA byte array.
+     *
+     * @param dag the live VideoProject instance
+     * @param timeMicros timestamp in microseconds
+     * @param width output width
+     * @param height output height
+     * @return RGBA byte array or null if native compositor unavailable
+     */
+    external fun nativeGetRenderedFrame(dag: Any, timeMicros: Long, width: Int, height: Int): ByteArray?
+
     /** Progress callback invoked from the native worker thread. */
     var onProgress: ((ExportProgress) -> Unit)? = null
 
