@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.util.Log
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
+import com.powercut.editor.data.TrackType
 import com.powercut.editor.domain.processing.VideoProcessor
 import com.powercut.editor.export.ExportEngine
 import com.powercut.editor.export.ExportConfig
@@ -464,6 +465,35 @@ class ExportManager @Inject constructor(
                 return
             }
             _progress.value = 5 // input resolved
+
+            // ═══════════════════════════════════════════════════════════
+            // MULTI-CLIP TIMELINE EXPORT
+            // If the timeline has multiple VIDEO clips, use the multi-clip
+            // pipeline (FFmpeg concat + xfade transitions). Otherwise,
+            // fall through to the single-clip pipeline below.
+            // ═══════════════════════════════════════════════════════════
+            val videoClips = project.timeline.tracks
+                .filter { it.type == com.powercut.editor.data.TrackType.VIDEO }
+                .flatMap { it.clips }
+                .sortedBy { it.startTimeMs }
+            if (videoClips.size >= 2) {
+                Log.d(tag, "Multi-clip timeline detected: ${videoClips.size} clips — using concat pipeline")
+                val multiOk = videoProcessor.processMultiClipTimeline(
+                    clips = videoClips,
+                    outputPath = tempOutputPath,
+                    resolution = project.targetResolution,
+                    project = project,
+                    onProgress = { pct -> updateProgress(10 + pct * 80 / 100) }
+                )
+                if (multiOk && tempOutputFile.exists() && tempOutputFile.length() > 0) {
+                    _progress.value = 90
+                    saveToGallery(tempOutputPath, project)
+                    _exportState.value = Resource.Success(tempOutputPath)
+                    return
+                } else {
+                    Log.w(tag, "Multi-clip export failed, falling back to single-clip")
+                }
+            }
 
             // ═══════════════════════════════════════════════════════════
             // FIX: Try NATIVE export engine first (DAG-based per-frame render).

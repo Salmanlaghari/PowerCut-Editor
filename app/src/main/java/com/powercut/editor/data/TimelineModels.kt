@@ -50,3 +50,20 @@ data class VideoTimeline(
     val zoomLevel: Float = 1.0f,
     val playheadPosMs: Long = 0L
 )
+
+/** Easing functions for keyframe interpolation */
+enum class KeyframeEasing { LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT, BOUNCE, ELASTIC }
+
+/** A single keyframe: maps a property to a value at a specific time. */
+data class Keyframe(
+    val timeMs: Long,
+    val property: String,     // "position_x", "position_y", "scale", "rotation", "opacity"
+    val value: Float,
+    val easing: KeyframeEasing = KeyframeEasing.LINEAR
+)
+
+/** Keyframe track attached to a clip — stores all keyframes for one clip. */
+data class KeyframeTrack(
+    val clipId: String,
+    val keyframes: List<Keyframe> = emptyList()
+)

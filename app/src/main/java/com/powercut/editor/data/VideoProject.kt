@@ -131,7 +131,10 @@ data class VideoProject(
     val isProTier: Boolean = false,
 
     // ── Phase 1: Professional Timeline ──
-    val timeline: VideoTimeline = VideoTimeline()
+    val timeline: VideoTimeline = VideoTimeline(),
+    // ── v6.1.0 Keyframe Animation ──
+    val keyframeTracks: List<KeyframeTrack> = emptyList(),
+    val activeKeyframePreset: String = "none"
 ) {
     val isTrimmed: Boolean
         get() = trimStartMs > 0L || trimEndMs < durationMs && trimEndMs > 0L

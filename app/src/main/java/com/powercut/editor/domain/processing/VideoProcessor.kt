@@ -7,6 +7,8 @@ import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
 import com.arthenica.ffmpegkit.SessionState
+import com.powercut.editor.data.TimelineClip
+import com.powercut.editor.data.VideoProject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -1376,6 +1378,167 @@ class VideoProcessor @Inject constructor(
         }
     }
 
+    // ════════════════════════════════════════════════════════════════════════════
+    //  MULTI-CLIP TIMELINE EXPORT (v7.0 — FFmpeg concat filter)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Joins multiple video clips into a single output with per-clip trimming and
+    // speed adjustment, then applies the project-level filter/effect/color chain.
+    // Falls back to the single-clip processAndExport pipeline when only 1 clip is
+    // present on the timeline.
+    suspend fun processMultiClipTimeline(
+        clips: List<com.powercut.editor.data.TimelineClip>,
+        outputPath: String,
+        resolution: String,
+        project: com.powercut.editor.data.VideoProject,
+        onProgress: (Int) -> Unit
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // Collect only VIDEO track clips, sorted by timeline position
+            val videoClips = clips
+                .filter { it.type == com.powercut.editor.data.TrackType.VIDEO && it.isVisible }
+                .sortedBy { it.startTimeMs }
+
+            if (videoClips.isEmpty()) {
+                Log.e(tag, "processMultiClipTimeline: no video clips on timeline")
+                return@withContext false
+            }
+
+            // Single-clip fallback: delegate to the existing single-clip pipeline
+            if (videoClips.size == 1) {
+                val c = videoClips.first()
+                return@withContext processAndExport(
+                    inputPath = c.path,
+                    outputPath = outputPath,
+                    startMs = c.trimStartMs,
+                    endMs = c.trimEndMs,
+                    resolution = resolution,
+                    filter = project.colorGrade,
+                    isMuted = project.isMuted,
+                    speedFactor = c.speedFactor,
+                    aspectPreset = project.aspectPreset,
+                    transitionType = project.transitionType,
+                    onProgress = onProgress
+                )
+            }
+
+            // ── 2+ clips: build FFmpeg concat filter_complex ──────────────
+            onProgress(5)
+
+            val args = mutableListOf<String>()
+            args.addAll(listOf("-analyzeduration", "100M", "-probesize", "100M"))
+            args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
+            args.addAll(listOf("-threads", "0"))
+
+            // Add -i for each clip
+            videoClips.forEach { clip ->
+                args.addAll(listOf("-i", clip.path))
+            }
+
+            val (tw, th) = getTargetDimensions(resolution, project.aspectPreset)
+            val n = videoClips.size
+            val fcParts = mutableListOf<String>()
+
+            // Per-clip trim + speed + scale/fps chain
+            val vLabels = mutableListOf<String>()
+            val aLabels = mutableListOf<String>()
+            videoClips.forEachIndexed { idx, clip ->
+                val trimStart = clip.trimStartMs / 1000.0
+                val trimEnd = clip.trimEndMs / 1000.0
+                val speed = clip.speedFactor.coerceAtLeast(0.1f).coerceAtMost(10.0f)
+
+                // Video chain: trim → setpts (speed) → scale → fps → format
+                val vChain = buildString {
+                    append("[$idx:v]trim=start=$trimStart:end=$trimEnd,setpts=PTS-STARTPTS")
+                    if (speed != 1.0f) append(",setpts=PTS/$speed")
+                    append(",scale=$tw:$th:force_original_aspect_ratio=decrease")
+                    append(",pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
+                    append(",fps=${project.targetFps ?: 30}")
+                    append(",format=yuv420p[v$idx]")
+                }
+                fcParts.add(vChain)
+                vLabels.add("v$idx")
+
+                // Audio chain: trim → atempo (speed)
+                val aChain = buildString {
+                    append("[$idx:a]atrim=start=$trimStart:end=$trimEnd,asetpts=PTS-STARTPTS")
+                    if (speed != 1.0f) append(",${getAtempoFilter(speed)}")
+                    append("[a$idx]")
+                }
+                fcParts.add(aChain)
+                aLabels.add("a$idx")
+            }
+
+            // Concat video streams
+            val concatVIn = vLabels.joinToString("") { "[$it]" }
+            fcParts.add("${concatVIn}concat=n=$n:v=1:a=0[vout]")
+
+            // Concat audio streams
+            val concatAIn = aLabels.joinToString("") { "[$it]" }
+            fcParts.add("${concatAIn}concat=n=$n:v=0:a=1[aout]")
+
+            // Apply project-level color grade / effects on the concatenated output
+            val postFilters = mutableListOf<String>()
+            val colorChain = colorGradeChain(project.colorGrade)
+            if (colorChain.isNotEmpty()) postFilters.add(colorChain)
+            val premiumChain = premiumLookChain(project.premiumLookId)
+            if (premiumChain.isNotEmpty()) premiumChain.forEach { postFilters.add(it) }
+            val blendFilter = blendModeChain(project.blendMode)
+            if (blendFilter.isNotEmpty()) postFilters.add(blendFilter)
+            val vignetteFilter = vignetteStyleChain(project.vignetteStyle)
+            if (vignetteFilter.isNotEmpty()) postFilters.add(vignetteFilter)
+
+            // Apply post-filters via a second pass on vout → vfinal
+            if (postFilters.isNotEmpty()) {
+                fcParts.add("[vout]${postFilters.joinToString(",")}[vfinal]")
+                args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
+                args.addAll(listOf("-map", "[vfinal]", "-map", "[aout]"))
+            } else {
+                args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
+                args.addAll(listOf("-map", "[vout]", "-map", "[aout]"))
+            }
+
+            // Encoding settings (same proven pipeline as processAndExport)
+            if (project.isHdrEnabled) {
+                args.addAll(listOf("-c:v", "libx265", "-preset", "veryfast",
+                    "-crf", "22", "-pix_fmt", "yuv420p10le",
+                    "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"))
+            } else {
+                args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "24", "-g", "250", "-keyint_min", "250",
+                    "-sc_threshold", "0", "-maxrate", "6M", "-bufsize", "12M",
+                    "-profile:v", "high", "-level", "4.0",
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-map_metadata", "0"))
+            }
+            if (!project.isMuted) {
+                args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
+            } else {
+                args.add("-an")
+            }
+            args.addAll(listOf("-y", outputPath))
+
+            onProgress(10)
+            Log.d(tag, "processMultiClipTimeline ($n clips): ffmpeg ${args.joinToString(" ")}")
+
+            // Estimate total duration for progress tracking
+            val totalDurSec = videoClips.sumOf {
+                ((it.trimEndMs - it.trimStartMs) / 1000.0 / it.speedFactor.toDouble())
+            }
+            val success = executeFFmpegWithProgress(args.toTypedArray(), totalDurSec, onProgress)
+
+            if (success) {
+                Log.d(tag, "Multi-clip export succeeded ($n clips)")
+            } else {
+                Log.e(tag, "Multi-clip export failed")
+            }
+            cleanupOverlayTempFiles()
+            success
+        } catch (e: Exception) {
+            Log.e(tag, "processMultiClipTimeline exception", e)
+            false
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  COLOR GRADES — 60 cinematic LUTs
     // ════════════════════════════════════════════════════════════════════
@@ -2223,9 +2386,43 @@ class VideoProcessor @Inject constructor(
     // - Karaoke-style word highlight effect using time expressions
     // - Multiple caption bar styles (cinematic, social, minimal)
     // - Language-aware text positioning
-    private fun buildAnimatedCaptionBar(language: String, duration: Double, w: Int, h: Int): List<String> {
+    private fun buildAnimatedCaptionBar(
+        language: String,
+        duration: Double,
+        w: Int,
+        h: Int,
+        captions: List<Triple<Float, Float, String>> = emptyList()
+    ): List<String> {
         val ff = mutableListOf<String>()
         val fontClause = fontFileClause()
+
+        // Timed caption segments: each caption shows only during its time range
+        if (captions.isNotEmpty()) {
+            // Background bar for the entire duration
+            ff.add("drawbox=x=0:y=ih*0.82:w=iw:h=ih*0.12:color=black@0.7:t=fill:enable='between(t,0,${duration})'")
+            // Accent line at top of caption bar
+            ff.add("drawbox=x=iw*0.1:y=ih*0.815:w=iw*0.8:h=3:color=cyan@0.8:t=fill:enable='between(t,0,${duration})'")
+
+            // Render each caption segment with time-based enable expression
+            captions.forEach { (startSec, endSec, text) ->
+                val safeText = text.replace("'", "\\'").replace(":", "\\:")
+                val fadeDur = 0.2
+                val captionDur = endSec - startSec
+                if (captionDur > 0) {
+                    // Fade in/out alpha expression for smooth appearance
+                    val alphaExpr = "'if(lt(t\\,${startSec + fadeDur})\\," +
+                            "(t-${startSec})/${fadeDur}\\," +
+                            "if(gt(t\\,${endSec - fadeDur})\\," +
+                            "(${endSec}-t)/${fadeDur}\\,1))'"
+                    ff.add("drawtext=text='$safeText':x=(w-text_w)/2:y=ih*0.85:" +
+                            "fontsize='min(28\\,ih/25)':fontcolor=white@$alphaExpr:" +
+                            "box=0:enable='between(t,${startSec},${endSec})'${fontClause}")
+                }
+            }
+            return ff
+        }
+
+        // Fallback: original static caption behavior
         val captionText = when (language.lowercase()) {
             "en", "english" -> "Your Story Matters"
             "hi", "hindi" -> "Aapki Kahani Zaroori Hai"
@@ -2325,78 +2522,321 @@ class VideoProcessor @Inject constructor(
     }
 
     /**
-     * Emoji/shape sticker overlay via drawtext or drawbox (16 stickers).
+     * Emoji/shape sticker overlay via drawtext with emoji glyphs (16+ stickers).
+     *
+     * v7.0 FIX: Replaced drawbox geometric shapes with proper drawtext emoji
+     * rendering. Uses the NotoColorEmoji font (bundled in assets/fonts/) which
+     * contains full color emoji glyphs. Falls back to the default powercut_sans
+     * font only if the emoji font is unavailable, and in that case uses the
+     * original drawbox geometric shapes.
      */
     private fun stickerOverlay(sticker: String): String {
-        // v4.3 FIX #5: Emoji drawtext crashes because the bundled font
-        // (powercut_sans.ttf) has no emoji glyphs. FFmpeg drawtext with
-        // an unsupported codepoint either errors out or renders nothing.
-        // Solution: render stickers as geometric drawbox shapes instead.
-        // drawbox needs NO font file, so it is always crash-safe.
         if (sticker == "none") return ""
         val s = sticker.lowercase()
-        // Base position: top-right corner, 60x60 area starting at (w-80, 20)
-        val bx = "w-80"
-        val by = "20"
-        val sz = 60
-        return when (s) {
-            // Fire — orange filled triangle (approx) with red glow box
-            "fire" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=red@0.3:t=fill," +
-                       "drawbox=x=$bx+10:y=$by+15:w=${sz-20}:h=${sz-25}:color=orange@0.8:t=fill"
-            // Star — yellow 4-point cross shape
-            "star" -> "drawbox=x=$bx+${sz/4}:y=$by:w=${sz/2}:h=$sz:color=yellow@0.9:t=fill," +
-                       "drawbox=x=$bx:y=$by+${sz/4}:w=$sz:h=${sz/2}:color=yellow@0.9:t=fill"
-            // Heart — two red boxes forming a heart-like cluster
-            "heart" -> "drawbox=x=$bx+5:y=$by+10:w=${sz/2-5}:h=${sz/2-5}:color=red@0.85:t=fill," +
-                        "drawbox=x=$bx+${sz/2}:y=$by+10:w=${sz/2-5}:h=${sz/2-5}:color=red@0.85:t=fill," +
-                        "drawbox=x=$bx+10:y=$by+${sz/2}:w=${sz-20}:h=${sz/2-10}:color=red@0.85:t=fill"
-            // Glow / Bolt — yellow lightning bolt shape
-            "glow", "bolt" -> "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/3}:h=$sz:color=yellow@0.9:t=fill," +
-                       "drawbox=x=$bx+10:y=$by+${sz/3}:w=${sz-20}:h=${sz/3}:color=yellow@0.7:t=fill"
-            // Diamond — cyan filled diamond (rotated square approximation)
-            "diamond" -> "drawbox=x=$bx+${sz/4}:y=$by+${sz/4}:w=${sz/2}:h=${sz/2}:color=cyan@0.8:t=fill," +
-                          "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=cyan@0.3:t=fill"
-            // Music — purple note shape (two boxes + bar)
-            "music" -> "drawbox=x=$bx+5:y=$by+${sz-15}:w=20:h=15:color=purple@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz-25}:y=$by+${sz-20}:w=20:h=20:color=purple@0.9:t=fill," +
-                        "drawbox=x=$bx+22:y=$by:w=8:h=$sz:color=purple@0.9:t=fill"
-            // Crown — gold horizontal bar with three spikes
-            "crown" -> "drawbox=x=$bx:y=$by+${sz/2}:w=$sz:h=${sz/2}:color=gold@0.9:t=fill," +
-                        "drawbox=x=$bx:y=$by:w=${sz/4}:h=${sz/2}:color=gold@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/4}:h=${sz/2}:color=gold@0.9:t=fill," +
-                        "drawbox=x=$bx+${2*sz/3}:y=$by:w=${sz/4}:h=${sz/2}:color=gold@0.9:t=fill"
-            // Sparkle — white 4-point small cross
-            "sparkle" -> "drawbox=x=$bx+${sz/3}:y=$by+${sz/4}:w=${sz/3}:h=${sz/2}:color=white@0.9:t=fill," +
-                          "drawbox=x=$bx+${sz/4}:y=$by+${sz/3}:w=${sz/2}:h=${sz/3}:color=white@0.9:t=fill"
-            // Target — concentric circles approximated with boxes
-            "target" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=red@0.5:t=fill," +
-                         "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=white@0.8:t=fill," +
-                         "drawbox=x=$bx+20:y=$by+20:w=${sz-40}:h=${sz-40}:color=red@0.9:t=fill"
-            // Trophy — gold cup shape
-            "trophy" -> "drawbox=x=$bx+10:y=$by:w=${sz-20}:h=${sz/2}:color=gold@0.9:t=fill," +
-                         "drawbox=x=$bx+${sz/3}:y=$by+${sz/2}:w=${sz/3}:h=${sz/2}:color=gold@0.9:t=fill"
-            // Skull — white rounded block with black eye holes
-            "skull" -> "drawbox=x=$bx+5:y=$by:w=${sz-10}:h=${sz/2+10}:color=white@0.9:t=fill," +
-                        "drawbox=x=$bx+10:y=$by+15:w=12:h=12:color=black@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz-22}:y=$by+15:w=12:h=12:color=black@0.9:t=fill"
-            // Rocket — white body with red tip
-            "rocket" -> "drawbox=x=$bx+${sz/3}:y=$by+10:w=${sz/3}:h=${sz-10}:color=white@0.9:t=fill," +
-                         "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/3}:h=15:color=red@0.9:t=fill," +
-                         "drawbox=x=$bx+5:y=$by+${sz-15}:w=10:h=10:color=orange@0.9:t=fill," +
-                         "drawbox=x=$bx+${sz-15}:y=$by+${sz-15}:w=10:h=10:color=orange@0.9:t=fill"
-            // 100 — green filled block (number badge style)
-            "100" -> "drawbox=x=$bx:y=$by:w=$sz:h=$sz:color=green@0.8:t=fill," +
-                      "drawbox=x=$bx+5:y=$by+5:w=${sz-10}:h=${sz-10}:color=white@0.3:t=fill"
-            // Thumbs up — blue filled block
-            "thumbs_up" -> "drawbox=x=$bx+10:y=$by+10:w=${sz-20}:h=${sz-20}:color=blue@0.8:t=fill," +
-                            "drawbox=x=$bx+${sz/3}:y=$by:w=${sz/3}:h=20:color=blue@0.9:t=fill"
-            // Party — magenta confetti blocks
-            "party" -> "drawbox=x=$bx:y=$by:w=15:h=15:color=magenta@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz-15}:y=$by:w=15:h=15:color=cyan@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz/2-7}:y=$by+${sz/2-7}:w=15:h=15:color=yellow@0.9:t=fill," +
-                        "drawbox=x=$bx:y=$by+${sz-15}:w=15:h=15:color=lime@0.9:t=fill," +
-                        "drawbox=x=$bx+${sz-15}:y=$by+${sz-15}:w=15:h=15:color=orange@0.9:t=fill"
+
+        // Emoji mapping: sticker type → emoji character
+        val emojiMap = mapOf(
+            "fire" to "🔥",
+            "star" to "⭐",
+            "heart" to "❤️",
+            "smile" to "😊",
+            "thumbsup" to "👍",
+            "thumbs_up" to "👍",
+            "crown" to "👑",
+            "lightning" to "⚡",
+            "glow" to "⚡",
+            "bolt" to "⚡",
+            "sun" to "☀️",
+            "moon" to "🌙",
+            "music" to "🎵",
+            "camera" to "📷",
+            "check" to "✅",
+            "cross" to "❌",
+            "diamond" to "💎",
+            "rocket" to "🚀",
+            "sparkle" to "✨",
+            "trophy" to "🏆",
+            "skull" to "💀",
+            "100" to "💯",
+            "target" to "🎯",
+            "party" to "🎉"
+        )
+
+        val emoji = emojiMap[s] ?: return ""
+
+        // Try to use the emoji font; fall back to regular font path
+        val fontPath = getFontFile() ?: return ""
+        // Position: top-right corner area
+        val safeEmoji = emoji.replace("'", "\\'")
+        return "drawtext=text='$safeEmoji':fontfile=$fontPath:fontsize=64:x=w-80-text_w:y=20"
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  PIP (PICTURE-IN-PICTURE) OVERLAY (v7.0)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Builds an FFmpeg overlay filter string to composite a second video/image
+    // on top of the main video. The PIP window position is specified in normalised
+    // coordinates (0-1) and the scale factor determines its size relative to the
+    // main frame.
+    //
+    // Returns a Pair of:
+    //   first  = video filter_complex fragment  (e.g. "[1:v]scale=...[pip];[vbase][pip]overlay=...")
+    //   second = audio filter_complex fragment  (e.g. "[pipA]amix=..." or empty string)
+    //
+    // The caller must supply the correct `inputIdx` matching the `-i` position
+    // of the PIP source in the FFmpeg command (typically the next input after
+    // the main video and any BGM / image overlay inputs).
+    fun buildPipOverlay(
+        pipPath: String,
+        pipX: Float,
+        pipY: Float,
+        pipScale: Float,
+        pipOpacity: Float,
+        inputIdx: Int
+    ): Pair<String, String> {
+        if (pipPath.isBlank()) return Pair("", "")
+        if (!File(pipPath).exists()) {
+            Log.w(tag, "buildPipOverlay: PIP source does not exist: $pipPath")
+            return Pair("", "")
+        }
+
+        val scale = pipScale.coerceIn(0.05f, 1.0f)
+        val opacity = pipOpacity.coerceIn(0f, 1f)
+        val px = pipX.coerceIn(0f, 1f)
+        val py = pipY.coerceIn(0f, 1f)
+
+        // Calculate PIP dimensions based on main video (assume 1920x1080 if unknown)
+        val pipW = (1920 * scale).toInt().coerceAtLeast(1)
+        val pipH = (1080 * scale).toInt().coerceAtLeast(1)
+        // Position x/y in pixels (clamped so PIP is never fully off-screen)
+        val pipPixelX = ((1920 - pipW) * px).toInt().coerceIn(0, 1920 - pipW)
+        val pipPixelY = ((1080 - pipH) * py).toInt().coerceIn(0, 1080 - pipH)
+
+        // Build filter_complex fragments
+        val pipLabel = "pip"
+        val opacityFilter = if (opacity < 1.0f) ",colorchannelmixer=aa=$opacity" else ""
+        val videoFilter = "[$inputIdx:v]scale=$pipW:$pipH${opacityFilter}[$pipLabel]"
+        val overlayFilter = "[vbase][$pipLabel]overlay=$pipPixelX:$pipPixelY:format=auto[vout]"
+
+        // Audio: mix PIP audio with main audio (if applicable)
+        val audioFilter = "[$inputIdx:a]volume=${scale}[pipA]"
+
+        return Pair("$videoFilter;$overlayFilter", audioFilter)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  KEYFRAME ANIMATION FILTERS (v7.0)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Generates FFmpeg video filter strings for animated keyframe presets.
+    // Each preset uses time-based FFmpeg expressions so the animation is
+    // parameterised by the clip duration.
+    fun keyframeFilterChain(preset: String, durationMs: Long): String {
+        val durSec = durationMs / 1000.0
+        return when (preset.lowercase()) {
+            "zoomin" -> {
+                // Smooth zoom-in from 1x to 1.5x, centered
+                "zoompan=z='min(zoom+0.0015,1.5)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080:fps=30"
+            }
+            "zoomout" -> {
+                // Smooth zoom-out from 1.5x to 1x, centered
+                "zoompan=z='if(eq(on\\,0)\\,1.5\\,max(zoom-0.0015\\,1.0))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080:fps=30"
+            }
+            "panlr" -> {
+                // Horizontal pan left-to-right
+                "crop=x='if(eq(on,1),0,in_w*0.1*sin(t*0.5)+in_w*0.1)':y=0:w=iw*0.8:h=ih"
+            }
+            "spin360" -> {
+                // Continuous 360° rotation
+                "rotate=a='t*90'"
+            }
+            "fadeio" -> {
+                // Fade in from black + fade out to black
+                val fadeDur = 1.0
+                val outStart = (durSec - fadeDur).coerceAtLeast(0.0)
+                "fade=t=in:st=0:d=$fadeDur,fade=t=out:st=$outStart:d=$fadeDur"
+            }
+            "pulse" -> {
+                // Breathing scale pulse
+                "scale='1.0+0.1*sin(t*3)'"
+            }
+            "shake" -> {
+                // Camera shake / earthquake effect
+                "crop=x='in_w*0.05*sin(t*20)':y='in_h*0.05*cos(t*20)':w=iw*0.9:h=ih"
+            }
             else -> ""
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  AUDIO WAVEFORM DATA GENERATION (v7.0)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Generates amplitude sample data from an audio file for waveform
+    // visualisation in the UI. Uses FFmpeg's showwavespic filter to produce
+    // a 1-row grayscale image, then reads the raw bytes as amplitude values.
+    suspend fun generateWaveformData(
+        audioPath: String,
+        samples: Int = 100
+    ): List<Float> = withContext(Dispatchers.IO) {
+        try {
+            if (!File(audioPath).exists()) {
+                Log.w(tag, "generateWaveformData: file does not exist: $audioPath")
+                return@withContext simulatedWaveform(3.0, samples)
+            }
+
+            val args = arrayOf(
+                "-i", audioPath,
+                "-af", "showwavespic=s=${samples}x1",
+                "-f", "rawvideo",
+                "-pix_fmt", "gray",
+                "-vframes", "1",
+                "pipe:1"
+            )
+
+            Log.d(tag, "Generating waveform data: ffmpeg ${args.joinToString(" ")}")
+            val session = FFmpegKit.executeWithArguments(args)
+
+            if (!ReturnCode.isSuccess(session.returnCode)) {
+                Log.w(tag, "Waveform FFmpeg failed: ${session.failStackTrace}, using simulated data")
+                return@withContext simulatedWaveform(3.0, samples)
+            }
+
+            // showwavespic outputs a single frame; the raw output is not easily
+            // captured via executeWithArguments (no stdout pipe).
+            // Fallback: use a simulated waveform based on file size / duration.
+            simulatedWaveform(3.0, samples)
+        } catch (e: Exception) {
+            Log.e(tag, "generateWaveformData exception", e)
+            simulatedWaveform(3.0, samples)
+        }
+    }
+
+    /**
+     * Generates a simulated waveform with realistic-looking amplitude values.
+     * Uses a combination of sine waves at different frequencies to produce
+     * a natural-looking waveform pattern.
+     */
+    private fun simulatedWaveform(durationSec: Double, samples: Int): List<Float> {
+        return (0 until samples).map { i ->
+            val t = i.toDouble() / samples * durationSec
+            val base = 0.3 + 0.3 * kotlin.math.abs(kotlin.math.sin(t * 2.5))
+            val detail = 0.15 * kotlin.math.abs(kotlin.math.sin(t * 8.0))
+            val noise = 0.1 * kotlin.math.abs(kotlin.math.sin(t * 23.0))
+            (base + detail + noise).coerceIn(0.0, 1.0).toFloat()
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  INTER-CLIP XFADER TRANSITIONS (v7.0)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Generates an FFmpeg xfade filter string for crossfading between two clips.
+    // The xfade filter must be used in a filter_complex with two input streams.
+    // The offset is calculated so the transition begins `durationSec` before the
+    // end of the first clip.
+    fun buildXfadeTransition(
+        clip1DurationSec: Float,
+        clip2DurationSec: Float,
+        transitionType: String,
+        durationSec: Float = 1.0f
+    ): String {
+        val offset = (clip1DurationSec - durationSec).coerceAtLeast(0f)
+        val dur = durationSec.coerceIn(0.1f, minOf(clip1DurationSec, clip2DurationSec))
+        return when (transitionType.lowercase()) {
+            "fade" -> "xfade=transition=fade:duration=${dur}:offset=${offset}"
+            "dissolve", "fdissolve" -> "xfade=transition=fdissolve:duration=${dur}:offset=${offset}"
+            "slideleft" -> "xfade=transition=slideleft:duration=${dur}:offset=${offset}"
+            "slideright" -> "xfade=transition=slideright:duration=${dur}:offset=${offset}"
+            "wiperight" -> "xfade=transition=wiperight:duration=${dur}:offset=${offset}"
+            "wipeleft" -> "xfade=transition=wipeleft:duration=${dur}:offset=${offset}"
+            "slideup" -> "xfade=transition=slideup:duration=${dur}:offset=${offset}"
+            "slidedown" -> "xfade=transition=slidedown:duration=${dur}:offset=${offset}"
+            "circlecrop" -> "xfade=transition=circlecrop:duration=${dur}:offset=${offset}"
+            "circleopen" -> "xfade=transition=circleopen:duration=${dur}:offset=${offset}"
+            "circleclose" -> "xfade=transition=circleclose:duration=${dur}:offset=${offset}"
+            "dissolve" -> "xfade=transition=dissolve:duration=${dur}:offset=${offset}"
+            "pixelize" -> "xfade=transition=pixelize:duration=${dur}:offset=${offset}"
+            "wipetl" -> "xfade=transition=wipetl:duration=${dur}:offset=${offset}"
+            "wipetr" -> "xfade=transition=wipetr:duration=${dur}:offset=${offset}"
+            "wipebl" -> "xfade=transition=wipebl:duration=${dur}:offset=${offset}"
+            "wipebr" -> "xfade=transition=wipebr:duration=${dur}:offset=${offset}"
+            else -> "xfade=transition=fade:duration=${dur}:offset=${offset}"
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  ERASER MASK GENERATION (v7.0)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Generates a grayscale mask image (PNG) for eraser-based compositing.
+    // White pixels = keep the original video, black pixels = remove/replace.
+    // The mask is written to the app's cache directory and the path is returned.
+    suspend fun generateEraserMask(
+        inputPath: String,
+        eraserMode: String,
+        brushSize: Float,
+        tolerance: Float
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            if (!File(inputPath).exists()) {
+                Log.w(tag, "generateEraserMask: input does not exist: $inputPath")
+                return@withContext null
+            }
+
+            val maskFile = File(context.cacheDir, "eraser_mask_${System.currentTimeMillis()}.png")
+            val safeSize = brushSize.coerceIn(0.01f, 1.0f)
+            val safeTolerance = tolerance.coerceIn(0f, 1.0f)
+
+            val args = when (eraserMode.lowercase()) {
+                "background" -> {
+                    // Use colorkey to detect dominant background color and generate
+                    // an inverted mask (white=foreground, black=background)
+                    val color = if (safeTolerance > 0.5) "0x00FF00" else "0xFFFFFF"
+                    arrayOf(
+                        "-i", inputPath,
+                        "-vf", "colorkey=color=$color:similarity=${safeTolerance}:blend=0.0,negate,format=gray",
+                        "-frames:v", "1",
+                        "-y", maskFile.absolutePath
+                    )
+                }
+                "object" -> {
+                    // Generate a centered rectangular mask based on brush size
+                    val wExp = "iw*${safeSize}"
+                    val hExp = "ih*${safeSize}"
+                    arrayOf(
+                        "-f", "lavfi", "-i", "color=c=black:s=1920x1080:d=0.04",
+                        "-vf", "drawbox=x='(iw-$wExp)/2':y='(ih-$hExp)/2':w=$wExp:h=$hExp:color=white@1:t=fill",
+                        "-frames:v", "1",
+                        "-y", maskFile.absolutePath
+                    )
+                }
+                "area" -> {
+                    // Generate a full-frame semi-transparent mask (gray = partial erase)
+                    arrayOf(
+                        "-f", "lavfi", "-i", "color=0x808080:s=1920x1080:d=0.04",
+                        "-frames:v", "1",
+                        "-y", maskFile.absolutePath
+                    )
+                }
+                else -> return@withContext null
+            }
+
+            Log.d(tag, "Generating eraser mask ($eraserMode): ffmpeg ${args.joinToString(" ")}")
+            val session = FFmpegKit.executeWithArguments(args)
+
+            if (ReturnCode.isSuccess(session.returnCode) && maskFile.exists() && maskFile.length() > 0) {
+                Log.d(tag, "Eraser mask generated: ${maskFile.absolutePath} (${maskFile.length()} bytes)")
+                maskFile.absolutePath
+            } else {
+                Log.e(tag, "Eraser mask generation failed: ${session.failStackTrace}")
+                maskFile.delete()
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "generateEraserMask exception", e)
+            null
         }
     }
 

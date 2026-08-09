@@ -382,7 +382,10 @@ fun NextGenEditorScreen(
     onSplitClip: (String, Long) -> Unit = { _, _ -> },
     onMoveClip: (String, Long) -> Unit = { _, _ -> },
     onTrimClip: (String, Long, Long) -> Unit = { _, _, _ -> },
-    onSelectClip: (String) -> Unit = {}
+    onSelectClip: (String) -> Unit = {},
+    // Undo/Redo
+    onUndo: () -> Unit = {},
+    onRedo: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -675,8 +678,8 @@ fun NextGenEditorScreen(
                 durationMs = project.durationMs,
                 onBack = { onSaveDraft(); onBack() },
                 onDone = { isEditingComplete = true },
-                onUndo = { },
-                onRedo = { }
+                onUndo = onUndo,
+                onRedo = onRedo
             )
 
             // 2027 8K: Premium launcher moved to bottom toolbar (gradient pills)
@@ -4551,6 +4554,7 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var selectedProperty by remember { mutableStateOf("position") }
     var selectedEasing by remember { mutableStateOf("linear") }
+    var selectedPreset by remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LiveAnimatedHeader("KEYFRAMES", "💎", NeonOrange)
@@ -4618,7 +4622,6 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
                 Box(Modifier.background(if (sel) SignatureOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, if (sel) SignatureOrange else Color.Transparent, RoundedCornerShape(6.dp)).clickable {
                     selectedProperty = id
                     onUpdateKeyframeAnim("$id:$selectedEasing")
-                    android.widget.Toast.makeText(ctx, "Keyframe property: $label", android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(horizontal = 6.dp, vertical = 4.dp)) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignatureOrange else Color.White)
                 }
@@ -4633,7 +4636,6 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
                 Box(Modifier.background(if (sel) SignaturePurple.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, if (sel) SignaturePurple else Color.Transparent, RoundedCornerShape(6.dp)).clickable {
                     selectedEasing = id
                     onUpdateKeyframeAnim("$selectedProperty:$id")
-                    android.widget.Toast.makeText(ctx, "Easing: $label", android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(horizontal = 6.dp, vertical = 4.dp)) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignaturePurple else Color.White)
                 }
@@ -4644,11 +4646,12 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
         Text("QUICK PRESETS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("Zoom In" to "zoomIn", "Zoom Out" to "zoomOut", "Pan Left→Right" to "panLR", "Pan Right→Left" to "panRL", "Spin 360°" to "spin360", "Fade In-Out" to "fadeIO", "Pulse" to "pulse", "Wobble" to "wobble", "Slide Up" to "slideUp", "Slide Down" to "slideDown", "Bounce In" to "bounceIn", "Shake" to "shake").forEach { (label, id) ->
-                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, SignatureOrange.copy(0.2f), RoundedCornerShape(6.dp)).clickable {
+                val sel = selectedPreset == id
+                Box(Modifier.background(if (sel) SignatureOrange.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (sel) SignatureOrange else SignatureOrange.copy(0.2f), RoundedCornerShape(6.dp)).clickable {
+                    selectedPreset = if (sel) null else id
                     onUpdateKeyframeAnim("preset:$id")
-                    android.widget.Toast.makeText(ctx, "Keyframe preset: $label", android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignatureOrange else Color.White)
                 }
             }
         }
@@ -4657,7 +4660,13 @@ private fun KeyframePanel(project: VideoProject, onUpdateKeyframeAnim: (String) 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("➕ Add Key" to "add", "🗑️ Clear" to "clear", "📋 Copy" to "copy", "↔️ Reverse" to "reverse", "🎬 Preview" to "preview").forEach { (label, id) ->
                 Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (id == "add") SignatureOrange.copy(0.4f) else Color.White.copy(0.1f), RoundedCornerShape(6.dp)).clickable {
-                    android.widget.Toast.makeText(ctx, "Keyframe: $label", android.widget.Toast.LENGTH_SHORT).show()
+                    when (id) {
+                        "add" -> onUpdateKeyframeAnim("add:$selectedProperty")
+                        "clear" -> { selectedPreset = null; onUpdateKeyframeAnim("clear") }
+                        "copy" -> onUpdateKeyframeAnim("copy:$selectedProperty")
+                        "reverse" -> onUpdateKeyframeAnim("reverse")
+                        "preview" -> onUpdateKeyframeAnim("preview:$selectedProperty")
+                    }
                 }.padding(5.dp), contentAlignment = Alignment.Center) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (id == "add") SignatureOrange else Color.White)
                 }
