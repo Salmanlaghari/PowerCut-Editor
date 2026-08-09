@@ -692,12 +692,12 @@ fun NextGenEditorScreen(
                 // ExoPlayer video
                 AndroidView(
                     factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
-                    modifier = Modifier.fillMaxSize().graphicsLayer(
-                        scaleX = if (project.isFlippedHorizontal) -1f else 1f,
-                        scaleY = if (project.isFlippedVertical) -1f else 1f,
-                        rotationZ = project.rotationDegrees,
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        scaleX = if (project.isFlippedHorizontal) -1f else 1f
+                        scaleY = if (project.isFlippedVertical) -1f else 1f
+                        rotationZ = project.rotationDegrees
                         colorFilter = combinedColorFilter
-                    )
+                    }
                 )
                 // Live color filter overlay — applies the combined cinematic filter
                 // + image-editor adjustments on top of the video in real-time.

@@ -474,9 +474,9 @@ class ExportManager @Inject constructor(
             // to VideoProcessor (FFmpeg) which also handles all edits.
             // ═══════════════════════════════════════════════════════════
             val exportPreset = when (project.targetResolution) {
-                "4k" -> ExportPreset.presetYt4k()
-                "720p" -> ExportPreset.presetWhatsApp()
-                else -> ExportPreset.presetYt1080()
+                "4k" -> ExportEngine.presetYt4k()
+                "720p" -> ExportEngine.presetWhatsApp()
+                else -> ExportEngine.presetYt1080()
             }
             val tempOutputPath_native = File(secureDir, "powercut_native_${System.currentTimeMillis()}.mp4").absolutePath
             val nativeConfig = ExportConfig(
