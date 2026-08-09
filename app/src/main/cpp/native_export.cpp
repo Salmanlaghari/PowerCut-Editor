@@ -23,6 +23,7 @@
 #include "powercut/export/export_engine.h"
 #include "powercut/core/dag.h"
 #include "powercut/core/compositor.h"
+#include "powercut/core/decoder_farm.h"
 
 // PRIORITY 1 FIX: Progress callback JNI bridge.
 // The native worker thread needs to call back into Kotlin to report progress.
@@ -42,6 +43,9 @@ using PowerCut::AudioSegment;
 using PowerCut::EffectNode;
 using PowerCut::Keyframe;
 using PowerCut::TimeMicros;
+using PowerCut::RGBAFrame;
+using PowerCut::global_compositor;
+using PowerCut::global_decoder_farm;
 
 // ---------------------------------------------------------------------------
 // Detect whether the full export engine is available. When building only the
