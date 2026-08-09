@@ -9,6 +9,9 @@ import android.util.Log
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.processing.VideoProcessor
+import com.powercut.editor.export.ExportEngine
+import com.powercut.editor.export.ExportConfig
+import com.powercut.editor.export.ExportPreset
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +27,11 @@ class ExportManager @Inject constructor(
     private val videoProcessor: VideoProcessor
 ) {
     private val tag = "ExportManager"
+
+    // FIX: Native export engine instance for DAG-based per-frame rendering.
+    // Tries native engine first (evaluates ALL edits per frame via compositor->render_full),
+    // falls back to VideoProcessor (FFmpeg) if native engine is unavailable.
+    private val nativeEngine = ExportEngine()
 
     private val _exportState = MutableStateFlow<Resource<String>>(Resource.Idle)
     val exportState: StateFlow<Resource<String>> = _exportState.asStateFlow()
@@ -456,6 +464,73 @@ class ExportManager @Inject constructor(
                 return
             }
             _progress.value = 5 // input resolved
+
+            // ═══════════════════════════════════════════════════════════
+            // FIX: Try NATIVE export engine first (DAG-based per-frame render).
+            // The native engine evaluates the PowerCutDAG at EVERY frame,
+            // calls compositor->render_full() with ALL layers (video, text,
+            // stickers, effects, keyframes), applies watermark, and mixes audio.
+            // If the native engine is not available (stub build), fall back
+            // to VideoProcessor (FFmpeg) which also handles all edits.
+            // ═══════════════════════════════════════════════════════════
+            val exportPreset = when (project.targetResolution) {
+                "4k" -> ExportPreset.presetYt4k()
+                "720p" -> ExportPreset.presetWhatsApp()
+                else -> ExportPreset.presetYt1080()
+            }
+            val tempOutputPath_native = File(secureDir, "powercut_native_${System.currentTimeMillis()}.mp4").absolutePath
+            val nativeConfig = ExportConfig(
+                preset = exportPreset,
+                out = tempOutputPath_native,
+                hw = true,
+                twoPass = false,
+                faststart = true,
+                removeWatermark = project.isProTier
+            )
+            nativeEngine.onProgress = { prog ->
+                if (prog.total > 0) {
+                    val pct = (prog.cur * 100 / prog.total).toInt().coerceIn(0, 100)
+                    updateProgress(pct)
+                }
+            }
+            val nativeOk = nativeEngine.start(project, nativeConfig)
+            if (nativeOk) {
+                Log.d(tag, "Native export engine started — DAG-based per-frame render")
+                // Wait for native engine to complete
+                val waitStart = System.currentTimeMillis()
+                while (nativeEngine.running()) {
+                    kotlinx.coroutines.delay(200)
+                    if (System.currentTimeMillis() - waitStart > 600_000) {
+                        Log.w(tag, "Native export timeout — cancelling")
+                        nativeEngine.cancel()
+                        break
+                    }
+                }
+                val nativeOutputFile = File(tempOutputPath_native)
+                if (nativeOutputFile.exists() && nativeOutputFile.length() > 0) {
+                    Log.d(tag, "Native export succeeded: ${nativeOutputFile.length()} bytes")
+                    _progress.value = 95
+                    val galleryPath = saveToPublicGallery(context, nativeOutputFile)
+                    if (galleryPath != null) {
+                        _progress.value = 100
+                        _exportState.value = Resource.Success(galleryPath)
+                    } else {
+                        _progress.value = 100
+                        _exportState.value = Resource.Success(tempOutputPath_native)
+                    }
+                    nativeEngine.destroy()
+                    return
+                } else {
+                    Log.w(tag, "Native export produced no output — falling back to FFmpeg")
+                }
+            } else {
+                Log.d(tag, "Native engine not available (stub build) — using FFmpeg pipeline")
+            }
+            nativeEngine.destroy()
+
+            // ═══════════════════════════════════════════════════════════
+            // FALLBACK: FFmpeg VideoProcessor pipeline (handles all edits)
+            // ═══════════════════════════════════════════════════════════
 
             // THERMAL PRE-CHECK (v4.2): warn (but don't block) if the device is
             // already hot before starting a long encode. The export will still
