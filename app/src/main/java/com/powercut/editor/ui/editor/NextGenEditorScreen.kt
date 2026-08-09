@@ -704,58 +704,31 @@ fun NextGenEditorScreen(
                     .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                // ExoPlayer video — with live blur/sharpen preview
+                // ExoPlayer video — with live blur/sharpen/flip/rotation preview
+                // AND the full combined color filter applied directly to the video
+                // pixels so trim, speed ramps, color grades, filters, premium looks,
+                // and all image-editor adjustments (brightness, contrast, saturation,
+                // temperature, exposure, fade, highlights, shadows, grain, sharpen)
+                // are visible in real-time — matching the exported frame.
                 AndroidView(
                     factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
                     modifier = Modifier.fillMaxSize()
                         .then(
                             if (project.imageEditorBlur > 0f) Modifier.blur((project.imageEditorBlur * 20f).dp) else Modifier
                         )
-                        .graphicsLayer(
-                            scaleX = if (project.isFlippedHorizontal) -1f else 1f,
-                            scaleY = if (project.isFlippedVertical) -1f else 1f,
-                            rotationZ = project.rotationDegrees,
-                            // Sharpen approximation: slight contrast boost via alpha
-                            alpha = if (project.imageEditorSharpen > 0f) (1f + project.imageEditorSharpen * 0.05f).coerceAtMost(1f) else 1f
-                        )
-                )
-                // Live color filter overlay — applies the combined cinematic filter
-                // + image-editor adjustments on top of the video in real-time.
-                if (combinedColorFilter != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .drawWithContent {
-                                drawContent()
-                                // Draw a semi-transparent overlay tint based on filter
-                                val f = project.selectedFilter.lowercase()
-                                val tint = when {
-                                    f.contains("sepia") -> Color(0xFF704214).copy(alpha = 0.15f)
-                                    f.contains("warm") || f.contains("sunset") || f.contains("golden") -> Color(0xFFFF8C00).copy(alpha = 0.08f)
-                                    f.contains("cool") || f.contains("arctic") -> Color(0xFF00BFFF).copy(alpha = 0.08f)
-                                    f.contains("cyberpunk") -> Color(0xFF00FFFF).copy(alpha = 0.06f)
-                                    f.contains("vintage") || f.contains("fade") -> Color(0xFFD4A76A).copy(alpha = 0.10f)
-                                    f.contains("teal") -> Color(0xFF008080).copy(alpha = 0.08f)
-                                    f.contains("rose") -> Color(0xFFFF1493).copy(alpha = 0.06f)
-                                    else -> Color.Transparent
-                                }
-                                if (tint != Color.Transparent) {
-                                    drawRect(tint)
-                                }
+                        .graphicsLayer {
+                            scaleX = if (project.isFlippedHorizontal) -1f else 1f
+                            scaleY = if (project.isFlippedVertical) -1f else 1f
+                            rotationZ = project.rotationDegrees
+                            // Apply the combined cinematic filter + image-editor
+                            // adjustments matrix directly to the video surface so
+                            // the preview shows the REAL processed pixels, not a
+                            // fake tint overlay. This makes preview == export.
+                            if (combinedColorFilter != null) {
+                                this.colorFilter = combinedColorFilter
                             }
-                    )
-                }
-
-                // Filter overlay
-                if (colorFilter != null) {
-                    val overlayColor = when (project.selectedFilter.lowercase()) {
-                        "grayscale" -> Color.Gray.copy(0.15f)
-                        "sepia" -> Color(0xFF704214).copy(0.18f)
-                        "invert" -> Color.White.copy(0.1f)
-                        else -> Color.Transparent
-                    }
-                    if (overlayColor != Color.Transparent) Box(Modifier.fillMaxSize().background(overlayColor))
-                }
+                        }
+                )
 
                 // 3D Shape Mask overlay
                 if (project.active3DShapeMask != "none") {
