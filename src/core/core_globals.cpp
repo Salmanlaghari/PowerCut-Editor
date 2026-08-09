@@ -1,17 +1,20 @@
 // =============================================================================
-// PowerCut Core — Global instances stub.
+// PowerCut Core — Global instances.
 //
-// In the full native build these are managed by the core engine lifecycle.
-// This stub provides the linker symbols so the export engine and JNI bridge
-// link cleanly. When the full compositor is unavailable, we fall back to an
-// inline software compositor for timeline export.
+// Provides the global compositor and decoder farm used by the export engine
+// and JNI preview bridge. The compositor processes ALL timeline effects;
+// the decoder farm provides source frames for the compositor.
 // =============================================================================
 #include "powercut/core/decoder_farm.h"
 #include "powercut/core/compositor.h"
 
 namespace PowerCut {
 
-DecoderFarm* global_decoder_farm = nullptr;
+// FIX: Initialize decoder farm so export engine can get source frames.
+// In the full build this is replaced by a real FFmpeg-backed decoder.
+static DecoderFarm default_decoder_farm;
+DecoderFarm* global_decoder_farm = &default_decoder_farm;
+
 static Compositor default_compositor;
 Compositor* global_compositor = &default_compositor;
 

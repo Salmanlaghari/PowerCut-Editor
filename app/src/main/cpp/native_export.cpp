@@ -694,4 +694,75 @@ Java_com_powercut_editor_export_ExportEngine_nativeRunning(
     return engine->running() ? JNI_TRUE : JNI_FALSE;
 }
 
+// ---------------------------------------------------------------------------
+// JNI: Get a single rendered preview frame from the native compositor.
+// Builds a DAG from the project, evaluates at the given time, calls
+// compositor->render_full() with ALL layers, and returns RGBA bytes.
+// ---------------------------------------------------------------------------
+JNIEXPORT jbyteArray JNICALL
+Java_com_powercut_editor_export_ExportEngine_nativeGetRenderedFrame(
+    JNIEnv* env, jobject thiz, jobject dagObj, jlong timeMicros, jint width, jint height) {
+    (void)thiz;
+
+    // Validate dimensions
+    if (width < 1 || width > 4096 || height < 1 || height > 4096) return nullptr;
+    if (!global_compositor || !global_decoder_farm) return nullptr;
+
+    // Build DAG from project
+    PowerCutDAG* dag = build_dag_from_project(env, dagObj);
+    if (!dag) return nullptr;
+
+    // Evaluate segments at the given time
+    TimeMicros t = (TimeMicros)timeMicros;
+    auto segs = dag->evaluate(t);
+
+    // Decode source frames for all segments
+    std::vector<RGBAFrame*> source_frames;
+    source_frames.reserve(segs.size());
+    for (auto& s : segs) {
+        if (s.track_type <= 3) {
+            RGBAFrame* fr = global_decoder_farm->get_original_frame(s.mat_id, s.src_time(t));
+            source_frames.push_back(fr);
+        } else {
+            source_frames.push_back(nullptr);
+        }
+    }
+
+    // Render full composite with ALL effects
+    RGBAFrame* out = global_compositor->render_full(segs, source_frames, t, width, height);
+
+    if (!out || !out->data) {
+        // Cleanup source frames
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    // Convert to Java byte array (RGBA)
+    size_t array_size = (size_t)width * height * 4;
+    if (array_size > INT32_MAX) {
+        free(out->data); delete out;
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    jbyteArray result = env->NewByteArray((jsize)array_size);
+    if (!result) {
+        free(out->data); delete out;
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    env->SetByteArrayRegion(result, 0, (jsize)array_size, (const jbyte*)out->data);
+
+    // Cleanup
+    free(out->data); delete out;
+    for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+    delete dag;
+
+    return result;
+}
+
 }  // extern "C"
