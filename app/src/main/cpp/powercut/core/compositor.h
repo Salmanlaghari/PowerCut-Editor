@@ -51,8 +51,10 @@ public:
     //                      VIGNETTE → GRAIN (each blended by intensity)
     //   4. Keyframed transform: scale_at(t), pos_x_at(t), pos_y_at(t),
     //      rotation_at(t), opacity_at(t) — interpolated from keyframe arrays
-    //   5. Alpha-composite onto accumulating output (respecting Z-order)
-    //   6. Text/sticker segments (track_type 1,2) rendered on top last
+    //   5. Chroma-key (green screen): if greenScreenEnabled, replace the
+    //      keyed color with the background image/layer using threshold
+    //   6. Alpha-composite onto accumulating output (respecting Z-order)
+    //   7. Text/sticker segments (track_type 1,2) rendered on top last
     //
     // Returns the FULLY EDITED RGBAFrame* ready for encoding + optional watermark.
     RGBAFrame* render_full(

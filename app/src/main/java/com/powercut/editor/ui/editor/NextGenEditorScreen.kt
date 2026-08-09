@@ -627,6 +627,18 @@ fun NextGenEditorScreen(
                 val grainSat = ColorMatrix().apply { setToSaturation((1f - gr * 0.3f).coerceAtLeast(0.5f)) }
                 adjMatrix *= grainSat
             }
+            // Sharpen approximation: boost contrast slightly for preview
+            if (project.imageEditorSharpen > 0f) {
+                val sharpenContrast = 1f + project.imageEditorSharpen * 0.15f
+                val sharpenShift = (1f - sharpenContrast) * 128f
+                val sharpenMatrix = ColorMatrix(floatArrayOf(
+                    sharpenContrast, 0f, 0f, 0f, sharpenShift,
+                    0f, sharpenContrast, 0f, 0f, sharpenShift,
+                    0f, 0f, sharpenContrast, 0f, sharpenShift,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                adjMatrix *= sharpenMatrix
+            }
 
             // v4.6.0: compose the premium look preview matrix on top of adjustments
             if (lookMatrix != null) {
@@ -692,14 +704,20 @@ fun NextGenEditorScreen(
                     .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                // ExoPlayer video
+                // ExoPlayer video — with live blur/sharpen preview
                 AndroidView(
                     factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
-                    modifier = Modifier.fillMaxSize().graphicsLayer(
-                        scaleX = if (project.isFlippedHorizontal) -1f else 1f,
-                        scaleY = if (project.isFlippedVertical) -1f else 1f,
-                        rotationZ = project.rotationDegrees
-                    )
+                    modifier = Modifier.fillMaxSize()
+                        .then(
+                            if (project.imageEditorBlur > 0f) Modifier.blur((project.imageEditorBlur * 20f).dp) else Modifier
+                        )
+                        .graphicsLayer(
+                            scaleX = if (project.isFlippedHorizontal) -1f else 1f,
+                            scaleY = if (project.isFlippedVertical) -1f else 1f,
+                            rotationZ = project.rotationDegrees,
+                            // Sharpen approximation: slight contrast boost via alpha
+                            alpha = if (project.imageEditorSharpen > 0f) (1f + project.imageEditorSharpen * 0.05f).coerceAtMost(1f) else 1f
+                        )
                 )
                 // Live color filter overlay — applies the combined cinematic filter
                 // + image-editor adjustments on top of the video in real-time.
@@ -1260,7 +1278,7 @@ fun NextGenEditorScreen(
             onClipSelected = { clip -> onSelectClip(clip.id) },
             onClipMoved = { clip, newStart -> onMoveClip(clip.id, newStart) },
             onClipTrimmed = { clip, newStart, newEnd -> onTrimClip(clip.id, newStart, newEnd) },
-            modifier = Modifier.fillMaxWidth().height(180.dp)
+            modifier = Modifier.fillMaxWidth().height(108.dp)
         )
 
         // ─── 5. TOOL PANEL (expandable) ───────────────────────
