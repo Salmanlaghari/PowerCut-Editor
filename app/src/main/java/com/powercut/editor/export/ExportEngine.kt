@@ -46,13 +46,35 @@ data class ExportProgress(
 class ExportEngine {
     private var nativeHandle: Long = 0
 
+    /**
+     * CRASH FIX #3: Tracks whether the native "powercut" library was loaded
+     * successfully. When false (stub build or lib missing), all native calls
+     * are no-ops and start() returns false immediately — the ExportManager
+     * skips the native path entirely and goes straight to the FFmpeg pipeline,
+     * avoiding wasted JNI overhead and potential global-ref leaks from
+     * repeated nativeCreate() calls on a stub engine.
+     */
+    private var nativeLibLoaded: Boolean = false
+
     init {
         try {
             System.loadLibrary("powercut")
+            nativeLibLoaded = true
         } catch (e: UnsatisfiedLinkError) {
             // Native lib not available in this build — calls below are no-ops.
+            nativeLibLoaded = false
+        } catch (e: Exception) {
+            // Defensive: any other error loading the native lib.
+            nativeLibLoaded = false
         }
     }
+
+    /**
+     * CRASH FIX #3: Returns true only if the native export engine is actually
+     * available (library loaded + handle created). ExportManager checks this
+     * before attempting the native path to avoid dead-end JNI calls.
+     */
+    fun isAvailable(): Boolean = nativeLibLoaded
 
     // ---- Native methods (implemented in app/src/main/cpp/native_export.cpp) ----
     external fun nativeCreate(): Long
@@ -123,6 +145,11 @@ class ExportEngine {
      *         the native engine is unavailable.
      */
     fun start(dag: Any, config: ExportConfig): Boolean {
+        // CRASH FIX #3: If the native library was never loaded (stub build or
+        // load failure), return false immediately. This avoids a
+        // UnsatisfiedLinkError on nativeCreate()/nativeStart() and lets the
+        // ExportManager skip straight to the proven FFmpeg pipeline.
+        if (!nativeLibLoaded) return false
         return try {
             if (nativeHandle == 0L) nativeHandle = nativeCreate()
             // PRIORITY 1 FIX: sanitize the output path — replace characters

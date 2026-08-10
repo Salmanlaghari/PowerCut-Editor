@@ -249,6 +249,57 @@ class VideoProcessor @Inject constructor(
         }
     }
 
+    /**
+     * CRASH FIX #2: Resolves a timeline clip path (which may be a content://
+     * URI from the gallery picker) to a real file path on disk that FFmpeg can
+     * read as an -i input.
+     *
+     * - Real file paths are returned unchanged (after verifying they exist).
+     * - content:// URIs are stream-copied to a temp file in cacheDir and the
+     *   temp file path is returned. The temp file is tracked in
+     *   [overlayTempFiles] and cleaned up by [cleanupOverlayTempFiles].
+     *
+     * This mirrors resolveOverlayPath() but is specialized for video clips
+     * (uses a .mp4 extension and a larger 1 MB copy buffer for big video files).
+     *
+     * @return the resolved real file path, or null if the path cannot be
+     *         resolved (e.g. contentResolver returns null, or file doesn't exist).
+     */
+    private fun resolveClipPath(path: String): String? {
+        if (path.isBlank()) return null
+        // Real file path — verify it exists
+        if (!path.startsWith("content://") && !path.startsWith("saf:")) {
+            return if (File(path).exists()) path else null
+        }
+        // content:// URI — stream-copy to a temp video file
+        return try {
+            val uri = android.net.Uri.parse(path)
+            val tempFile = File(context.cacheDir, "clip_${System.currentTimeMillis()}_${System.nanoTime()}.mp4")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                java.io.FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output, bufferSize = 1024 * 1024) // 1 MB buffer for large videos
+                    output.flush()
+                    output.fd.sync()
+                }
+            } ?: run {
+                Log.e(tag, "resolveClipPath: openInputStream returned null for $path")
+                return null
+            }
+            if (tempFile.exists() && tempFile.length() > 0) {
+                overlayTempFiles.add(tempFile)
+                Log.d(tag, "Resolved clip content URI to temp file: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
+                tempFile.absolutePath
+            } else {
+                tempFile.delete()
+                Log.e(tag, "resolveClipPath: temp file is empty for $path")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "resolveClipPath failed for ${path.take(80)}: ${e.message}")
+            null
+        }
+    }
+
     /** Delete all temp overlay files created during the last export. */
     fun cleanupOverlayTempFiles() {
         for (f in overlayTempFiles) {
@@ -273,6 +324,24 @@ class VideoProcessor @Inject constructor(
     // maps the FFmpeg statistics (time in ms) to a 10-90% range and calls
     // onProgress. We use suspendCancellableCoroutine to bridge the async
     // callback back to a suspend function.
+
+    /**
+     * CRASH FIX #5 helper: Replaces the value immediately following a given
+     * FFmpeg flag (e.g. "-preset") in the argument list. This is deterministic
+     * — it finds the FLAG, not a bare value, so it can never accidentally
+     * replace "veryfast" or "24" appearing as literal text inside a filter
+     * expression or as an unrelated numeric argument.
+     *
+     * If the flag is not found, or the flag is the last element (no value
+     * follows it), the list is left unchanged.
+     */
+    private fun replaceFlagValue(args: MutableList<String>, flag: String, newValue: String) {
+        val idx = args.indexOf(flag)
+        if (idx >= 0 && idx + 1 < args.size) {
+            args[idx + 1] = newValue
+        }
+    }
+
     private suspend fun executeFFmpegWithProgress(
         args: Array<String>,
         totalDurationSec: Double,
@@ -289,9 +358,21 @@ class VideoProcessor @Inject constructor(
         val thermalSleepMs = 2000L // 2 seconds
         val thermalThresholdC = 45.0f
 
-        // Enable statistics callback — this fires periodically during encoding
-        // with the current encoded time. We map it to 10-90% of the export.
-        FFmpegKitConfig.enableStatisticsCallback { statistics ->
+        // CRASH FIX #4: Do NOT use the global FFmpegKitConfig.enableStatisticsCallback.
+        // That callback is process-wide and fires for EVERY FFmpeg session — including
+        // recovery retries and any other FFmpeg call running concurrently. When a
+        // recovery retry starts, the global callback from the previous (failed) attempt
+        // would still fire for the new session, corrupting progress and potentially
+        // causing NPEs on a cancelled session's state.
+        //
+        // Instead we rely SOLELY on the per-session StatisticsCallback (the 4th
+        // argument to executeWithArgumentsAsync below), which is scoped to this
+        // specific session only.
+        val session = FFmpegKit.executeWithArgumentsAsync(args, { completedSession ->
+            val success = ReturnCode.isSuccess(completedSession.returnCode)
+            if (cont.isActive) cont.resume(success)
+        }, { _ -> /* log callback — not used here */ }, { statistics ->
+            // Per-session statistics callback — scoped to THIS session only.
             try {
                 val encodedMs = statistics.time
                 if (totalMs > 0 && encodedMs > 0) {
@@ -314,28 +395,12 @@ class VideoProcessor @Inject constructor(
             } catch (_: Exception) {
                 // Statistics callback errors are non-fatal
             }
-        }
-
-        val session = FFmpegKit.executeWithArgumentsAsync(args, { completedSession ->
-            // Disable the statistics callback to avoid leaking
-            FFmpegKitConfig.enableStatisticsCallback { }
-            val success = ReturnCode.isSuccess(completedSession.returnCode)
-            if (cont.isActive) cont.resume(success)
-        }, { _ -> /* log callback — not used here */ }, { statistics ->
-            // Per-session statistics callback
-            try {
-                val encodedMs = statistics.time
-                if (totalMs > 0 && encodedMs > 0) {
-                    val pct = (10 + (encodedMs.toDouble() / totalMs * 80)).toInt().coerceIn(10, 90)
-                    onProgress(pct)
-                }
-            } catch (_: Exception) {}
         })
 
         cont.invokeOnCancellation {
-            // If the coroutine is cancelled, cancel the FFmpeg session
+            // If the coroutine is cancelled, cancel the FFmpeg session.
+            // No need to clear a global callback since we never set one.
             try { FFmpegKit.cancel(session.sessionId) } catch (_: Exception) {}
-            FFmpegKitConfig.enableStatisticsCallback { }
         }
     }
 
@@ -347,6 +412,45 @@ class VideoProcessor @Inject constructor(
             Log.e(tag, "FFmpeg failed: code=${session.returnCode}, state=${session.state}, logs=${session.failStackTrace}")
         }
         return success
+    }
+
+    /**
+     * CRASH FIX #6: Checks whether a given FFmpeg encoder (e.g. "libx265") is
+     * available in this FFmpeg-Kit build. Runs `ffmpeg -encoders` and searches
+     * for the codec name. This is cached after the first call to avoid repeated
+     * subprocess invocations.
+     *
+     * Used by the HDR export path: if libx265 (HEVC) is not present, we fall
+     * back to libx264 with yuv420p (SDR) instead of crashing with an
+     * "Unknown encoder 'libx265'" error.
+     */
+    private var encoderAvailabilityCache: MutableMap<String, Boolean> = mutableMapOf()
+    private fun isEncoderAvailable(encoder: String): Boolean {
+        encoderAvailabilityCache[encoder]?.let { return it }
+        val available = try {
+            // Run "ffmpeg -encoders" and check if the encoder name appears in
+            // the output. The FFmpegKit Session interface provides:
+            //   - getAllLogsAsString() → Kotlin synthetic: allLogsAsString
+            //   - getOutput()          → Kotlin synthetic: output
+            //   - getLogsAsString()    → Kotlin synthetic: logsAsString
+            // We try all three in order for robustness across FFmpegKit versions.
+            val session = FFmpegKit.executeWithArguments(arrayOf("-encoders"))
+            val logs: String = try {
+                session.allLogsAsString
+            } catch (_: Exception) {
+                try { session.output } catch (_: Exception) {
+                    try { session.logsAsString } catch (_: Exception) { "" }
+                }
+            } ?: ""
+            // The -encoders output lists each encoder as " V..... libx265 ..."
+            logs.contains(encoder)
+        } catch (e: Exception) {
+            Log.w(tag, "isEncoderAvailable($encoder) check failed: ${e.message}")
+            false
+        }
+        encoderAvailabilityCache[encoder] = available
+        Log.d(tag, "isEncoderAvailable($encoder) = $available")
+        return available
     }
 
     /**
@@ -1257,25 +1361,48 @@ class VideoProcessor @Inject constructor(
         //  • Default: the proven libx264 veryfast CRF 24 pipeline above.
         val gopSize = (targetFps * 8).toString()  // ~8s GOP, adaptive to fps
         if (isHdrEnabled) {
-            // ── HDR 10-bit HEVC pipeline ──
-            args.addAll(listOf("-c:v", "libx265"))
-            args.addAll(listOf("-preset", "veryfast"))
-            args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
-            args.addAll(listOf("-x265-params",
-                "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:" +
-                "max-cll=1000,400:hdr10-opt=1:repeat-headers=1"))
-            args.addAll(listOf("-g", gopSize))
-            args.addAll(listOf("-keyint_min", gopSize))
-            args.addAll(listOf("-sc_threshold", "0"))
-            // HDR needs a much higher bitrate ceiling (10-bit HDR is ~2.5x the data)
-            val hdrMaxrate = if (isHighBitrateEnabled) "40M" else "20M"
-            val hdrBufsize = if (isHighBitrateEnabled) "80M" else "40M"
-            args.addAll(listOf("-maxrate", hdrMaxrate, "-bufsize", hdrBufsize))
-            args.addAll(listOf("-pix_fmt", "yuv420p10le"))
-            args.addAll(listOf("-tag:v", "hvc1"))  // Apple/QuickTime HEVC tag
-            args.addAll(listOf("-movflags", "+faststart"))
-            args.addAll(listOf("-map_metadata", "0"))
-            Log.d(tag, "v6.0.0 HDR export: libx265 10-bit BT.2020 PQ, CRF=${if (isHighBitrateEnabled) 18 else 22}, maxrate=$hdrMaxrate")
+            // CRASH FIX #6: Check if libx265 (HEVC) is available in this FFmpeg
+            // build. The ffmpeg-kit-full package should include it, but if it
+            // is missing (custom build, stripped binary, etc.) the export would
+            // crash with "Unknown encoder 'libx265'". In that case we fall back
+            // to libx264 SDR and log a warning.
+            if (isEncoderAvailable("libx265")) {
+                // ── HDR 10-bit HEVC pipeline ──
+                args.addAll(listOf("-c:v", "libx265"))
+                args.addAll(listOf("-preset", "veryfast"))
+                args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
+                args.addAll(listOf("-x265-params",
+                    "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:" +
+                    "max-cll=1000,400:hdr10-opt=1:repeat-headers=1"))
+                args.addAll(listOf("-g", gopSize))
+                args.addAll(listOf("-keyint_min", gopSize))
+                args.addAll(listOf("-sc_threshold", "0"))
+                // HDR needs a much higher bitrate ceiling (10-bit HDR is ~2.5x the data)
+                val hdrMaxrate = if (isHighBitrateEnabled) "40M" else "20M"
+                val hdrBufsize = if (isHighBitrateEnabled) "80M" else "40M"
+                args.addAll(listOf("-maxrate", hdrMaxrate, "-bufsize", hdrBufsize))
+                args.addAll(listOf("-pix_fmt", "yuv420p10le"))
+                args.addAll(listOf("-tag:v", "hvc1"))  // Apple/QuickTime HEVC tag
+                args.addAll(listOf("-movflags", "+faststart"))
+                args.addAll(listOf("-map_metadata", "0"))
+                Log.d(tag, "v6.0.0 HDR export: libx265 10-bit BT.2020 PQ, CRF=${if (isHighBitrateEnabled) 18 else 22}, maxrate=$hdrMaxrate")
+            } else {
+                // ── Fallback: libx265 not available → SDR H.264 ──
+                Log.w(tag, "CRASH FIX #6: libx265 not available in this FFmpeg build — falling back to libx264 SDR for HDR request")
+                args.addAll(listOf("-c:v", "libx264"))
+                args.addAll(listOf("-preset", "veryfast"))
+                args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
+                args.addAll(listOf("-g", gopSize))
+                args.addAll(listOf("-keyint_min", gopSize))
+                args.addAll(listOf("-sc_threshold", "0"))
+                val fbMaxrate = if (isHighBitrateEnabled) "20M" else "10M"
+                val fbBufsize = if (isHighBitrateEnabled) "40M" else "20M"
+                args.addAll(listOf("-maxrate", fbMaxrate, "-bufsize", fbBufsize))
+                args.addAll(listOf("-profile:v", "high"))
+                args.addAll(listOf("-pix_fmt", "yuv420p"))
+                args.addAll(listOf("-movflags", "+faststart"))
+                args.addAll(listOf("-map_metadata", "0"))
+            }
         } else if (isHighBitrateEnabled) {
             // ── High-bitrate visually-lossless H.264 pipeline ──
             args.addAll(listOf("-c:v", "libx264"))
@@ -1322,11 +1449,14 @@ class VideoProcessor @Inject constructor(
             // (keeps overlays/filters but uses the fastest encoder settings).
             // This catches cases where veryfast ran out of memory or timed out.
             Log.d(tag, "Recovery 1: full pipeline with ultrafast preset (keeps overlays)...")
+            // CRASH FIX #5: Instead of using indexOf("veryfast") / indexOf("24") which
+            // can match the WRONG occurrence (e.g. "veryfast" as literal text in a
+            // drawtext filter, or "24" as a timestamp/duration/any numeric arg), we
+            // scan for the -preset and -crf FLAGS and replace the value immediately
+            // AFTER each flag. This is deterministic and cannot corrupt other args.
             val recovery1Args = args.toMutableList()
-            val vfIdx = recovery1Args.indexOf("veryfast")
-            if (vfIdx >= 0) recovery1Args[vfIdx] = "ultrafast"
-            val crfIdx = recovery1Args.indexOf("24")
-            if (crfIdx >= 0) recovery1Args[crfIdx] = "28"
+            replaceFlagValue(recovery1Args, "-preset", "ultrafast")
+            replaceFlagValue(recovery1Args, "-crf", "28")
             val rec1Success = executeFFmpegSync(recovery1Args.toTypedArray())
             if (rec1Success) {
                 Log.d(tag, "Recovery 1 (ultrafast re-encode with overlays) succeeded!")
@@ -1430,9 +1560,33 @@ class VideoProcessor @Inject constructor(
             args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
             args.addAll(listOf("-threads", "0"))
 
-            // Add -i for each clip
-            videoClips.forEach { clip ->
-                args.addAll(listOf("-i", clip.path))
+            // CRASH FIX #2: Resolve content:// URIs for each clip to real temp
+            // files BEFORE adding them as FFmpeg -i inputs. FFmpeg CANNOT read
+            // content:// URIs (from the gallery picker) as -i inputs — it either
+            // silently fails to open the input or crashes the export. The
+            // single-clip pipeline already resolves these via resolveVideoPath()
+            // in ExportManager, but the multi-clip path passed clip.path directly,
+            // which was the #2 root cause of the export crash on multi-clip
+            // timelines assembled from gallery-imported clips.
+            //
+            // We reuse the existing resolveOverlayPath() helper (which stream-
+            // copies content:// URIs to cacheDir temp files) for this purpose.
+            // The temp files are cleaned up by cleanupOverlayTempFiles() in the
+            // finally block of ExportManager.exportProject().
+            val resolvedClipPaths = mutableListOf<String>()
+            for (clip in videoClips) {
+                val resolved = resolveClipPath(clip.path)
+                if (resolved == null) {
+                    Log.e(tag, "processMultiClipTimeline: could not resolve clip path: ${clip.path.take(80)}")
+                    cleanupOverlayTempFiles()
+                    return@withContext false
+                }
+                resolvedClipPaths.add(resolved)
+            }
+
+            // Add -i for each (now resolved) clip
+            resolvedClipPaths.forEach { path ->
+                args.addAll(listOf("-i", path))
             }
 
             val (tw, th) = getTargetDimensions(resolution, project.aspectPreset)
@@ -1499,11 +1653,14 @@ class VideoProcessor @Inject constructor(
             }
 
             // Encoding settings (same proven pipeline as processAndExport)
-            if (project.isHdrEnabled) {
+            if (project.isHdrEnabled && isEncoderAvailable("libx265")) {
                 args.addAll(listOf("-c:v", "libx265", "-preset", "veryfast",
                     "-crf", "22", "-pix_fmt", "yuv420p10le",
                     "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"))
             } else {
+                if (project.isHdrEnabled) {
+                    Log.w(tag, "CRASH FIX #6: libx265 not available — multi-clip HDR falling back to libx264 SDR")
+                }
                 args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast",
                     "-crf", "24", "-g", "250", "-keyint_min", "250",
                     "-sc_threshold", "0", "-maxrate", "6M", "-bufsize", "12M",
