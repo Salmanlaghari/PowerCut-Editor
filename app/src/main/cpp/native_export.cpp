@@ -699,6 +699,25 @@ Java_com_powercut_editor_export_ExportEngine_nativeRunning(
 }
 
 // ---------------------------------------------------------------------------
+// JNI: Tell Kotlin whether the FULL export engine is compiled in.
+// In the stub build (no POWERCUT_FULL_EXPORT_ENGINE) this returns JNI_FALSE so
+// that ExportEngine.isAvailable() returns false and the entire native path
+// (build_dag_from_project + nativeStart) is SKIPPED.  This avoids wasteful and
+// risky JNI field reads on every export and lets the robust FFmpeg fallback
+// handle the export directly.
+// ---------------------------------------------------------------------------
+JNIEXPORT jboolean JNICALL
+Java_com_powercut_editor_export_ExportEngine_nativeIsFullEngine(
+    JNIEnv* env, jobject thiz) {
+    (void)env; (void)thiz;
+#ifdef POWERCUT_FULL_EXPORT_ENGINE
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif
+}
+
+// ---------------------------------------------------------------------------
 // JNI: Get a single rendered preview frame from the native compositor.
 // Builds a DAG from the project, evaluates at the given time, calls
 // compositor->render_full() with ALL layers, and returns RGBA bytes.

@@ -71,10 +71,26 @@ class ExportEngine {
 
     /**
      * CRASH FIX #3: Returns true only if the native export engine is actually
-     * available (library loaded + handle created). ExportManager checks this
-     * before attempting the native path to avoid dead-end JNI calls.
+     * available (library loaded + full engine compiled in). ExportManager
+     * checks this before attempting the native path to avoid dead-end JNI
+     * calls.
+     *
+     * In the stub build (the default), `nativeIsFullEngine()` returns false,
+     * so this method returns false and ExportManager skips straight to the
+     * robust FFmpeg fallback — no wasted JNI overhead and no risky
+     * `build_dag_from_project()` field reads on every export.
      */
-    fun isAvailable(): Boolean = nativeLibLoaded
+    fun isAvailable(): Boolean {
+        if (!nativeLibLoaded) return false
+        return try {
+            nativeIsFullEngine()
+        } catch (e: UnsatisfiedLinkError) {
+            // Older native builds may not have the symbol — treat as stub.
+            false
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     // ---- Native methods (implemented in app/src/main/cpp/native_export.cpp) ----
     external fun nativeCreate(): Long
@@ -82,6 +98,13 @@ class ExportEngine {
     external fun nativeStart(handle: Long, dag: Any, config: ExportConfig): Boolean
     external fun nativeCancel(handle: Long)
     external fun nativeRunning(handle: Long): Boolean
+
+    /**
+     * Returns true if the FULL export engine is compiled into the native lib.
+     * The stub build (no `POWERCUT_FULL_EXPORT_ENGINE`) returns false so that
+     * [isAvailable] returns false and the FFmpeg fallback path is used.
+     */
+    external fun nativeIsFullEngine(): Boolean
 
     /**
      * Get a single rendered preview frame from the native compositor.
