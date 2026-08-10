@@ -27,6 +27,22 @@
          jobs at compileSdk 34. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- ============================================================ -->
+    <!-- CRASH FIX: FOREGROUND_SERVICE_MEDIA_PROCESSING permission     -->
+    <!-- -------------------------------------------------------------- -->
+    <!-- The ExportForegroundService declares BOTH dataSync AND         -->
+    <!-- mediaProcessing as its foregroundServiceType. Android 14+      -->
+    <!-- (API 34) REQUIRES a matching typed permission for EVERY type   -->
+    <!-- declared in the service's foregroundServiceType attribute.     -->
+    <!--                                                                -->
+    <!-- Without this permission, startForeground() with                -->
+    <!-- FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING throws                -->
+    <!--   ForegroundServiceStartNotAllowedException                   -->
+    <!-- and the app CRASHES the instant the user taps "Export".        -->
+    <!-- This was the #1 root cause of the export crash.                -->
+    <!-- ============================================================ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+
     <!-- Keeps the CPU running while the screen is off so FFmpeg does not
          stall. Acquired for the whole duration of the export. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
