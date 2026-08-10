@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.powercut.ui.components.EditorPreviewFrameProvider
 import java.util.UUID
 
 /** Editor + export shared state. Holds the project, selection, export config. */

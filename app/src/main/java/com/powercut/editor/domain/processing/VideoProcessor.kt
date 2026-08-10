@@ -249,6 +249,57 @@ class VideoProcessor @Inject constructor(
         }
     }
 
+    /**
+     * CRASH FIX #2: Resolves a timeline clip path (which may be a content://
+     * URI from the gallery picker) to a real file path on disk that FFmpeg can
+     * read as an -i input.
+     *
+     * - Real file paths are returned unchanged (after verifying they exist).
+     * - content:// URIs are stream-copied to a temp file in cacheDir and the
+     *   temp file path is returned. The temp file is tracked in
+     *   [overlayTempFiles] and cleaned up by [cleanupOverlayTempFiles].
+     *
+     * This mirrors resolveOverlayPath() but is specialized for video clips
+     * (uses a .mp4 extension and a larger 1 MB copy buffer for big video files).
+     *
+     * @return the resolved real file path, or null if the path cannot be
+     *         resolved (e.g. contentResolver returns null, or file doesn't exist).
+     */
+    private fun resolveClipPath(path: String): String? {
+        if (path.isBlank()) return null
+        // Real file path — verify it exists
+        if (!path.startsWith("content://") && !path.startsWith("saf:")) {
+            return if (File(path).exists()) path else null
+        }
+        // content:// URI — stream-copy to a temp video file
+        return try {
+            val uri = android.net.Uri.parse(path)
+            val tempFile = File(context.cacheDir, "clip_${System.currentTimeMillis()}_${System.nanoTime()}.mp4")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                java.io.FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output, bufferSize = 1024 * 1024) // 1 MB buffer for large videos
+                    output.flush()
+                    output.fd.sync()
+                }
+            } ?: run {
+                Log.e(tag, "resolveClipPath: openInputStream returned null for $path")
+                return null
+            }
+            if (tempFile.exists() && tempFile.length() > 0) {
+                overlayTempFiles.add(tempFile)
+                Log.d(tag, "Resolved clip content URI to temp file: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
+                tempFile.absolutePath
+            } else {
+                tempFile.delete()
+                Log.e(tag, "resolveClipPath: temp file is empty for $path")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "resolveClipPath failed for ${path.take(80)}: ${e.message}")
+            null
+        }
+    }
+
     /** Delete all temp overlay files created during the last export. */
     fun cleanupOverlayTempFiles() {
         for (f in overlayTempFiles) {
@@ -273,6 +324,24 @@ class VideoProcessor @Inject constructor(
     // maps the FFmpeg statistics (time in ms) to a 10-90% range and calls
     // onProgress. We use suspendCancellableCoroutine to bridge the async
     // callback back to a suspend function.
+
+    /**
+     * CRASH FIX #5 helper: Replaces the value immediately following a given
+     * FFmpeg flag (e.g. "-preset") in the argument list. This is deterministic
+     * — it finds the FLAG, not a bare value, so it can never accidentally
+     * replace "veryfast" or "24" appearing as literal text inside a filter
+     * expression or as an unrelated numeric argument.
+     *
+     * If the flag is not found, or the flag is the last element (no value
+     * follows it), the list is left unchanged.
+     */
+    private fun replaceFlagValue(args: MutableList<String>, flag: String, newValue: String) {
+        val idx = args.indexOf(flag)
+        if (idx >= 0 && idx + 1 < args.size) {
+            args[idx + 1] = newValue
+        }
+    }
+
     private suspend fun executeFFmpegWithProgress(
         args: Array<String>,
         totalDurationSec: Double,
@@ -289,9 +358,21 @@ class VideoProcessor @Inject constructor(
         val thermalSleepMs = 2000L // 2 seconds
         val thermalThresholdC = 45.0f
 
-        // Enable statistics callback — this fires periodically during encoding
-        // with the current encoded time. We map it to 10-90% of the export.
-        FFmpegKitConfig.enableStatisticsCallback { statistics ->
+        // CRASH FIX #4: Do NOT use the global FFmpegKitConfig.enableStatisticsCallback.
+        // That callback is process-wide and fires for EVERY FFmpeg session — including
+        // recovery retries and any other FFmpeg call running concurrently. When a
+        // recovery retry starts, the global callback from the previous (failed) attempt
+        // would still fire for the new session, corrupting progress and potentially
+        // causing NPEs on a cancelled session's state.
+        //
+        // Instead we rely SOLELY on the per-session StatisticsCallback (the 4th
+        // argument to executeWithArgumentsAsync below), which is scoped to this
+        // specific session only.
+        val session = FFmpegKit.executeWithArgumentsAsync(args, { completedSession ->
+            val success = ReturnCode.isSuccess(completedSession.returnCode)
+            if (cont.isActive) cont.resume(success)
+        }, { _ -> /* log callback — not used here */ }, { statistics ->
+            // Per-session statistics callback — scoped to THIS session only.
             try {
                 val encodedMs = statistics.time
                 if (totalMs > 0 && encodedMs > 0) {
@@ -314,28 +395,12 @@ class VideoProcessor @Inject constructor(
             } catch (_: Exception) {
                 // Statistics callback errors are non-fatal
             }
-        }
-
-        val session = FFmpegKit.executeWithArgumentsAsync(args, { completedSession ->
-            // Disable the statistics callback to avoid leaking
-            FFmpegKitConfig.enableStatisticsCallback { }
-            val success = ReturnCode.isSuccess(completedSession.returnCode)
-            if (cont.isActive) cont.resume(success)
-        }, { _ -> /* log callback — not used here */ }, { statistics ->
-            // Per-session statistics callback
-            try {
-                val encodedMs = statistics.time
-                if (totalMs > 0 && encodedMs > 0) {
-                    val pct = (10 + (encodedMs.toDouble() / totalMs * 80)).toInt().coerceIn(10, 90)
-                    onProgress(pct)
-                }
-            } catch (_: Exception) {}
         })
 
         cont.invokeOnCancellation {
-            // If the coroutine is cancelled, cancel the FFmpeg session
+            // If the coroutine is cancelled, cancel the FFmpeg session.
+            // No need to clear a global callback since we never set one.
             try { FFmpegKit.cancel(session.sessionId) } catch (_: Exception) {}
-            FFmpegKitConfig.enableStatisticsCallback { }
         }
     }
 
@@ -347,6 +412,45 @@ class VideoProcessor @Inject constructor(
             Log.e(tag, "FFmpeg failed: code=${session.returnCode}, state=${session.state}, logs=${session.failStackTrace}")
         }
         return success
+    }
+
+    /**
+     * CRASH FIX #6: Checks whether a given FFmpeg encoder (e.g. "libx265") is
+     * available in this FFmpeg-Kit build. Runs `ffmpeg -encoders` and searches
+     * for the codec name. This is cached after the first call to avoid repeated
+     * subprocess invocations.
+     *
+     * Used by the HDR export path: if libx265 (HEVC) is not present, we fall
+     * back to libx264 with yuv420p (SDR) instead of crashing with an
+     * "Unknown encoder 'libx265'" error.
+     */
+    private var encoderAvailabilityCache: MutableMap<String, Boolean> = mutableMapOf()
+    private fun isEncoderAvailable(encoder: String): Boolean {
+        encoderAvailabilityCache[encoder]?.let { return it }
+        val available = try {
+            // Run "ffmpeg -encoders" and check if the encoder name appears in
+            // the output. The FFmpegKit Session interface provides:
+            //   - getAllLogsAsString() → Kotlin synthetic: allLogsAsString
+            //   - getOutput()          → Kotlin synthetic: output
+            //   - getLogsAsString()    → Kotlin synthetic: logsAsString
+            // We try all three in order for robustness across FFmpegKit versions.
+            val session = FFmpegKit.executeWithArguments(arrayOf("-encoders"))
+            val logs: String = try {
+                session.allLogsAsString
+            } catch (_: Exception) {
+                try { session.output } catch (_: Exception) {
+                    try { session.logsAsString } catch (_: Exception) { "" }
+                }
+            } ?: ""
+            // The -encoders output lists each encoder as " V..... libx265 ..."
+            logs.contains(encoder)
+        } catch (e: Exception) {
+            Log.w(tag, "isEncoderAvailable($encoder) check failed: ${e.message}")
+            false
+        }
+        encoderAvailabilityCache[encoder] = available
+        Log.d(tag, "isEncoderAvailable($encoder) = $available")
+        return available
     }
 
     /**
@@ -1257,25 +1361,48 @@ class VideoProcessor @Inject constructor(
         //  • Default: the proven libx264 veryfast CRF 24 pipeline above.
         val gopSize = (targetFps * 8).toString()  // ~8s GOP, adaptive to fps
         if (isHdrEnabled) {
-            // ── HDR 10-bit HEVC pipeline ──
-            args.addAll(listOf("-c:v", "libx265"))
-            args.addAll(listOf("-preset", "veryfast"))
-            args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
-            args.addAll(listOf("-x265-params",
-                "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:" +
-                "max-cll=1000,400:hdr10-opt=1:repeat-headers=1"))
-            args.addAll(listOf("-g", gopSize))
-            args.addAll(listOf("-keyint_min", gopSize))
-            args.addAll(listOf("-sc_threshold", "0"))
-            // HDR needs a much higher bitrate ceiling (10-bit HDR is ~2.5x the data)
-            val hdrMaxrate = if (isHighBitrateEnabled) "40M" else "20M"
-            val hdrBufsize = if (isHighBitrateEnabled) "80M" else "40M"
-            args.addAll(listOf("-maxrate", hdrMaxrate, "-bufsize", hdrBufsize))
-            args.addAll(listOf("-pix_fmt", "yuv420p10le"))
-            args.addAll(listOf("-tag:v", "hvc1"))  // Apple/QuickTime HEVC tag
-            args.addAll(listOf("-movflags", "+faststart"))
-            args.addAll(listOf("-map_metadata", "0"))
-            Log.d(tag, "v6.0.0 HDR export: libx265 10-bit BT.2020 PQ, CRF=${if (isHighBitrateEnabled) 18 else 22}, maxrate=$hdrMaxrate")
+            // CRASH FIX #6: Check if libx265 (HEVC) is available in this FFmpeg
+            // build. The ffmpeg-kit-full package should include it, but if it
+            // is missing (custom build, stripped binary, etc.) the export would
+            // crash with "Unknown encoder 'libx265'". In that case we fall back
+            // to libx264 SDR and log a warning.
+            if (isEncoderAvailable("libx265")) {
+                // ── HDR 10-bit HEVC pipeline ──
+                args.addAll(listOf("-c:v", "libx265"))
+                args.addAll(listOf("-preset", "veryfast"))
+                args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
+                args.addAll(listOf("-x265-params",
+                    "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:" +
+                    "max-cll=1000,400:hdr10-opt=1:repeat-headers=1"))
+                args.addAll(listOf("-g", gopSize))
+                args.addAll(listOf("-keyint_min", gopSize))
+                args.addAll(listOf("-sc_threshold", "0"))
+                // HDR needs a much higher bitrate ceiling (10-bit HDR is ~2.5x the data)
+                val hdrMaxrate = if (isHighBitrateEnabled) "40M" else "20M"
+                val hdrBufsize = if (isHighBitrateEnabled) "80M" else "40M"
+                args.addAll(listOf("-maxrate", hdrMaxrate, "-bufsize", hdrBufsize))
+                args.addAll(listOf("-pix_fmt", "yuv420p10le"))
+                args.addAll(listOf("-tag:v", "hvc1"))  // Apple/QuickTime HEVC tag
+                args.addAll(listOf("-movflags", "+faststart"))
+                args.addAll(listOf("-map_metadata", "0"))
+                Log.d(tag, "v6.0.0 HDR export: libx265 10-bit BT.2020 PQ, CRF=${if (isHighBitrateEnabled) 18 else 22}, maxrate=$hdrMaxrate")
+            } else {
+                // ── Fallback: libx265 not available → SDR H.264 ──
+                Log.w(tag, "CRASH FIX #6: libx265 not available in this FFmpeg build — falling back to libx264 SDR for HDR request")
+                args.addAll(listOf("-c:v", "libx264"))
+                args.addAll(listOf("-preset", "veryfast"))
+                args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
+                args.addAll(listOf("-g", gopSize))
+                args.addAll(listOf("-keyint_min", gopSize))
+                args.addAll(listOf("-sc_threshold", "0"))
+                val fbMaxrate = if (isHighBitrateEnabled) "20M" else "10M"
+                val fbBufsize = if (isHighBitrateEnabled) "40M" else "20M"
+                args.addAll(listOf("-maxrate", fbMaxrate, "-bufsize", fbBufsize))
+                args.addAll(listOf("-profile:v", "high"))
+                args.addAll(listOf("-pix_fmt", "yuv420p"))
+                args.addAll(listOf("-movflags", "+faststart"))
+                args.addAll(listOf("-map_metadata", "0"))
+            }
         } else if (isHighBitrateEnabled) {
             // ── High-bitrate visually-lossless H.264 pipeline ──
             args.addAll(listOf("-c:v", "libx264"))
@@ -1322,11 +1449,14 @@ class VideoProcessor @Inject constructor(
             // (keeps overlays/filters but uses the fastest encoder settings).
             // This catches cases where veryfast ran out of memory or timed out.
             Log.d(tag, "Recovery 1: full pipeline with ultrafast preset (keeps overlays)...")
+            // CRASH FIX #5: Instead of using indexOf("veryfast") / indexOf("24") which
+            // can match the WRONG occurrence (e.g. "veryfast" as literal text in a
+            // drawtext filter, or "24" as a timestamp/duration/any numeric arg), we
+            // scan for the -preset and -crf FLAGS and replace the value immediately
+            // AFTER each flag. This is deterministic and cannot corrupt other args.
             val recovery1Args = args.toMutableList()
-            val vfIdx = recovery1Args.indexOf("veryfast")
-            if (vfIdx >= 0) recovery1Args[vfIdx] = "ultrafast"
-            val crfIdx = recovery1Args.indexOf("24")
-            if (crfIdx >= 0) recovery1Args[crfIdx] = "28"
+            replaceFlagValue(recovery1Args, "-preset", "ultrafast")
+            replaceFlagValue(recovery1Args, "-crf", "28")
             val rec1Success = executeFFmpegSync(recovery1Args.toTypedArray())
             if (rec1Success) {
                 Log.d(tag, "Recovery 1 (ultrafast re-encode with overlays) succeeded!")
@@ -1430,9 +1560,33 @@ class VideoProcessor @Inject constructor(
             args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
             args.addAll(listOf("-threads", "0"))
 
-            // Add -i for each clip
-            videoClips.forEach { clip ->
-                args.addAll(listOf("-i", clip.path))
+            // CRASH FIX #2: Resolve content:// URIs for each clip to real temp
+            // files BEFORE adding them as FFmpeg -i inputs. FFmpeg CANNOT read
+            // content:// URIs (from the gallery picker) as -i inputs — it either
+            // silently fails to open the input or crashes the export. The
+            // single-clip pipeline already resolves these via resolveVideoPath()
+            // in ExportManager, but the multi-clip path passed clip.path directly,
+            // which was the #2 root cause of the export crash on multi-clip
+            // timelines assembled from gallery-imported clips.
+            //
+            // We reuse the existing resolveOverlayPath() helper (which stream-
+            // copies content:// URIs to cacheDir temp files) for this purpose.
+            // The temp files are cleaned up by cleanupOverlayTempFiles() in the
+            // finally block of ExportManager.exportProject().
+            val resolvedClipPaths = mutableListOf<String>()
+            for (clip in videoClips) {
+                val resolved = resolveClipPath(clip.path)
+                if (resolved == null) {
+                    Log.e(tag, "processMultiClipTimeline: could not resolve clip path: ${clip.path.take(80)}")
+                    cleanupOverlayTempFiles()
+                    return@withContext false
+                }
+                resolvedClipPaths.add(resolved)
+            }
+
+            // Add -i for each (now resolved) clip
+            resolvedClipPaths.forEach { path ->
+                args.addAll(listOf("-i", path))
             }
 
             val (tw, th) = getTargetDimensions(resolution, project.aspectPreset)
@@ -1499,11 +1653,14 @@ class VideoProcessor @Inject constructor(
             }
 
             // Encoding settings (same proven pipeline as processAndExport)
-            if (project.isHdrEnabled) {
+            if (project.isHdrEnabled && isEncoderAvailable("libx265")) {
                 args.addAll(listOf("-c:v", "libx265", "-preset", "veryfast",
                     "-crf", "22", "-pix_fmt", "yuv420p10le",
                     "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"))
             } else {
+                if (project.isHdrEnabled) {
+                    Log.w(tag, "CRASH FIX #6: libx265 not available — multi-clip HDR falling back to libx264 SDR")
+                }
                 args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast",
                     "-crf", "24", "-g", "250", "-keyint_min", "250",
                     "-sc_threshold", "0", "-maxrate", "6M", "-bufsize", "12M",
@@ -1549,8 +1706,8 @@ class VideoProcessor @Inject constructor(
             "sepia" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"
             "grayscale", "mono", "black_white" -> "format=gray,lut=a=val"
             "invert", "negative" -> "negate"
-            "warm" -> "eq=temp=1.1:saturation=1.1,colorbalance=rs=0.08:gs=0.02:rm=0.05"
-            "cool" -> "eq=temp=0.9:saturation=1.05,colorbalance=bs=0.1:gm=-0.03:bm=0.05"
+            "warm" -> "eq=saturation=1.1,colorbalance=rs=0.08:gs=0.02:rm=0.05"
+            "cool" -> "eq=saturation=1.05,colorbalance=bs=0.1:gm=-0.03:bm=0.05"
             "vintage" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.8:contrast=1.1:gamma=1.1,vignette=angle=PI/4"
             "dramatic" -> "eq=contrast=1.4:saturation=1.3:gamma=0.9,curves=preset=strong_contrast"
             "vivid" -> "eq=saturation=1.6:contrast=1.2"
@@ -1561,7 +1718,7 @@ class VideoProcessor @Inject constructor(
             "fade" -> "eq=saturation=0.6:contrast=0.9:brightness=0.05,colorbalance=rs=0.04:gs=0.02:bs=0.06"
             "cyberpunk" -> "colorbalance=rs=0.2:bs=0.25:rm=0.1:bm=0.15,eq=saturation=1.8:contrast=1.3,hue=h=-20"
             "sunset" -> "colorbalance=rs=0.15:rm=0.1:gs=-0.03,eq=saturation=1.4:contrast=1.1:gamma=1.05"
-            "arctic" -> "eq=temp=0.75:saturation=0.9:contrast=1.1,colorbalance=bs=0.12:bm=0.08"
+            "arctic" -> "eq=saturation=0.9:contrast=1.1,colorbalance=bs=0.12:bm=0.08"
             "forest" -> "eq=saturation=1.2:contrast=1.1,colorbalance=gs=0.1:gm=0.06:bs=-0.03"
             "rose" -> "colorbalance=rs=0.1:rm=0.08:gs=-0.02:bs=0.04,eq=saturation=1.3:brightness=0.03"
             "golden" -> "colorbalance=rs=0.12:rm=0.1:gs=0.03,eq=saturation=1.35:contrast=1.1:gamma=1.05,vignette=angle=PI/4"
@@ -1598,8 +1755,8 @@ class VideoProcessor @Inject constructor(
             "haze" -> "eq=contrast=0.85:saturation=0.8:brightness=0.12,boxblur=luma_radius=3:luma_power=1"
             "matte" -> "eq=saturation=0.85:contrast=0.9:brightness=0.05,curves=preset=lighter"
             "litho" -> "format=gray,eq=contrast=1.6:gamma=0.8,curves=preset=strong_contrast"
-            "sepia_warm" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=temp=1.15:saturation=1.1"
-            "sepia_cool" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=temp=0.85:saturation=0.9"
+            "sepia_warm" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=1.1"
+            "sepia_cool" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.9"
             "red_boost" -> "colorbalance=rs=0.2:rm=0.15,eq=saturation=1.2:contrast=1.1"
             "blue_boost" -> "colorbalance=bs=0.2:bm=0.15,eq=saturation=1.2:contrast=1.1"
             "green_boost" -> "colorbalance=gs=0.2:gm=0.15,eq=saturation=1.2:contrast=1.1"
@@ -1622,7 +1779,7 @@ class VideoProcessor @Inject constructor(
             "desert" -> "colorbalance=rs=0.15:rm=0.1:gs=0.04,eq=saturation=1.2:contrast=1.1:gamma=1.05"
             "ocean" -> "colorbalance=bs=0.15:bm=0.1:gs=0.05,eq=saturation=1.2:contrast=1.05"
             "autumn" -> "colorbalance=rs=0.15:rm=0.12:gs=0.05,eq=saturation=1.3:contrast=1.1"
-            "winter" -> "eq=temp=0.8:saturation=0.85:contrast=1.1,colorbalance=bs=0.1:bm=0.05"
+            "winter" -> "eq=saturation=0.85:contrast=1.1,colorbalance=bs=0.1:bm=0.05"
             "spring" -> "colorbalance=gs=0.08:bs=0.05:rs=0.03,eq=saturation=1.2:brightness=0.05"
             "summer" -> "eq=saturation=1.3:contrast=1.1:brightness=0.05,colorbalance=rs=0.05:bs=0.03"
             else -> ""
@@ -1707,9 +1864,109 @@ class VideoProcessor @Inject constructor(
     // ════════════════════════════════════════════════════════════════════
     //  SUPER EFFECTS — 70+
     // ════════════════════════════════════════════════════════════════════
+    // v6.4.0: Exact-match map for ALL 72 effect IDs from EffectCatalog.
+    // Each value is the exact FFmpeg -vf filter chain from the catalog's
+    // ffmpegChain field, ensuring every user-selectable effect produces a
+    // real, visible change in the exported video (fixes the "export looks
+    // identical to import" bug where 49/72 effects were silently dropped).
+    private val exactEffectChains: Map<String, String> = mapOf(
+        "vivid" to "eq=saturation=1.5:contrast=1.1",
+        "cinematic" to "curves=preset=strong_contrast,eq=saturation=0.9",
+        "tealorange" to "colorbalance=rs=0.12:gs=-0.05:bs=0.05:rm=0.1:bm=0.08,eq=saturation=1.3:contrast=1.15",
+        "noir" to "hue=s=0,eq=contrast=1.3:brightness=-0.05",
+        "vintage" to "curves=preset=lighter,eq=saturation=0.7:brightness=0.05",
+        "fade" to "eq=saturation=0.6:contrast=0.9:brightness=0.08",
+        "warm" to "colorbalance=rs=0.08:rm=0.05,eq=saturation=1.1",
+        "cool" to "colorbalance=bs=0.1:bm=0.05,eq=saturation=1.05",
+        "punchy" to "eq=contrast=1.25:saturation=1.4",
+        "muted" to "eq=saturation=0.55:contrast=0.95",
+        "lomo" to "vignette=PI/5,eq=saturation=1.6",
+        "pastel" to "eq=saturation=0.7:brightness=0.06:contrast=0.9",
+        "mono" to "hue=s=0",
+        "sepia" to "colorchannelmixer=.393:.769:.189:.349:.686:.168:.272:.534:.131",
+        "invert" to "negate",
+        "polaroid" to "eq=saturation=0.8:brightness=0.1,curves=preset=lighter",
+        "kodak" to "eq=saturation=1.2:contrast=1.1:brightness=0.02",
+        "glow" to "gblur=sigma=2,tblend=all_mode=screen",
+        "bloom" to "gblur=sigma=4,tblend=all_mode=screen:all_opacity=0.5",
+        "dreamy" to "gblur=sigma=3,eq=brightness=0.08:saturation=1.2",
+        "softfocus" to "gblur=sigma=1.2",
+        "sharpen" to "unsharp=5:5:1.0:5:5:0.0",
+        "highkey" to "eq=brightness=0.12:contrast=0.85:saturation=1.1",
+        "lowkey" to "eq=brightness=-0.1:contrast=1.2:saturation=0.9",
+        "vignette" to "vignette=PI/4",
+        "lensflare" to "eq=brightness=0.08:contrast=1.1,vignette=angle=PI/4",
+        "blur" to "boxblur=10:1",
+        "motionblur" to "tmix=frames=4:weights=1",
+        "tiltshift" to "gblur=sigma=8:steps=2,eq=saturation=1.3",
+        "radialblur" to "boxblur=20:2",
+        "rgbshift" to "chromashift=cbh=-4:crv=4",
+        "pixelate" to "scale=iw/12:ih/12:flags=area,scale=iw:ih:flags=neighbor",
+        "glitch" to "scale=iw/4:ih/4:flags=area,scale=iw:ih:flags=neighbor,noise=alls=20:allf=t",
+        "datamosh" to "noise=alls=40:allf=t+u",
+        "shake" to "noise=alls=10:allf=t+u,crop=iw-4:ih-4:2:2",
+        "scanlines" to "drawgrid=w=iw:h=2:t=1:c=black@0.3",
+        "vhs" to "noise=alls=15:allf=t,eq=saturation=1.3:contrast=1.1",
+        "crt" to "drawgrid=w=iw:h=3:t=2:c=black@0.4,eq=contrast=1.1",
+        "distort" to "lenscorrection=cx=0.05:cy=0.05",
+        "kaleido" to "lenscorrection=k1=0.4:k2=0.4,eq=saturation=1.3",
+        "cartoon" to "eq=saturation=1.8:contrast=1.4,unsharp=3:3:1:3:3:0,noise=alls=2:allf=t",
+        "sketch" to "edgedetect=low=0.1:high=0.4,hue=s=0",
+        "oilpaint" to "oilpaint=radius=8",
+        "watercolor" to "boxblur=6:2,eq=saturation=1.3:brightness=0.05",
+        "emboss" to "convolution=-1 -1 0 -1 4 0 0 0 0",
+        "edge" to "edgedetect=low=0.2:high=0.5",
+        "neon" to "edgedetect=low=0.1:high=0.3,eq=saturation=2.0:contrast=1.5",
+        "duotone" to "hue=s=1.5,eq=saturation=1.8",
+        "posterize" to "lutrgb=r=32:g=32:b=32",
+        "thermal" to "eq=saturation=2.5:contrast=1.5,colorbalance=rs=0.3:bs=0.2:rm=0.15:bm=0.1",
+        "xray" to "negate,hue=s=0,eq=contrast=1.3",
+        "lightleak" to "eq=brightness=0.1:saturation=1.2,tblend=all_mode=screen",
+        "filmgrain" to "noise=alls=12:allf=t",
+        "dust" to "noise=alls=5:allf=t+u,eq=contrast=0.95:brightness=0.03",
+        "scratch" to "noise=alls=15:allf=t+u:allc=color",
+        "grunge" to "noise=alls=20:allf=t,eq=contrast=1.15:saturation=0.85",
+        "echo" to "tmix=frames=3:weights=1 0.5 0.25",
+        "trail" to "tmix=frames=5:weights=1 0.7 0.5 0.3 0.15",
+        "strobe" to "tblend=all_mode=screen",
+        "8mm" to "eq=saturation=1.4:contrast=1.1,noise=alls=18:allf=t,vignette=PI/5",
+        "16mm" to "eq=saturation=1.2:contrast=1.05,noise=alls=10:allf=t",
+        "35mm" to "eq=saturation=1.1:contrast=1.05,noise=alls=6:allf=t",
+        "polaroid2" to "eq=saturation=0.85:brightness=0.08:contrast=0.95,vignette=PI/6",
+        "hdr" to "eq=contrast=1.15:saturation=1.25:brightness=0.03",
+        "dramatic" to "curves=preset=strong_contrast,eq=contrast=1.3:saturation=1.1",
+        "clarity" to "unsharp=5:5:1.2:5:5:0.0,eq=contrast=1.1",
+        "matte" to "eq=contrast=0.9:brightness=0.04:saturation=0.95",
+        "colorpop" to "hue=s=0,eq=saturation=1.4",
+        "golden" to "colorbalance=rs=0.12:rm=0.08,eq=saturation=1.2:brightness=0.04",
+        "midnight" to "colorbalance=bs=0.1:bm=0.05,eq=saturation=1.1:contrast=1.15:brightness=-0.04",
+        "forest" to "colorbalance=gs=0.1:gm=0.06,eq=saturation=1.3",
+        "ocean" to "colorbalance=bs=0.1:bm=0.06,eq=saturation=1.2"
+    )
+
     private fun effectChain(effectName: String, duration: Double, w: Int, h: Int): List<String> {
         if (effectName == "none") return emptyList()
         val e = effectName.lowercase().replace(" ", "_").replace("-", "_")
+
+        // ── v6.4.0 FIX: Exact-match lookup for ALL EffectCatalog IDs ──
+        // Previously, effectChain() used only `e.contains(...)` pattern matching,
+        // which silently dropped 49 out of 72 effects from EffectCatalog because
+        // their IDs (e.g. "vivid", "cinematic", "noir", "sepia", "warm", "cool",
+        // "blur", "sharpen", "glow", "mono", "invert", "punchy", "muted", etc.)
+        // did not match any contains() branch. This caused the exported video to
+        // look identical to the imported video — no effect was applied.
+        //
+        // Now we first try an exact-match against a comprehensive map that covers
+        // every single effect ID in EffectCatalog (EffectsScreen.kt), using the
+        // exact FFmpeg filter chains defined in the catalog's ffmpegChain field.
+        // Only if the exact match fails do we fall through to the contains()
+        // pattern matching below (which handles dynamic/animated effects like
+        // "magic_*", "glitch_rgb", "vhs_old", "snow_heavy", etc.).
+        val exactMatch = exactEffectChains[e]
+        if (exactMatch != null) {
+            return if (exactMatch.isBlank()) emptyList() else listOf(exactMatch)
+        }
+
         return when {
             // v4.4.0: Magic / animated effects use real FFmpeg time expressions.
             e.contains("magic_") ->
@@ -1735,7 +1992,7 @@ class VideoProcessor @Inject constructor(
             e.contains("fire") || e.contains("flame") ->
                 listOf("colorbalance=rs=0.2:rm=0.15,eq=brightness=0.08:saturation=1.3")
             e.contains("frost") || e.contains("ice") ->
-                listOf("eq=temp=0.8:saturation=0.9:contrast=1.1,colorbalance=bs=0.15:bm=0.1")
+                listOf("eq=saturation=0.9:contrast=1.1,colorbalance=bs=0.15:bm=0.1")
             e.contains("sparkle") || e.contains("starburst") ->
                 listOf("eq=brightness=0.1:contrast=1.15")
             e.contains("dust") ->
@@ -2334,7 +2591,7 @@ class VideoProcessor @Inject constructor(
             "ice" -> listOf(
                 "colorbalance=bs=0.18:bm=0.12",
                 "eq=saturation=0.9:contrast=1.1:brightness=0.03",
-                "eq=temp=0.85"
+                "eq="
             )
             else -> listOf(
                 "drawbox=x=0:y=0:w=iw:h=ih*0.05:color=black@1:t=fill",
@@ -2534,32 +2791,85 @@ class VideoProcessor @Inject constructor(
         if (sticker == "none") return ""
         val s = sticker.lowercase()
 
-        // Emoji mapping: sticker type → emoji character
+        // v6.4.0 FIX: Complete emoji map covering ALL 66 StickerCatalog IDs.
+        // Previously only 17 of 66 stickers had emoji mappings, so selecting
+        // stickers like "laugh", "love", "cat", "dog", "pizza", etc. produced
+        // NO overlay in the exported video (stickerOverlay returned "").
+        // Now every sticker ID maps to its correct emoji character.
         val emojiMap = mapOf(
             "fire" to "🔥",
             "star" to "⭐",
             "heart" to "❤️",
-            "smile" to "😊",
+            "glow" to "⚡",
+            "smile" to "😀",
+            "laugh" to "😂",
+            "love" to "😍",
+            "cool" to "😎",
+            "wink" to "😉",
+            "cry" to "😭",
+            "angry" to "😡",
+            "shock" to "😱",
             "thumbsup" to "👍",
             "thumbs_up" to "👍",
-            "crown" to "👑",
-            "lightning" to "⚡",
-            "glow" to "⚡",
-            "bolt" to "⚡",
+            "thumbsdown" to "👎",
+            "ok" to "👌",
+            "peace" to "✌️",
+            "clap" to "👏",
+            "muscle" to "💪",
+            "pray" to "🙏",
+            "point" to "👉",
             "sun" to "☀️",
             "moon" to "🌙",
+            "cloud" to "☁️",
+            "rainbow" to "🌈",
+            "bolt" to "⚡",
+            "lightning" to "⚡",
+            "snow" to "❄️",
+            "sparkle" to "✨",
+            "star2" to "🌟",
+            "flower" to "🌸",
+            "rose" to "🌹",
+            "tree" to "🌳",
+            "leaf" to "🍃",
+            "wave" to "🌊",
+            "volcano" to "🌋",
+            "mountain" to "⛰️",
+            "cat" to "🐱",
+            "dog" to "🐶",
+            "panda" to "🐼",
+            "fox" to "🦊",
+            "lion" to "🦁",
+            "frog" to "🐸",
+            "unicorn" to "🦄",
+            "butterfly" to "🦋",
+            "bee" to "🐝",
+            "turtle" to "🐢",
+            "coffee" to "☕",
+            "pizza" to "🍕",
+            "burger" to "🍔",
+            "cake" to "🎂",
+            "icecream" to "🍦",
+            "donut" to "🍩",
+            "cherry" to "🍒",
+            "apple" to "🍎",
+            "avocado" to "🥑",
+            "crown" to "👑",
+            "diamond" to "💎",
+            "trophy" to "🏆",
+            "medal" to "🎖️",
+            "rocket" to "🚀",
+            "balloon" to "🎈",
+            "gift" to "🎁",
+            "party" to "🎉",
+            "confetti" to "🎊",
             "music" to "🎵",
             "camera" to "📷",
+            "film" to "🎥",
             "check" to "✅",
             "cross" to "❌",
-            "diamond" to "💎",
-            "rocket" to "🚀",
-            "sparkle" to "✨",
-            "trophy" to "🏆",
             "skull" to "💀",
             "100" to "💯",
-            "target" to "🎯",
-            "party" to "🎉"
+            "target" to "🎯"
         )
 
         val emoji = emojiMap[s] ?: return ""

@@ -860,7 +860,38 @@ class EditorViewModel @Inject constructor(
 
     fun updateBackgroundMusic(path: String?) {
         projectRepository.updateProject { project ->
-            project.copy(backgroundMusicPath = path)
+            // Also reflect the music on the timeline as an AUDIO clip so the
+            // user sees a layer on the Background Music track. If a music clip
+            // already exists, replace it; otherwise add a new one.
+            val updatedTracks = if (path.isNullOrBlank()) {
+                // Music removed — clear the AUDIO track clips
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.AUDIO) track.copy(clips = emptyList()) else track
+                }
+            } else {
+                val musicClip = TimelineClip(
+                    name = "Background Music",
+                    path = path,
+                    type = TrackType.AUDIO,
+                    startTimeMs = 0L,
+                    durationMs = project.durationMs,
+                    mediaDurationMs = project.durationMs,
+                    volume = project.backgroundMusicVolume,
+                    layerIndex = 0
+                )
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.AUDIO) {
+                        // Replace any existing clip (single BGM at a time)
+                        track.copy(clips = listOf(musicClip))
+                    } else {
+                        track
+                    }
+                }
+            }
+            project.copy(
+                backgroundMusicPath = path,
+                timeline = project.timeline.copy(tracks = updatedTracks)
+            )
         }
     }
 
@@ -876,9 +907,9 @@ class EditorViewModel @Inject constructor(
             try {
                 val path = royaltyFreeMusicGenerator.generateTrack(trackId, 30)
                 if (path != null) {
-                    projectRepository.updateProject { project ->
-                        project.copy(backgroundMusicPath = path)
-                    }
+                    // Use updateBackgroundMusic so the timeline AUDIO track
+                    // also gets a clip (not just the flat field).
+                    updateBackgroundMusic(path)
                     _musicState.value = Resource.Success(path)
                     Log.d("EditorViewModel", "Royalty-free music set: $trackId -> $path")
                 } else {
@@ -963,7 +994,34 @@ class EditorViewModel @Inject constructor(
 
     fun updateTextOverlay(text: String?) {
         projectRepository.updateProject { project ->
-            project.copy(activeTextOverlay = text)
+            // Reflect the text overlay on the timeline as a TEXT clip so the
+            // user sees a layer on the Text & Titles track.
+            val updatedTracks = if (text.isNullOrBlank()) {
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.TEXT) track.copy(clips = emptyList()) else track
+                }
+            } else {
+                val textClip = TimelineClip(
+                    name = text.take(20),
+                    path = "",
+                    type = TrackType.TEXT,
+                    startTimeMs = 0L,
+                    durationMs = project.durationMs,
+                    mediaDurationMs = project.durationMs,
+                    layerIndex = 0
+                )
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.TEXT) {
+                        track.copy(clips = listOf(textClip))
+                    } else {
+                        track
+                    }
+                }
+            }
+            project.copy(
+                activeTextOverlay = text,
+                timeline = project.timeline.copy(tracks = updatedTracks)
+            )
         }
     }
 
@@ -1037,7 +1095,34 @@ class EditorViewModel @Inject constructor(
 
     fun updateStickerType(sticker: String) {
         projectRepository.updateProject { project ->
-            project.copy(stickerType = sticker)
+            // Reflect the sticker on the timeline as a STICKER clip so the
+            // user sees a layer on the Stickers track.
+            val updatedTracks = if (sticker == "none" || sticker.isBlank()) {
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.STICKER) track.copy(clips = emptyList()) else track
+                }
+            } else {
+                val stickerClip = TimelineClip(
+                    name = sticker,
+                    path = "",
+                    type = TrackType.STICKER,
+                    startTimeMs = 0L,
+                    durationMs = project.durationMs,
+                    mediaDurationMs = project.durationMs,
+                    layerIndex = 0
+                )
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.STICKER) {
+                        track.copy(clips = listOf(stickerClip))
+                    } else {
+                        track
+                    }
+                }
+            }
+            project.copy(
+                stickerType = sticker,
+                timeline = project.timeline.copy(tracks = updatedTracks)
+            )
         }
     }
 
@@ -1074,7 +1159,38 @@ class EditorViewModel @Inject constructor(
 
     fun updateImageOverlay(path: String?) {
         projectRepository.updateProject { project ->
-            project.copy(imageOverlayPath = path)
+            // Reflect the image overlay on the timeline as an OVERLAY clip so
+            // the user sees a layer on the Overlays track.
+            val updatedTracks = if (path.isNullOrBlank()) {
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.OVERLAY) track.copy(clips = emptyList()) else track
+                }
+            } else {
+                val overlayClip = TimelineClip(
+                    name = "Image Overlay",
+                    path = path,
+                    type = TrackType.OVERLAY,
+                    startTimeMs = 0L,
+                    durationMs = project.durationMs,
+                    mediaDurationMs = project.durationMs,
+                    opacity = project.imageOverlayOpacity,
+                    scale = project.imageOverlayScale,
+                    posX = project.imageOverlayX,
+                    posY = project.imageOverlayY,
+                    layerIndex = 0
+                )
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.OVERLAY) {
+                        track.copy(clips = listOf(overlayClip))
+                    } else {
+                        track
+                    }
+                }
+            }
+            project.copy(
+                imageOverlayPath = path,
+                timeline = project.timeline.copy(tracks = updatedTracks)
+            )
         }
     }
 
@@ -1111,7 +1227,46 @@ class EditorViewModel @Inject constructor(
     fun updateSelectedEffect(effect: String) {
         pushUndoState()
         projectRepository.updateProject { project ->
-            project.copy(selectedEffect = effect)
+            // Reflect the effect on the timeline as an EFFECT clip so the user
+            // sees a layer indicating an active effect.
+            val updatedTracks = if (effect == "none" || effect.isBlank()) {
+                project.timeline.tracks.map { track ->
+                    if (track.type == TrackType.EFFECT) track.copy(clips = emptyList()) else track
+                }
+            } else {
+                val effectClip = TimelineClip(
+                    name = effect,
+                    path = "",
+                    type = TrackType.EFFECT,
+                    startTimeMs = 0L,
+                    durationMs = project.durationMs,
+                    mediaDurationMs = project.durationMs,
+                    layerIndex = 0
+                )
+                // The default timeline has 5 tracks (VIDEO, AUDIO, TEXT,
+                // STICKER, OVERLAY) but no EFFECT track. If one doesn't exist
+                // yet, append it so the effect shows on the timeline.
+                val hasEffectTrack = project.timeline.tracks.any { it.type == TrackType.EFFECT }
+                if (hasEffectTrack) {
+                    project.timeline.tracks.map { track ->
+                        if (track.type == TrackType.EFFECT) {
+                            track.copy(clips = listOf(effectClip))
+                        } else {
+                            track
+                        }
+                    }
+                } else {
+                    project.timeline.tracks + TimelineTrack(
+                        type = TrackType.EFFECT,
+                        label = "Effects",
+                        clips = listOf(effectClip)
+                    )
+                }
+            }
+            project.copy(
+                selectedEffect = effect,
+                timeline = project.timeline.copy(tracks = updatedTracks)
+            )
         }
     }
 

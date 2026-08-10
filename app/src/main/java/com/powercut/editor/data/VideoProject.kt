@@ -155,7 +155,7 @@ data class VideoProject(
         get() = imageEditorBrightness != 0f || imageEditorContrast != 1f || imageEditorSaturation != 1f ||
                 imageEditorBlur != 0f || imageEditorSharpen != 0f || imageEditorTemperature != 0f ||
                 imageEditorVignette != 0f || imageEditorGrain != 0f || imageEditorFade != 0f ||
-                imageEditorExposure != 0f
+                imageEditorExposure != 0f || imageEditorHighlights != 0f || imageEditorShadows != 0f
 
     val isVerticalMode: Boolean
         get() = orientationMode == "vertical" || aspectPreset == "9:16"

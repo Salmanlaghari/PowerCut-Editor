@@ -32,7 +32,10 @@ class ExportManager @Inject constructor(
     // FIX: Native export engine instance for DAG-based per-frame rendering.
     // Tries native engine first (evaluates ALL edits per frame via compositor->render_full),
     // falls back to VideoProcessor (FFmpeg) if native engine is unavailable.
-    private val nativeEngine = ExportEngine()
+    // CRASH FIX #3: We only instantiate the native engine lazily and check
+    // isAvailable() before calling start(), so stub builds skip the JNI path
+    // entirely (no wasted nativeCreate/global-ref, no UnsatisfiedLinkError).
+    private val nativeEngine by lazy { ExportEngine() }
 
     private val _exportState = MutableStateFlow<Resource<String>>(Resource.Idle)
     val exportState: StateFlow<Resource<String>> = _exportState.asStateFlow()
@@ -509,60 +512,73 @@ class ExportManager @Inject constructor(
             // If the native engine is not available (stub build), fall back
             // to VideoProcessor (FFmpeg) which also handles all edits.
             // ═══════════════════════════════════════════════════════════
-            val exportPreset = when (project.targetResolution) {
-                "4k" -> ExportEngine.presetYt4k()
-                "720p" -> ExportEngine.presetWhatsApp()
-                else -> ExportEngine.presetYt1080()
-            }
-            val tempOutputPath_native = File(secureDir, "powercut_native_${System.currentTimeMillis()}.mp4").absolutePath
-            val nativeConfig = ExportConfig(
-                preset = exportPreset,
-                out = tempOutputPath_native,
-                hw = true,
-                twoPass = false,
-                faststart = true,
-                removeWatermark = project.isProTier
-            )
-            nativeEngine.onProgress = { prog ->
-                if (prog.total > 0) {
-                    val pct = (prog.cur * 100 / prog.total).toInt().coerceIn(0, 100)
-                    updateProgress(pct)
+            // CRASH FIX #3: Only attempt the native export path if the native
+            // library was actually loaded. In the current stub build
+            // isAvailable() returns false, so we skip the entire native block
+            // and go straight to the proven FFmpeg pipeline — no JNI overhead,
+            // no global-ref leaks, no UnsatisfiedLinkError risk.
+            if (nativeEngine.isAvailable()) {
+                val exportPreset = when (project.targetResolution) {
+                    "4k" -> ExportEngine.presetYt4k()
+                    "720p" -> ExportEngine.presetWhatsApp()
+                    else -> ExportEngine.presetYt1080()
                 }
-            }
-            val nativeOk = nativeEngine.start(project, nativeConfig)
-            if (nativeOk) {
-                Log.d(tag, "Native export engine started — DAG-based per-frame render")
-                // Wait for native engine to complete
-                val waitStart = System.currentTimeMillis()
-                while (nativeEngine.running()) {
-                    kotlinx.coroutines.delay(200)
-                    if (System.currentTimeMillis() - waitStart > 600_000) {
-                        Log.w(tag, "Native export timeout — cancelling")
-                        nativeEngine.cancel()
-                        break
+                val tempOutputPath_native = File(secureDir, "powercut_native_${System.currentTimeMillis()}.mp4").absolutePath
+                val nativeConfig = ExportConfig(
+                    preset = exportPreset,
+                    out = tempOutputPath_native,
+                    hw = true,
+                    twoPass = false,
+                    faststart = true,
+                    // FIX: Remove watermark if user has pro tier OR watched rewarded ad.
+                    // project.watermarkPath is null when user watched ad (isNoWatermark=true).
+                    // project.isProTier is true when user has pro subscription.
+                    // Both conditions grant watermark-free export.
+                    removeWatermark = project.isProTier || project.watermarkPath == null
+                )
+                nativeEngine.onProgress = { prog ->
+                    if (prog.total > 0) {
+                        val pct = (prog.cur * 100 / prog.total).toInt().coerceIn(0, 100)
+                        updateProgress(pct)
                     }
                 }
-                val nativeOutputFile = File(tempOutputPath_native)
-                if (nativeOutputFile.exists() && nativeOutputFile.length() > 0) {
-                    Log.d(tag, "Native export succeeded: ${nativeOutputFile.length()} bytes")
-                    _progress.value = 95
-                    val galleryPath = saveToPublicGallery(context, nativeOutputFile)
-                    if (galleryPath != null) {
-                        _progress.value = 100
-                        _exportState.value = Resource.Success(galleryPath)
+                val nativeOk = nativeEngine.start(project, nativeConfig)
+                if (nativeOk) {
+                    Log.d(tag, "Native export engine started — DAG-based per-frame render")
+                    // Wait for native engine to complete
+                    val waitStart = System.currentTimeMillis()
+                    while (nativeEngine.running()) {
+                        kotlinx.coroutines.delay(200)
+                        if (System.currentTimeMillis() - waitStart > 600_000) {
+                            Log.w(tag, "Native export timeout — cancelling")
+                            nativeEngine.cancel()
+                            break
+                        }
+                    }
+                    val nativeOutputFile = File(tempOutputPath_native)
+                    if (nativeOutputFile.exists() && nativeOutputFile.length() > 0) {
+                        Log.d(tag, "Native export succeeded: ${nativeOutputFile.length()} bytes")
+                        _progress.value = 95
+                        val galleryPath = saveToPublicGallery(context, nativeOutputFile)
+                        if (galleryPath != null) {
+                            _progress.value = 100
+                            _exportState.value = Resource.Success(galleryPath)
+                        } else {
+                            _progress.value = 100
+                            _exportState.value = Resource.Success(tempOutputPath_native)
+                        }
+                        nativeEngine.destroy()
+                        return
                     } else {
-                        _progress.value = 100
-                        _exportState.value = Resource.Success(tempOutputPath_native)
+                        Log.w(tag, "Native export produced no output — falling back to FFmpeg")
                     }
-                    nativeEngine.destroy()
-                    return
                 } else {
-                    Log.w(tag, "Native export produced no output — falling back to FFmpeg")
+                    Log.d(tag, "Native engine start() returned false — using FFmpeg pipeline")
                 }
+                nativeEngine.destroy()
             } else {
                 Log.d(tag, "Native engine not available (stub build) — using FFmpeg pipeline")
             }
-            nativeEngine.destroy()
 
             // ═══════════════════════════════════════════════════════════
             // FALLBACK: FFmpeg VideoProcessor pipeline (handles all edits)
@@ -581,6 +597,15 @@ class ExportManager @Inject constructor(
             // Check if input is audio file
             val isAudioInput = videoProcessor.isAudioFile(videoPath)
 
+            // v6.4.0 FIX: Added ALL missing edit checks so that ANY user edit
+            // forces the full transcode pipeline (processAndExport) instead of
+            // falling through to instantTrim (stream copy). Previously, many
+            // edits were NOT checked here — watermark, image editor adjustments,
+            // blend mode, reverse, freeze frame, color curves, audio effects,
+            // voice changer, audio ducking, border style, vignette style,
+            // premium looks, HDR, high bitrate, AI features, social presets,
+            // target FPS != 30 — so the export silently used stream copy and
+            // produced an output identical to the input with no edits applied.
             val isInstantTrimPossible = !isAudioInput &&
                     !project.isMuted &&
                     project.selectedFilter == "none" &&
@@ -607,7 +632,24 @@ class ExportManager @Inject constructor(
                     !project.isGreenScreenActive &&
                     !project.isEraserActive &&
                     !project.isImageEditorActive &&
-                    project.orientationMode == "free"
+                    project.orientationMode == "free" &&
+                    // ── v6.4.0 NEW CHECKS (previously missing) ──
+                    !project.hasWatermark &&
+                    !project.isBlendModeActive &&
+                    !project.isReversed &&
+                    !project.hasFreezeFrame &&
+                    !project.isColorCurvesActive &&
+                    !project.isAudioEffectActive &&
+                    !project.isVoiceChanged &&
+                    !project.isAudioDuckingActive &&
+                    !project.isBorderStyleActive &&
+                    !project.isVignetteStyleActive &&
+                    !project.isPremiumLookActive &&
+                    project.targetFps == 30 &&
+                    !project.isHdrExport &&
+                    !project.isHighBitrate &&
+                    !project.isAiFeatureActive &&
+                    !project.hasSocialPreset
 
             val success = if (isInstantTrimPossible) {
                 Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")

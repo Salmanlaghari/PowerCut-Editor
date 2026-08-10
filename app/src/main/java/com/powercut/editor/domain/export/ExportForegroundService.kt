@@ -134,21 +134,36 @@ class ExportForegroundService : Service() {
 
         // Promote to foreground IMMEDIATELY (must happen within 5s on Android 12+).
         val notification = buildNotification("Preparing export…", 0)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+: declare the foreground service type for long
-            // video transcode jobs. On API 34+ use mediaProcessing plus dataSync.
-            val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        // CRASH FIX: Wrap startForeground() in a try/catch. On Android 12+,
+        // startForeground() can throw ForegroundServiceStartNotAllowedException
+        // if the app is in a restricted background state (even with the correct
+        // permissions declared). Without this catch, the service crashes and
+        // takes the app down with it. We also catch SecurityException for
+        // missing-permission cases (belt-and-suspenders with the manifest fix).
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+: declare the foreground service type for long
+                // video transcode jobs. On API 34+ use mediaProcessing plus dataSync.
+                val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                }
+                startForeground(
+                    NOTIF_ID,
+                    notification,
+                    serviceType
+                )
             } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                startForeground(NOTIF_ID, notification)
             }
-            startForeground(
-                NOTIF_ID,
-                notification,
-                serviceType
-            )
-        } else {
-            startForeground(NOTIF_ID, notification)
+        } catch (e: Exception) {
+            // ForegroundServiceStartNotAllowedException (Android 12+) or
+            // SecurityException (missing permission) — either way, we cannot
+            // run as a foreground service. Fall back to running the export
+            // in the background (no wake lock guarantee, but at least we
+            // don't crash). Log the error so it's diagnosable.
+            Log.e(tag, "startForeground() failed — running export without foreground priority: ${e.message}", e)
         }
 
         // Run the export in the service's own scope (survives Activity death).

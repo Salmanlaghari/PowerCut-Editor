@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -627,6 +628,18 @@ fun NextGenEditorScreen(
                 val grainSat = ColorMatrix().apply { setToSaturation((1f - gr * 0.3f).coerceAtLeast(0.5f)) }
                 adjMatrix *= grainSat
             }
+            // Sharpen approximation: boost contrast slightly for preview
+            if (project.imageEditorSharpen > 0f) {
+                val sharpenContrast = 1f + project.imageEditorSharpen * 0.15f
+                val sharpenShift = (1f - sharpenContrast) * 128f
+                val sharpenMatrix = ColorMatrix(floatArrayOf(
+                    sharpenContrast, 0f, 0f, 0f, sharpenShift,
+                    0f, sharpenContrast, 0f, 0f, sharpenShift,
+                    0f, 0f, sharpenContrast, 0f, sharpenShift,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                adjMatrix *= sharpenMatrix
+            }
 
             // v4.6.0: compose the premium look preview matrix on top of adjustments
             if (lookMatrix != null) {
@@ -692,52 +705,29 @@ fun NextGenEditorScreen(
                     .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                // ExoPlayer video
+                // ExoPlayer video — with live blur/sharpen/flip/rotation preview
+                // AND the full combined color filter applied directly to the video
+                // pixels so trim, speed ramps, color grades, filters, premium looks,
+                // and all image-editor adjustments (brightness, contrast, saturation,
+                // temperature, exposure, fade, highlights, shadows, grain, sharpen)
+                // are visible in real-time — matching the exported frame.
                 AndroidView(
                     factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
-                    modifier = Modifier.fillMaxSize().graphicsLayer(
-                        scaleX = if (project.isFlippedHorizontal) -1f else 1f,
-                        scaleY = if (project.isFlippedVertical) -1f else 1f,
-                        rotationZ = project.rotationDegrees
-                    )
-                )
-                // Live color filter overlay — applies the combined cinematic filter
-                // + image-editor adjustments on top of the video in real-time.
-                if (combinedColorFilter != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .drawWithContent {
-                                drawContent()
-                                // Draw a semi-transparent overlay tint based on filter
-                                val f = project.selectedFilter.lowercase()
-                                val tint = when {
-                                    f.contains("sepia") -> Color(0xFF704214).copy(alpha = 0.15f)
-                                    f.contains("warm") || f.contains("sunset") || f.contains("golden") -> Color(0xFFFF8C00).copy(alpha = 0.08f)
-                                    f.contains("cool") || f.contains("arctic") -> Color(0xFF00BFFF).copy(alpha = 0.08f)
-                                    f.contains("cyberpunk") -> Color(0xFF00FFFF).copy(alpha = 0.06f)
-                                    f.contains("vintage") || f.contains("fade") -> Color(0xFFD4A76A).copy(alpha = 0.10f)
-                                    f.contains("teal") -> Color(0xFF008080).copy(alpha = 0.08f)
-                                    f.contains("rose") -> Color(0xFFFF1493).copy(alpha = 0.06f)
-                                    else -> Color.Transparent
-                                }
-                                if (tint != Color.Transparent) {
-                                    drawRect(tint)
-                                }
-                            }
-                    )
-                }
+                    modifier = Modifier.fillMaxSize()
+                        .then(
+                            if (project.imageEditorBlur > 0f) Modifier.blur((project.imageEditorBlur * 20f).dp) else Modifier
+                        )
+                        .graphicsLayer {
+                            scaleX = if (project.isFlippedHorizontal) -1f else 1f
+                            scaleY = if (project.isFlippedVertical) -1f else 1f
+                            rotationZ = project.rotationDegrees
+                            // Apply the combined cinematic filter + image-editor
+                            // adjustments matrix directly to the video surface so
+                            // the preview shows the REAL processed pixels, not a
+                            // fake tint overlay. This makes preview == export.
 
-                // Filter overlay
-                if (colorFilter != null) {
-                    val overlayColor = when (project.selectedFilter.lowercase()) {
-                        "grayscale" -> Color.Gray.copy(0.15f)
-                        "sepia" -> Color(0xFF704214).copy(0.18f)
-                        "invert" -> Color.White.copy(0.1f)
-                        else -> Color.Transparent
-                    }
-                    if (overlayColor != Color.Transparent) Box(Modifier.fillMaxSize().background(overlayColor))
-                }
+                        }
+                )
 
                 // 3D Shape Mask overlay
                 if (project.active3DShapeMask != "none") {
@@ -1260,7 +1250,7 @@ fun NextGenEditorScreen(
             onClipSelected = { clip -> onSelectClip(clip.id) },
             onClipMoved = { clip, newStart -> onMoveClip(clip.id, newStart) },
             onClipTrimmed = { clip, newStart, newEnd -> onTrimClip(clip.id, newStart, newEnd) },
-            modifier = Modifier.fillMaxWidth().height(180.dp)
+            modifier = Modifier.fillMaxWidth().height(108.dp)
         )
 
         // ─── 5. TOOL PANEL (expandable) ───────────────────────

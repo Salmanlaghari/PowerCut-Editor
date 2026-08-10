@@ -46,11 +46,49 @@ data class ExportProgress(
 class ExportEngine {
     private var nativeHandle: Long = 0
 
+    /**
+     * CRASH FIX #3: Tracks whether the native "powercut" library was loaded
+     * successfully. When false (stub build or lib missing), all native calls
+     * are no-ops and start() returns false immediately — the ExportManager
+     * skips the native path entirely and goes straight to the FFmpeg pipeline,
+     * avoiding wasted JNI overhead and potential global-ref leaks from
+     * repeated nativeCreate() calls on a stub engine.
+     */
+    private var nativeLibLoaded: Boolean = false
+
     init {
         try {
             System.loadLibrary("powercut")
+            nativeLibLoaded = true
         } catch (e: UnsatisfiedLinkError) {
             // Native lib not available in this build — calls below are no-ops.
+            nativeLibLoaded = false
+        } catch (e: Exception) {
+            // Defensive: any other error loading the native lib.
+            nativeLibLoaded = false
+        }
+    }
+
+    /**
+     * CRASH FIX #3: Returns true only if the native export engine is actually
+     * available (library loaded + full engine compiled in). ExportManager
+     * checks this before attempting the native path to avoid dead-end JNI
+     * calls.
+     *
+     * In the stub build (the default), `nativeIsFullEngine()` returns false,
+     * so this method returns false and ExportManager skips straight to the
+     * robust FFmpeg fallback — no wasted JNI overhead and no risky
+     * `build_dag_from_project()` field reads on every export.
+     */
+    fun isAvailable(): Boolean {
+        if (!nativeLibLoaded) return false
+        return try {
+            nativeIsFullEngine()
+        } catch (e: UnsatisfiedLinkError) {
+            // Older native builds may not have the symbol — treat as stub.
+            false
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -60,6 +98,26 @@ class ExportEngine {
     external fun nativeStart(handle: Long, dag: Any, config: ExportConfig): Boolean
     external fun nativeCancel(handle: Long)
     external fun nativeRunning(handle: Long): Boolean
+
+    /**
+     * Returns true if the FULL export engine is compiled into the native lib.
+     * The stub build (no `POWERCUT_FULL_EXPORT_ENGINE`) returns false so that
+     * [isAvailable] returns false and the FFmpeg fallback path is used.
+     */
+    external fun nativeIsFullEngine(): Boolean
+
+    /**
+     * Get a single rendered preview frame from the native compositor.
+     * Evaluates the DAG at the given time and renders ALL layers (video, text,
+     * stickers, effects, keyframes, chroma-key) into an RGBA byte array.
+     *
+     * @param dag the live VideoProject instance
+     * @param timeMicros timestamp in microseconds
+     * @param width output width
+     * @param height output height
+     * @return RGBA byte array or null if native compositor unavailable
+     */
+    external fun nativeGetRenderedFrame(dag: Any, timeMicros: Long, width: Int, height: Int): ByteArray?
 
     /** Progress callback invoked from the native worker thread. */
     var onProgress: ((ExportProgress) -> Unit)? = null
@@ -110,6 +168,11 @@ class ExportEngine {
      *         the native engine is unavailable.
      */
     fun start(dag: Any, config: ExportConfig): Boolean {
+        // CRASH FIX #3: If the native library was never loaded (stub build or
+        // load failure), return false immediately. This avoids a
+        // UnsatisfiedLinkError on nativeCreate()/nativeStart() and lets the
+        // ExportManager skip straight to the proven FFmpeg pipeline.
+        if (!nativeLibLoaded) return false
         return try {
             if (nativeHandle == 0L) nativeHandle = nativeCreate()
             // PRIORITY 1 FIX: sanitize the output path — replace characters
