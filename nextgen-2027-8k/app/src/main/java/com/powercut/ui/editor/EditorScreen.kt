@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.powercut.ui.components.GradientPill
 import com.powercut.ui.components.LivePreviewSurface
+import com.powercut.ui.components.PreviewFrameProvider
 import com.powercut.ui.components.ProBadge
 import com.powercut.ui.components.powercutGradientBrush
 import com.powercut.ui.theme.*
@@ -98,6 +99,7 @@ fun EditorScreen(vm: EditorViewModel = viewModel()) {
             zoom = zoom,
             onTogglePlay = vm::togglePlay,
             onZoom = vm::setZoom,
+            frameProvider = vm.frameProvider,
             modifier = Modifier.fillMaxWidth().weight(1f)
         )
 
@@ -164,6 +166,7 @@ private fun PreviewArea(
     zoom: Float,
     onTogglePlay: () -> Unit,
     onZoom: (Float) -> Unit,
+    frameProvider: PreviewFrameProvider? = null,
     modifier: Modifier = Modifier
 ) {
     var panX by remember { mutableStateOf(0f) }
@@ -191,7 +194,10 @@ private fun PreviewArea(
                 .clip(RoundedCornerShape(0.dp)) // pure black, no rounding on the canvas
                 .background(PureBlack)
         ) {
-            LivePreviewSurface(modifier = Modifier.fillMaxSize())
+            LivePreviewSurface(
+                modifier = Modifier.fillMaxSize(),
+                frameProvider = frameProvider
+            )
 
             // Centered play/pause button — the ONLY overlay (user control).
             // Spec: "centered play button" — this is user content, allowed.

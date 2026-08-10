@@ -9,6 +9,14 @@
 *.out
 build/
 dist/
+.cxx/
+app/.cxx/
+**/.cxx/
+**/.cxx/**
+**/build/
+**/build/**
+**/.gradle/
+**/.gradle/**
 
 # Dependencies
 node_modules/
