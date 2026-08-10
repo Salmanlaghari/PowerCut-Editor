@@ -597,6 +597,15 @@ class ExportManager @Inject constructor(
             // Check if input is audio file
             val isAudioInput = videoProcessor.isAudioFile(videoPath)
 
+            // v6.4.0 FIX: Added ALL missing edit checks so that ANY user edit
+            // forces the full transcode pipeline (processAndExport) instead of
+            // falling through to instantTrim (stream copy). Previously, many
+            // edits were NOT checked here — watermark, image editor adjustments,
+            // blend mode, reverse, freeze frame, color curves, audio effects,
+            // voice changer, audio ducking, border style, vignette style,
+            // premium looks, HDR, high bitrate, AI features, social presets,
+            // target FPS != 30 — so the export silently used stream copy and
+            // produced an output identical to the input with no edits applied.
             val isInstantTrimPossible = !isAudioInput &&
                     !project.isMuted &&
                     project.selectedFilter == "none" &&
@@ -623,7 +632,24 @@ class ExportManager @Inject constructor(
                     !project.isGreenScreenActive &&
                     !project.isEraserActive &&
                     !project.isImageEditorActive &&
-                    project.orientationMode == "free"
+                    project.orientationMode == "free" &&
+                    // ── v6.4.0 NEW CHECKS (previously missing) ──
+                    !project.hasWatermark &&
+                    !project.isBlendModeActive &&
+                    !project.isReversed &&
+                    !project.hasFreezeFrame &&
+                    !project.isColorCurvesActive &&
+                    !project.isAudioEffectActive &&
+                    !project.isVoiceChanged &&
+                    !project.isAudioDuckingActive &&
+                    !project.isBorderStyleActive &&
+                    !project.isVignetteStyleActive &&
+                    !project.isPremiumLookActive &&
+                    project.targetFps == 30 &&
+                    !project.isHdrExport &&
+                    !project.isHighBitrate &&
+                    !project.isAiFeatureActive &&
+                    !project.hasSocialPreset
 
             val success = if (isInstantTrimPossible) {
                 Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")

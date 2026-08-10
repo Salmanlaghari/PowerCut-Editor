@@ -1706,8 +1706,8 @@ class VideoProcessor @Inject constructor(
             "sepia" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"
             "grayscale", "mono", "black_white" -> "format=gray,lut=a=val"
             "invert", "negative" -> "negate"
-            "warm" -> "eq=temp=1.1:saturation=1.1,colorbalance=rs=0.08:gs=0.02:rm=0.05"
-            "cool" -> "eq=temp=0.9:saturation=1.05,colorbalance=bs=0.1:gm=-0.03:bm=0.05"
+            "warm" -> "eq=saturation=1.1,colorbalance=rs=0.08:gs=0.02:rm=0.05"
+            "cool" -> "eq=saturation=1.05,colorbalance=bs=0.1:gm=-0.03:bm=0.05"
             "vintage" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.8:contrast=1.1:gamma=1.1,vignette=angle=PI/4"
             "dramatic" -> "eq=contrast=1.4:saturation=1.3:gamma=0.9,curves=preset=strong_contrast"
             "vivid" -> "eq=saturation=1.6:contrast=1.2"
@@ -1718,7 +1718,7 @@ class VideoProcessor @Inject constructor(
             "fade" -> "eq=saturation=0.6:contrast=0.9:brightness=0.05,colorbalance=rs=0.04:gs=0.02:bs=0.06"
             "cyberpunk" -> "colorbalance=rs=0.2:bs=0.25:rm=0.1:bm=0.15,eq=saturation=1.8:contrast=1.3,hue=h=-20"
             "sunset" -> "colorbalance=rs=0.15:rm=0.1:gs=-0.03,eq=saturation=1.4:contrast=1.1:gamma=1.05"
-            "arctic" -> "eq=temp=0.75:saturation=0.9:contrast=1.1,colorbalance=bs=0.12:bm=0.08"
+            "arctic" -> "eq=saturation=0.9:contrast=1.1,colorbalance=bs=0.12:bm=0.08"
             "forest" -> "eq=saturation=1.2:contrast=1.1,colorbalance=gs=0.1:gm=0.06:bs=-0.03"
             "rose" -> "colorbalance=rs=0.1:rm=0.08:gs=-0.02:bs=0.04,eq=saturation=1.3:brightness=0.03"
             "golden" -> "colorbalance=rs=0.12:rm=0.1:gs=0.03,eq=saturation=1.35:contrast=1.1:gamma=1.05,vignette=angle=PI/4"
@@ -1755,8 +1755,8 @@ class VideoProcessor @Inject constructor(
             "haze" -> "eq=contrast=0.85:saturation=0.8:brightness=0.12,boxblur=luma_radius=3:luma_power=1"
             "matte" -> "eq=saturation=0.85:contrast=0.9:brightness=0.05,curves=preset=lighter"
             "litho" -> "format=gray,eq=contrast=1.6:gamma=0.8,curves=preset=strong_contrast"
-            "sepia_warm" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=temp=1.15:saturation=1.1"
-            "sepia_cool" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=temp=0.85:saturation=0.9"
+            "sepia_warm" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=1.1"
+            "sepia_cool" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.9"
             "red_boost" -> "colorbalance=rs=0.2:rm=0.15,eq=saturation=1.2:contrast=1.1"
             "blue_boost" -> "colorbalance=bs=0.2:bm=0.15,eq=saturation=1.2:contrast=1.1"
             "green_boost" -> "colorbalance=gs=0.2:gm=0.15,eq=saturation=1.2:contrast=1.1"
@@ -1779,7 +1779,7 @@ class VideoProcessor @Inject constructor(
             "desert" -> "colorbalance=rs=0.15:rm=0.1:gs=0.04,eq=saturation=1.2:contrast=1.1:gamma=1.05"
             "ocean" -> "colorbalance=bs=0.15:bm=0.1:gs=0.05,eq=saturation=1.2:contrast=1.05"
             "autumn" -> "colorbalance=rs=0.15:rm=0.12:gs=0.05,eq=saturation=1.3:contrast=1.1"
-            "winter" -> "eq=temp=0.8:saturation=0.85:contrast=1.1,colorbalance=bs=0.1:bm=0.05"
+            "winter" -> "eq=saturation=0.85:contrast=1.1,colorbalance=bs=0.1:bm=0.05"
             "spring" -> "colorbalance=gs=0.08:bs=0.05:rs=0.03,eq=saturation=1.2:brightness=0.05"
             "summer" -> "eq=saturation=1.3:contrast=1.1:brightness=0.05,colorbalance=rs=0.05:bs=0.03"
             else -> ""
@@ -1864,9 +1864,109 @@ class VideoProcessor @Inject constructor(
     // ════════════════════════════════════════════════════════════════════
     //  SUPER EFFECTS — 70+
     // ════════════════════════════════════════════════════════════════════
+    // v6.4.0: Exact-match map for ALL 72 effect IDs from EffectCatalog.
+    // Each value is the exact FFmpeg -vf filter chain from the catalog's
+    // ffmpegChain field, ensuring every user-selectable effect produces a
+    // real, visible change in the exported video (fixes the "export looks
+    // identical to import" bug where 49/72 effects were silently dropped).
+    private val exactEffectChains: Map<String, String> = mapOf(
+        "vivid" to "eq=saturation=1.5:contrast=1.1",
+        "cinematic" to "curves=preset=strong_contrast,eq=saturation=0.9",
+        "tealorange" to "colorbalance=rs=0.12:gs=-0.05:bs=0.05:rm=0.1:bm=0.08,eq=saturation=1.3:contrast=1.15",
+        "noir" to "hue=s=0,eq=contrast=1.3:brightness=-0.05",
+        "vintage" to "curves=preset=lighter,eq=saturation=0.7:brightness=0.05",
+        "fade" to "eq=saturation=0.6:contrast=0.9:brightness=0.08",
+        "warm" to "colorbalance=rs=0.08:rm=0.05,eq=saturation=1.1",
+        "cool" to "colorbalance=bs=0.1:bm=0.05,eq=saturation=1.05",
+        "punchy" to "eq=contrast=1.25:saturation=1.4",
+        "muted" to "eq=saturation=0.55:contrast=0.95",
+        "lomo" to "vignette=PI/5,eq=saturation=1.6",
+        "pastel" to "eq=saturation=0.7:brightness=0.06:contrast=0.9",
+        "mono" to "hue=s=0",
+        "sepia" to "colorchannelmixer=.393:.769:.189:.349:.686:.168:.272:.534:.131",
+        "invert" to "negate",
+        "polaroid" to "eq=saturation=0.8:brightness=0.1,curves=preset=lighter",
+        "kodak" to "eq=saturation=1.2:contrast=1.1:brightness=0.02",
+        "glow" to "gblur=sigma=2,tblend=all_mode=screen",
+        "bloom" to "gblur=sigma=4,tblend=all_mode=screen:all_opacity=0.5",
+        "dreamy" to "gblur=sigma=3,eq=brightness=0.08:saturation=1.2",
+        "softfocus" to "gblur=sigma=1.2",
+        "sharpen" to "unsharp=5:5:1.0:5:5:0.0",
+        "highkey" to "eq=brightness=0.12:contrast=0.85:saturation=1.1",
+        "lowkey" to "eq=brightness=-0.1:contrast=1.2:saturation=0.9",
+        "vignette" to "vignette=PI/4",
+        "lensflare" to "eq=brightness=0.08:contrast=1.1,vignette=angle=PI/4",
+        "blur" to "boxblur=10:1",
+        "motionblur" to "tmix=frames=4:weights=1",
+        "tiltshift" to "gblur=sigma=8:steps=2,eq=saturation=1.3",
+        "radialblur" to "boxblur=20:2",
+        "rgbshift" to "chromashift=cbh=-4:crv=4",
+        "pixelate" to "scale=iw/12:ih/12:flags=area,scale=iw:ih:flags=neighbor",
+        "glitch" to "scale=iw/4:ih/4:flags=area,scale=iw:ih:flags=neighbor,noise=alls=20:allf=t",
+        "datamosh" to "noise=alls=40:allf=t+u",
+        "shake" to "noise=alls=10:allf=t+u,crop=iw-4:ih-4:2:2",
+        "scanlines" to "drawgrid=w=iw:h=2:t=1:c=black@0.3",
+        "vhs" to "noise=alls=15:allf=t,eq=saturation=1.3:contrast=1.1",
+        "crt" to "drawgrid=w=iw:h=3:t=2:c=black@0.4,eq=contrast=1.1",
+        "distort" to "lenscorrection=cx=0.05:cy=0.05",
+        "kaleido" to "lenscorrection=k1=0.4:k2=0.4,eq=saturation=1.3",
+        "cartoon" to "eq=saturation=1.8:contrast=1.4,unsharp=3:3:1:3:3:0,noise=alls=2:allf=t",
+        "sketch" to "edgedetect=low=0.1:high=0.4,hue=s=0",
+        "oilpaint" to "oilpaint=radius=8",
+        "watercolor" to "boxblur=6:2,eq=saturation=1.3:brightness=0.05",
+        "emboss" to "convolution=-1 -1 0 -1 4 0 0 0 0",
+        "edge" to "edgedetect=low=0.2:high=0.5",
+        "neon" to "edgedetect=low=0.1:high=0.3,eq=saturation=2.0:contrast=1.5",
+        "duotone" to "hue=s=1.5,eq=saturation=1.8",
+        "posterize" to "lutrgb=r=32:g=32:b=32",
+        "thermal" to "eq=saturation=2.5:contrast=1.5,colorbalance=rs=0.3:bs=0.2:rm=0.15:bm=0.1",
+        "xray" to "negate,hue=s=0,eq=contrast=1.3",
+        "lightleak" to "eq=brightness=0.1:saturation=1.2,tblend=all_mode=screen",
+        "filmgrain" to "noise=alls=12:allf=t",
+        "dust" to "noise=alls=5:allf=t+u,eq=contrast=0.95:brightness=0.03",
+        "scratch" to "noise=alls=15:allf=t+u:allc=color",
+        "grunge" to "noise=alls=20:allf=t,eq=contrast=1.15:saturation=0.85",
+        "echo" to "tmix=frames=3:weights=1 0.5 0.25",
+        "trail" to "tmix=frames=5:weights=1 0.7 0.5 0.3 0.15",
+        "strobe" to "tblend=all_mode=screen",
+        "8mm" to "eq=saturation=1.4:contrast=1.1,noise=alls=18:allf=t,vignette=PI/5",
+        "16mm" to "eq=saturation=1.2:contrast=1.05,noise=alls=10:allf=t",
+        "35mm" to "eq=saturation=1.1:contrast=1.05,noise=alls=6:allf=t",
+        "polaroid2" to "eq=saturation=0.85:brightness=0.08:contrast=0.95,vignette=PI/6",
+        "hdr" to "eq=contrast=1.15:saturation=1.25:brightness=0.03",
+        "dramatic" to "curves=preset=strong_contrast,eq=contrast=1.3:saturation=1.1",
+        "clarity" to "unsharp=5:5:1.2:5:5:0.0,eq=contrast=1.1",
+        "matte" to "eq=contrast=0.9:brightness=0.04:saturation=0.95",
+        "colorpop" to "hue=s=0,eq=saturation=1.4",
+        "golden" to "colorbalance=rs=0.12:rm=0.08,eq=saturation=1.2:brightness=0.04",
+        "midnight" to "colorbalance=bs=0.1:bm=0.05,eq=saturation=1.1:contrast=1.15:brightness=-0.04",
+        "forest" to "colorbalance=gs=0.1:gm=0.06,eq=saturation=1.3",
+        "ocean" to "colorbalance=bs=0.1:bm=0.06,eq=saturation=1.2"
+    )
+
     private fun effectChain(effectName: String, duration: Double, w: Int, h: Int): List<String> {
         if (effectName == "none") return emptyList()
         val e = effectName.lowercase().replace(" ", "_").replace("-", "_")
+
+        // ── v6.4.0 FIX: Exact-match lookup for ALL EffectCatalog IDs ──
+        // Previously, effectChain() used only `e.contains(...)` pattern matching,
+        // which silently dropped 49 out of 72 effects from EffectCatalog because
+        // their IDs (e.g. "vivid", "cinematic", "noir", "sepia", "warm", "cool",
+        // "blur", "sharpen", "glow", "mono", "invert", "punchy", "muted", etc.)
+        // did not match any contains() branch. This caused the exported video to
+        // look identical to the imported video — no effect was applied.
+        //
+        // Now we first try an exact-match against a comprehensive map that covers
+        // every single effect ID in EffectCatalog (EffectsScreen.kt), using the
+        // exact FFmpeg filter chains defined in the catalog's ffmpegChain field.
+        // Only if the exact match fails do we fall through to the contains()
+        // pattern matching below (which handles dynamic/animated effects like
+        // "magic_*", "glitch_rgb", "vhs_old", "snow_heavy", etc.).
+        val exactMatch = exactEffectChains[e]
+        if (exactMatch != null) {
+            return if (exactMatch.isBlank()) emptyList() else listOf(exactMatch)
+        }
+
         return when {
             // v4.4.0: Magic / animated effects use real FFmpeg time expressions.
             e.contains("magic_") ->
@@ -1892,7 +1992,7 @@ class VideoProcessor @Inject constructor(
             e.contains("fire") || e.contains("flame") ->
                 listOf("colorbalance=rs=0.2:rm=0.15,eq=brightness=0.08:saturation=1.3")
             e.contains("frost") || e.contains("ice") ->
-                listOf("eq=temp=0.8:saturation=0.9:contrast=1.1,colorbalance=bs=0.15:bm=0.1")
+                listOf("eq=saturation=0.9:contrast=1.1,colorbalance=bs=0.15:bm=0.1")
             e.contains("sparkle") || e.contains("starburst") ->
                 listOf("eq=brightness=0.1:contrast=1.15")
             e.contains("dust") ->
@@ -2491,7 +2591,7 @@ class VideoProcessor @Inject constructor(
             "ice" -> listOf(
                 "colorbalance=bs=0.18:bm=0.12",
                 "eq=saturation=0.9:contrast=1.1:brightness=0.03",
-                "eq=temp=0.85"
+                "eq="
             )
             else -> listOf(
                 "drawbox=x=0:y=0:w=iw:h=ih*0.05:color=black@1:t=fill",
@@ -2691,32 +2791,85 @@ class VideoProcessor @Inject constructor(
         if (sticker == "none") return ""
         val s = sticker.lowercase()
 
-        // Emoji mapping: sticker type → emoji character
+        // v6.4.0 FIX: Complete emoji map covering ALL 66 StickerCatalog IDs.
+        // Previously only 17 of 66 stickers had emoji mappings, so selecting
+        // stickers like "laugh", "love", "cat", "dog", "pizza", etc. produced
+        // NO overlay in the exported video (stickerOverlay returned "").
+        // Now every sticker ID maps to its correct emoji character.
         val emojiMap = mapOf(
             "fire" to "🔥",
             "star" to "⭐",
             "heart" to "❤️",
-            "smile" to "😊",
+            "glow" to "⚡",
+            "smile" to "😀",
+            "laugh" to "😂",
+            "love" to "😍",
+            "cool" to "😎",
+            "wink" to "😉",
+            "cry" to "😭",
+            "angry" to "😡",
+            "shock" to "😱",
             "thumbsup" to "👍",
             "thumbs_up" to "👍",
-            "crown" to "👑",
-            "lightning" to "⚡",
-            "glow" to "⚡",
-            "bolt" to "⚡",
+            "thumbsdown" to "👎",
+            "ok" to "👌",
+            "peace" to "✌️",
+            "clap" to "👏",
+            "muscle" to "💪",
+            "pray" to "🙏",
+            "point" to "👉",
             "sun" to "☀️",
             "moon" to "🌙",
+            "cloud" to "☁️",
+            "rainbow" to "🌈",
+            "bolt" to "⚡",
+            "lightning" to "⚡",
+            "snow" to "❄️",
+            "sparkle" to "✨",
+            "star2" to "🌟",
+            "flower" to "🌸",
+            "rose" to "🌹",
+            "tree" to "🌳",
+            "leaf" to "🍃",
+            "wave" to "🌊",
+            "volcano" to "🌋",
+            "mountain" to "⛰️",
+            "cat" to "🐱",
+            "dog" to "🐶",
+            "panda" to "🐼",
+            "fox" to "🦊",
+            "lion" to "🦁",
+            "frog" to "🐸",
+            "unicorn" to "🦄",
+            "butterfly" to "🦋",
+            "bee" to "🐝",
+            "turtle" to "🐢",
+            "coffee" to "☕",
+            "pizza" to "🍕",
+            "burger" to "🍔",
+            "cake" to "🎂",
+            "icecream" to "🍦",
+            "donut" to "🍩",
+            "cherry" to "🍒",
+            "apple" to "🍎",
+            "avocado" to "🥑",
+            "crown" to "👑",
+            "diamond" to "💎",
+            "trophy" to "🏆",
+            "medal" to "🎖️",
+            "rocket" to "🚀",
+            "balloon" to "🎈",
+            "gift" to "🎁",
+            "party" to "🎉",
+            "confetti" to "🎊",
             "music" to "🎵",
             "camera" to "📷",
+            "film" to "🎥",
             "check" to "✅",
             "cross" to "❌",
-            "diamond" to "💎",
-            "rocket" to "🚀",
-            "sparkle" to "✨",
-            "trophy" to "🏆",
             "skull" to "💀",
             "100" to "💯",
-            "target" to "🎯",
-            "party" to "🎉"
+            "target" to "🎯"
         )
 
         val emoji = emojiMap[s] ?: return ""
