@@ -19,6 +19,8 @@ import java.util.UUID
 
 /** Editor + export shared state. Holds the project, selection, export config. */
 class EditorViewModel : ViewModel() {
+    val frameProvider = com.powercut.ui.components.EditorPreviewFrameProvider(this)
+
     private val _project = MutableStateFlow(
         VideoProject(
             name = "My 8K Edit",
@@ -200,5 +202,10 @@ class EditorViewModel : ViewModel() {
         }
         sb.append("}")
         return sb.toString()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        frameProvider.dispose()
     }
 }

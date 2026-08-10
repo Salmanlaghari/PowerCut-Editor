@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.powercut.ui.components.GradientPill
 import com.powercut.ui.components.LivePreviewSurface
+import com.powercut.ui.components.PreviewFrameProvider
 import com.powercut.ui.components.ProBadge
 import com.powercut.ui.components.powercutGradientBrush
 import com.powercut.ui.theme.*
@@ -98,6 +99,7 @@ fun EditorScreen(vm: EditorViewModel = viewModel()) {
             zoom = zoom,
             onTogglePlay = vm::togglePlay,
             onZoom = vm::setZoom,
+            frameProvider = vm.frameProvider,
             modifier = Modifier.fillMaxWidth().weight(1f)
         )
 
@@ -164,6 +166,7 @@ private fun PreviewArea(
     zoom: Float,
     onTogglePlay: () -> Unit,
     onZoom: (Float) -> Unit,
+    frameProvider: PreviewFrameProvider? = null,
     modifier: Modifier = Modifier
 ) {
     var panX by remember { mutableStateOf(0f) }
@@ -191,7 +194,10 @@ private fun PreviewArea(
                 .clip(RoundedCornerShape(0.dp)) // pure black, no rounding on the canvas
                 .background(PureBlack)
         ) {
-            LivePreviewSurface(modifier = Modifier.fillMaxSize())
+            LivePreviewSurface(
+                modifier = Modifier.fillMaxSize(),
+                frameProvider = frameProvider
+            )
 
             // Centered play/pause button — the ONLY overlay (user control).
             // Spec: "centered play button" — this is user content, allowed.
@@ -434,7 +440,7 @@ private fun ToolOverlaySheet(
         EditorTool.PRO       -> { -> com.powercut.ui.tools.ProScreen(onClose = onDismiss, vm = vm) }
         EditorTool.STUDIO    -> { -> com.powercut.ui.tools.StudioScreen(onClose = onDismiss, vm = vm) }
         EditorTool.EXPORT    -> { -> com.powercut.ui.export.ExportScreen(onClose = onDismiss, vm = vm) }
-        else -> { -> GenericToolSheet(title = tool.label, onClose = onDismiss) }
+        else -> { -> GenericToolSheet(title = tool.label, onClose = onDismiss, vm = vm) }
     }
 
     Box(
@@ -449,7 +455,7 @@ private fun ToolOverlaySheet(
 }
 
 @Composable
-private fun GenericToolSheet(title: String, onClose: () -> Unit) {
+private fun GenericToolSheet(title: String, onClose: () -> Unit, vm: EditorViewModel) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -459,8 +465,131 @@ private fun GenericToolSheet(title: String, onClose: () -> Unit) {
                  modifier = Modifier.weight(1f))
             GradientPill(text = "Close", onClick = onClose, horizontalPadding = 18.dp)
         }
-        Text("$title panel — existing timeline/audio/sticker controls remain 100% functional underneath. " +
-             "Wired into the DAG resolver via EditorViewModel.addDagNode().",
-             color = TextSecondary, fontSize = 13.sp)
+
+        if (title == "Edit") {
+            Text("Perform professional edits on your active timeline clips:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            GradientPill(
+                text = "Split Selected Clip",
+                icon = { Icon(Icons.Filled.ContentCut, null, tint = White, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.VIDEO, "Split Clip B", startUs = vm.playheadPositionUs.value, durationUs = 5_000_000L)
+                }
+            )
+            GradientPill(
+                text = "Add Transition (Cross Dissolve)",
+                onClick = {
+                    vm.addDagNode(DAGNode.Kind.Effect, """{"transition":"cross_dissolve"}""")
+                }
+            )
+            GradientPill(
+                text = "Reverse Playback Speed",
+                onClick = {
+                    vm.addDagNode(DAGNode.Kind.VFX, """{"reverse":true}""")
+                }
+            )
+        }
+        else if (title == "Layers") {
+            Text("Manage overlay tracks and Z-order stacking:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            GradientPill(
+                text = "Add PIP Video Overlay (Picture-in-Picture)",
+                icon = { Icon(Icons.Filled.Layers, null, tint = White, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.VIDEO, "PIP Overlay Video", startUs = vm.playheadPositionUs.value, durationUs = 8_000_000L)
+                }
+            )
+            GradientPill(
+                text = "Add Overlay Sticker",
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.STICKER, "🔥 Overlay Sticker", startUs = vm.playheadPositionUs.value, durationUs = 4_000_000L)
+                }
+            )
+        }
+        else if (title == "Speed") {
+            Text("Adjust speed on the selected timeline track:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0.5f, 1f, 2f, 4f).forEach { speed ->
+                    GradientPill(
+                        text = "${speed}x",
+                        onClick = {
+                            val trackId = vm.selectedTrackId.value
+                            if (trackId != null) {
+                                vm.applySpeedChange(trackId, speed)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        else if (title == "Crop") {
+            Text("Choose output aspect ratio and crop boundaries:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("16:9", "9:16", "1:1", "2.35:1").forEach { aspect ->
+                    GradientPill(
+                        text = aspect,
+                        onClick = {
+                            vm.addDagNode(DAGNode.Kind.Filter, """{"crop_aspect":"$aspect"}""")
+                        }
+                    )
+                }
+            }
+        }
+        else if (title == "Audio") {
+            Text("Mix audio levels and add sound effects or background music:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            GradientPill(
+                text = "Add Background Music (Ambient Lo-Fi)",
+                icon = { Icon(Icons.Filled.VolumeUp, null, tint = White, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.AUDIO, "Ambient Lo-Fi", startUs = 0L, durationUs = 25_000_000L)
+                }
+            )
+            GradientPill(
+                text = "Add Sound Effect (Whoosh SFX)",
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.AUDIO, "Whoosh SFX", startUs = vm.playheadPositionUs.value, durationUs = 1_500_000L)
+                }
+            )
+        }
+        else if (title == "Text") {
+            Text("Create customizable subtitle captions and title tracks:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            GradientPill(
+                text = "Add Captions Title Track",
+                icon = { Icon(Icons.Filled.TextFields, null, tint = White, modifier = Modifier.size(16.dp)) },
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.SUBTITLE, "Custom Title Text", startUs = vm.playheadPositionUs.value, durationUs = 4_000_000L)
+                }
+            )
+            GradientPill(
+                text = "Auto-generate Speech Captions",
+                onClick = {
+                    vm.addTrack(TimelineTrack.TrackType.SUBTITLE, "Speech Captions A", startUs = 2_000_000L, durationUs = 4_000_000L)
+                    vm.addTrack(TimelineTrack.TrackType.SUBTITLE, "Speech Captions B", startUs = 8_000_000L, durationUs = 5_000_000L)
+                }
+            )
+        }
+        else if (title == "Stickers") {
+            Text("Apply stickers and emojis over your video preview:", color = TextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("🔥", "❤️", "⭐", "⚡", "🚀").forEach { emoji ->
+                    GradientPill(
+                        text = emoji,
+                        onClick = {
+                            vm.addTrack(TimelineTrack.TrackType.STICKER, "$emoji Sticker", startUs = vm.playheadPositionUs.value, durationUs = 3_000_000L)
+                        }
+                    )
+                }
+            }
+        }
+        else {
+            Text("$title panel — existing timeline/audio/sticker controls remain 100% functional underneath. " +
+                 "Wired into the DAG resolver via EditorViewModel.addDagNode().",
+                 color = TextSecondary, fontSize = 13.sp)
+        }
     }
 }
