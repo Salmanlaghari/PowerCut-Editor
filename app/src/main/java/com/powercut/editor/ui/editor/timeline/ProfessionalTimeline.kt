@@ -461,4 +461,4 @@ private fun findSnapPoint(
         if (abs(currentTime - clipEnd) < threshold) return clipEnd
     }
     return null
-}
+} // Trailing newline

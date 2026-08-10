@@ -20,7 +20,7 @@ import java.util.UUID
 
 /** Editor + export shared state. Holds the project, selection, export config. */
 class EditorViewModel : ViewModel() {
-    val frameProvider = EditorPreviewFrameProvider(this)
+    val frameProvider = com.powercut.ui.components.EditorPreviewFrameProvider(this)
 
     private val _project = MutableStateFlow(
         VideoProject(
