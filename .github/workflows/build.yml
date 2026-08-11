@@ -91,3 +91,4 @@ jobs:
         name: PowerCut-v${{ steps.version.outputs.version_name }}-Release-AAB
         path: app/build/outputs/bundle/release/*.aab
         if-no-files-found: warn
+# trigger
