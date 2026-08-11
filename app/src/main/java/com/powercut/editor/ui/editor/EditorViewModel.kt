@@ -471,8 +471,8 @@ class EditorViewModel @Inject constructor(
                                             opacity = clJson.optDouble("opacity", 1.0).toFloat(),
                                             rotation = clJson.optDouble("rotation", 0.0).toFloat(),
                                             scale = clJson.optDouble("scale", 1.0).toFloat(),
-                                            posX = clJson.optDouble("posX", 0.5f).toFloat(),
-                                            posY = clJson.optDouble("posY", 0.5f).toFloat()
+                                            posX = clJson.optDouble("posX", 0.5).toFloat(),
+                                            posY = clJson.optDouble("posY", 0.5).toFloat()
                                         )
                                     }
                                 } ?: emptyList()
