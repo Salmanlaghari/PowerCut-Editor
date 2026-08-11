@@ -842,6 +842,20 @@ class ExportManager @Inject constructor(
                         watermarkPath = project.watermarkPath,
                         vignetteStyle = project.vignetteStyle,
                         premiumLookId = project.activePremiumLook,
+                        textStyleId = project.textStyleId,
+                        textBold = project.textBold,
+                        textItalic = project.textItalic,
+                        textShadow = project.textShadow,
+                        textOutline = project.textOutline,
+                        textGlow = project.textGlow,
+                        textNeon = project.textNeon,
+                        textBgColor = project.textBgColor,
+                        textBgOpacity = project.textBgOpacity,
+                        targetFps = project.targetFps,
+                        isHdrEnabled = project.isHdrEnabled,
+                        isHighBitrateEnabled = project.isHighBitrateEnabled,
+                        activeAiFeature = project.activeAiFeature,
+                        socialPreset = project.socialPreset,
                         onProgress = { pct -> updateProgress(pct) }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
