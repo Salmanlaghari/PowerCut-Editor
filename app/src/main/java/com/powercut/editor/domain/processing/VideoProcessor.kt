@@ -2590,8 +2590,7 @@ class VideoProcessor @Inject constructor(
             // Ice — cold blue frost
             "ice" -> listOf(
                 "colorbalance=bs=0.18:bm=0.12",
-                "eq=saturation=0.9:contrast=1.1:brightness=0.03",
-                "eq="
+                "eq=saturation=0.9:contrast=1.1:brightness=0.03"
             )
             else -> listOf(
                 "drawbox=x=0:y=0:w=iw:h=ih*0.05:color=black@1:t=fill",
@@ -3066,7 +3065,6 @@ class VideoProcessor @Inject constructor(
             "circlecrop" -> "xfade=transition=circlecrop:duration=${dur}:offset=${offset}"
             "circleopen" -> "xfade=transition=circleopen:duration=${dur}:offset=${offset}"
             "circleclose" -> "xfade=transition=circleclose:duration=${dur}:offset=${offset}"
-            "dissolve" -> "xfade=transition=dissolve:duration=${dur}:offset=${offset}"
             "pixelize" -> "xfade=transition=pixelize:duration=${dur}:offset=${offset}"
             "wipetl" -> "xfade=transition=wipetl:duration=${dur}:offset=${offset}"
             "wipetr" -> "xfade=transition=wipetr:duration=${dur}:offset=${offset}"
