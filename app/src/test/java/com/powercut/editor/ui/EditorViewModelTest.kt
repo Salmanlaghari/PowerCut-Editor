@@ -1,8 +1,11 @@
 package com.powercut.editor.ui
 
+import android.content.Context
 import com.powercut.editor.data.ProjectRepository
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.export.ExportManager
+import com.powercut.editor.domain.processing.VideoProcessor
+import com.powercut.editor.domain.processing.RoyaltyFreeMusicGenerator
 import com.powercut.editor.ui.editor.EditorViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,6 +27,9 @@ class EditorViewModelTest {
 
     private lateinit var projectRepository: ProjectRepository
     private lateinit var exportManager: ExportManager
+    private lateinit var context: Context
+    private lateinit var videoProcessor: VideoProcessor
+    private lateinit var royaltyFreeMusicGenerator: RoyaltyFreeMusicGenerator
     private lateinit var viewModel: EditorViewModel
 
     @Before
@@ -31,7 +37,10 @@ class EditorViewModelTest {
         Dispatchers.setMain(testDispatcher)
         projectRepository = ProjectRepository()
         exportManager = mock(ExportManager::class.java)
-        viewModel = EditorViewModel(projectRepository, exportManager)
+        context = mock(Context::class.java)
+        videoProcessor = mock(VideoProcessor::class.java)
+        royaltyFreeMusicGenerator = mock(RoyaltyFreeMusicGenerator::class.java)
+        viewModel = EditorViewModel(context, projectRepository, exportManager, videoProcessor, royaltyFreeMusicGenerator)
     }
 
     @After
