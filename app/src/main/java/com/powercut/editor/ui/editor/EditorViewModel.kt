@@ -728,6 +728,9 @@ class EditorViewModel @Inject constructor(
                         transitionType = transition,
                         autoCaptionsLanguage = captions,
                         speedFactor = speed,
+                        // Base video layer is always present so the Layers panel
+                        // reflects reality from the moment a project is imported.
+                        activeLayers = listOf("video"),
                         timeline = com.powercut.editor.data.VideoTimeline(
                             tracks = listOf(
                                 com.powercut.editor.data.TimelineTrack(
@@ -775,7 +778,7 @@ class EditorViewModel @Inject constructor(
     // ═══════════════════════════════════════════════════════════════════════
     //  v4.5.0 PREMIUM QUICK TOOLS — Compress / Slideshow / AI Edit
     //  All delegate to real FFmpeg pipelines in ExportManager. Workable.
-    // ═══════════════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════���═════════════════════════════════
 
     /** v4.5.0 — Compress a picked video to a smaller MP4. */
     fun compressVideo(videoUri: Uri, qualityPreset: String = "balanced") {
@@ -890,6 +893,7 @@ class EditorViewModel @Inject constructor(
             }
             project.copy(
                 backgroundMusicPath = path,
+                activeLayers = project.activeLayers.withLayer("audio", !path.isNullOrBlank()),
                 timeline = project.timeline.copy(tracks = updatedTracks)
             )
         }
@@ -1020,6 +1024,7 @@ class EditorViewModel @Inject constructor(
             }
             project.copy(
                 activeTextOverlay = text,
+                activeLayers = project.activeLayers.withLayer("text", !text.isNullOrBlank()),
                 timeline = project.timeline.copy(tracks = updatedTracks)
             )
         }
@@ -1121,6 +1126,7 @@ class EditorViewModel @Inject constructor(
             }
             project.copy(
                 stickerType = sticker,
+                activeLayers = project.activeLayers.withLayer("sticker", sticker != "none" && sticker.isNotBlank()),
                 timeline = project.timeline.copy(tracks = updatedTracks)
             )
         }
@@ -1189,6 +1195,7 @@ class EditorViewModel @Inject constructor(
             }
             project.copy(
                 imageOverlayPath = path,
+                activeLayers = project.activeLayers.withLayer("image", !path.isNullOrBlank()),
                 timeline = project.timeline.copy(tracks = updatedTracks)
             )
         }
@@ -1265,6 +1272,7 @@ class EditorViewModel @Inject constructor(
             }
             project.copy(
                 selectedEffect = effect,
+                activeLayers = project.activeLayers.withLayer("effect", effect != "none" && effect.isNotBlank()),
                 timeline = project.timeline.copy(tracks = updatedTracks)
             )
         }
@@ -1272,13 +1280,48 @@ class EditorViewModel @Inject constructor(
 
     fun addLayer(layerId: String) {
         projectRepository.updateProject { project ->
-            project.copy(activeLayers = project.activeLayers + layerId)
+            if (project.activeLayers.contains(layerId)) project
+            else project.copy(activeLayers = project.activeLayers + layerId)
         }
     }
 
     fun removeLayer(layerId: String) {
         projectRepository.updateProject { project ->
             project.copy(activeLayers = project.activeLayers - layerId)
+        }
+    }
+
+    /**
+     * Layers architecture fix: keeps [VideoProject.activeLayers] in sync with the
+     * feature panels. Previously the Layers panel counted `activeLayers`, but the
+     * Text/Image/Sticker/Effect/Audio panels only wrote their own content fields
+     * (and timeline clips) — never `activeLayers` — so the panel always showed
+     * "0 active". Every content mutation now routes its layer id through here so
+     * the Layers panel reflects reality and compositing order is driven by one
+     * source of truth.
+     */
+    private fun List<String>.withLayer(id: String, enabled: Boolean): List<String> =
+        if (enabled) {
+            if (contains(id)) this else this + id
+        } else {
+            this - id
+        }
+
+    /**
+     * Layers panel "remove" (✕) fix: actually clears the underlying content for a
+     * layer instead of only dropping it from the visibility set. This makes the
+     * Layers panel a real destructive control that feeds the shared model, so the
+     * change propagates to both preview and export.
+     */
+    fun clearLayerContent(layerId: String) {
+        pushUndoState()
+        when (layerId) {
+            "text" -> updateTextOverlay(null)
+            "image" -> updateImageOverlay(null)
+            "sticker" -> updateStickerType("none")
+            "effect" -> updateSelectedEffect("none")
+            "audio" -> updateBackgroundMusic(null)
+            else -> removeLayer(layerId)
         }
     }
 

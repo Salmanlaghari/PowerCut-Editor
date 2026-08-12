@@ -320,6 +320,7 @@ fun NextGenEditorScreen(
     onUpdateSelectedEffect: (String) -> Unit = {},
     onAddLayer: (String) -> Unit = {},
     onRemoveLayer: (String) -> Unit = {},
+    onClearLayer: (String) -> Unit = {},
     // Green Screen callbacks
     onToggleGreenScreen: () -> Unit = {},
     onUpdateGreenScreenColor: (String) -> Unit = {},
@@ -1337,6 +1338,7 @@ fun NextGenEditorScreen(
                 onToggleAutoReframe = onToggleAutoReframe,
                 onAddLayer = onAddLayer,
                 onRemoveLayer = onRemoveLayer,
+                onClearLayer = onClearLayer,
                 onUpdateBlendMode = onUpdateBlendMode,
                 onToggleReverse = onToggleReverse,
                 onUpdateFreezeFrame = onUpdateFreezeFrame,
@@ -1674,7 +1676,7 @@ private fun CapCutToolBar(
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPCUT TOOL PANELS (all options functional)
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════���═════════════════════════════
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CapCutToolPanel(
@@ -1761,6 +1763,7 @@ private fun CapCutToolPanel(
     // Layers
     onAddLayer: (String) -> Unit = {},
     onRemoveLayer: (String) -> Unit = {},
+    onClearLayer: (String) -> Unit = {},
     // NEW v4.0 CapCut-sync Pro
     onUpdateBlendMode: (String) -> Unit = {},
     onToggleReverse: () -> Unit = {},
@@ -1789,7 +1792,7 @@ private fun CapCutToolPanel(
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
             when (selectedTool) {
                 0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame)
-                1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
+                1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer, onClearLayer = onClearLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve, onToggleReverse, onUpdateFreezeFrame)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
                 4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) }, onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic)
@@ -2131,7 +2134,7 @@ private fun EditPanel(
 
 // ─── 1. LAYERS PANEL ───────────────────────────────────────────
 @Composable
-private fun LayersPanel(project: VideoProject, context: android.content.Context, onAddLayer: (String) -> Unit, onRemoveLayer: (String) -> Unit) {
+private fun LayersPanel(project: VideoProject, context: android.content.Context, onAddLayer: (String) -> Unit, onRemoveLayer: (String) -> Unit, onClearLayer: (String) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LiveAnimatedHeader("LAYERS", "📑", CyberCyan)
 
@@ -2248,7 +2251,7 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                                 .background(Color(0xFFFF3D7F).copy(0.12f), CircleShape)
                                 .border(1.dp, Color(0xFFFF3D7F).copy(0.3f), CircleShape)
                                 .clickable {
-                                    onRemoveLayer(layerId)
+                                    onClearLayer(layerId)
                                     android.widget.Toast.makeText(context, "$name removed", android.widget.Toast.LENGTH_SHORT).show()
                                 },
                             contentAlignment = Alignment.Center

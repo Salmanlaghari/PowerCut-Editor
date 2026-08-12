@@ -411,6 +411,9 @@ class MainActivity : ComponentActivity() {
                                         onRemoveLayer = { layerId ->
                                             viewModel.removeLayer(layerId)
                                         },
+                                        onClearLayer = { layerId ->
+                                            viewModel.clearLayerContent(layerId)
+                                        },
                                         // Green Screen
                                         onToggleGreenScreen = { viewModel.toggleGreenScreen() },
                                         onUpdateGreenScreenColor = { viewModel.updateGreenScreenColor(it) },
@@ -505,7 +508,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        // ─────────────────────────────────────────────────────────────
+                        // ───────────────────────────────────────────────────��─────────
                         //  v6.0.0 PREMIUM OVERLAY SCREENS
                         //  Rendered on top of the active tab. Each drives REAL FFmpeg
                         //  chains through EditorViewModel → VideoProcessor at export.
