@@ -205,12 +205,28 @@ public:
                         }
                         if (eff.type == EffectNode::SHARPEN && fi > 0.001f) {
                             float amount = fi * 0.5f;
-                            float nr = r * (1.0f + 4.0f * amount) - (float)r * amount;
-                            float ng = g * (1.0f + 4.0f * amount) - (float)g * amount;
-                            float nb = b * (1.0f + 4.0f * amount) - (float)b * amount;
-                            r = (uint8_t)std::max(0, std::min(255, (int)nr));
-                            g = (uint8_t)std::max(0, std::min(255, (int)ng));
-                            b = (uint8_t)std::max(0, std::min(255, (int)nb));
+                            float sum_r = 0.0f, sum_g = 0.0f, sum_b = 0.0f;
+                            int count = 0;
+                            for (int ky = -1; ky <= 1; ++ky) {
+                                for (int kx = -1; kx <= 1; ++kx) {
+                                    if (kx == 0 && ky == 0) continue;
+                                    int nsx = sx + kx, nsy = sy + ky;
+                                    if (nsx >= 0 && nsx < src->width && nsy >= 0 && nsy < src->height) {
+                                        const uint8_t* nsp = src->data + nsy * src->stride + nsx * 4;
+                                        sum_r += nsp[0]; sum_g += nsp[1]; sum_b += nsp[2];
+                                        ++count;
+                                    }
+                                }
+                            }
+                            if (count > 0) {
+                                float avg_r = sum_r / count, avg_g = sum_g / count, avg_b = sum_b / count;
+                                float nr = r * (1.0f + 8.0f * amount) - avg_r * amount;
+                                float ng = g * (1.0f + 8.0f * amount) - avg_g * amount;
+                                float nb = b * (1.0f + 8.0f * amount) - avg_b * amount;
+                                r = (uint8_t)std::max(0, std::min(255, (int)nr));
+                                g = (uint8_t)std::max(0, std::min(255, (int)ng));
+                                b = (uint8_t)std::max(0, std::min(255, (int)nb));
+                            }
                         }
                         if (eff.type == EffectNode::GRAIN && fi > 0.001f) {
                             float grain = ((float)rand() / RAND_MAX - 0.5f) * fi * 80.0f;

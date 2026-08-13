@@ -286,8 +286,9 @@ static void read_keyframes_for_property(
         jlong timeMs = fTime ? env->GetLongField(kfObj, fTime) : 0;
         float value = fValue ? env->GetFloatField(kfObj, fValue) : 0.0f;
         jstring jsProp = fProp ? (jstring)env->GetObjectField(kfObj, fProp) : nullptr;
-        std::string prop = jsProp ? env->GetStringUTFChars(jsProp, nullptr) : "";
-        if (jsProp) env->ReleaseStringUTFChars(jsProp, env->GetStringUTFChars(jsProp, nullptr));
+        const char* propChars = jsProp ? env->GetStringUTFChars(jsProp, nullptr) : "";
+        std::string prop = propChars ? propChars : "";
+        if (jsProp) env->ReleaseStringUTFChars(jsProp, propChars);
         if (prop == propertyName) {
             Keyframe kf;
             kf.time = (TimeMicros)(timeMs * 1000);
@@ -519,8 +520,9 @@ static PowerCutDAG* build_dag_from_project(JNIEnv* env, jobject projectObj) {
                         jfieldID fKfs = env->GetFieldID(kfTrackCls, "keyframes", "Ljava/util/List;");
                         if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(kfTrackObj); continue; }
                         jstring jsClipId = fClipId ? (jstring)env->GetObjectField(kfTrackObj, fClipId) : nullptr;
-                        std::string clipId = jsClipId ? env->GetStringUTFChars(jsClipId, nullptr) : "";
-                        if (jsClipId) env->ReleaseStringUTFChars(jsClipId, env->GetStringUTFChars(jsClipId, nullptr));
+                        const char* clipIdChars = jsClipId ? env->GetStringUTFChars(jsClipId, nullptr) : "";
+                        std::string clipId = clipIdChars ? clipIdChars : "";
+                        if (jsClipId) env->ReleaseStringUTFChars(jsClipId, clipIdChars);
                         jobject kfList = fKfs ? env->GetObjectField(kfTrackObj, fKfs) : nullptr;
                         if (clipId == "main_video" && kfList) {
                             read_keyframes_for_property(env, kfList, "scale", videoSeg.kf_scale);

@@ -3045,9 +3045,57 @@ class VideoProcessor @Inject constructor(
             filters.add("${filterName}=${formatExpr(parts.joinToString("") + lastVal + closing)}")
         }
 
-        piecewise("position_x", "0.5", "crop") { "x='$it'" }
-        piecewise("position_y", "0.5", "crop") { "y='$it'" }
-        piecewise("scale", "1.0", "scale") { "'$it'" }
+        val posXExpr = buildString {
+            val sorted = kfsByProperty["position_x"]?.sortedBy { it.timeMs } ?: emptyList()
+            if (sorted.size >= 2) {
+                val points = sorted.map { kf ->
+                    val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
+                    localTime.coerceIn(0.0, durSec) to kf.value.toDouble()
+                }.distinctBy { it.first }
+                if (points.size >= 2) {
+                    for (i in 0 until points.size - 1) {
+                        val (t0, v0) = points[i]
+                        val (t1, v1) = points[i + 1]
+                        val span = (t1 - t0).coerceAtLeast(0.001)
+                        val slope = (v1 - v0) / span
+                        val expr = "($v0+($slope)*(t-$t0))"
+                        val cond = if (i == 0) "between(t,$t0,$t1)" else "gte(t,$t0)"
+                        append("if($cond,$expr,")
+                    }
+                    append(points.last().second)
+                    append(")".repeat(points.size - 1))
+                }
+            }
+        }
+        val posYExpr = buildString {
+            val sorted = kfsByProperty["position_y"]?.sortedBy { it.timeMs } ?: emptyList()
+            if (sorted.size >= 2) {
+                val points = sorted.map { kf ->
+                    val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
+                    localTime.coerceIn(0.0, durSec) to kf.value.toDouble()
+                }.distinctBy { it.first }
+                if (points.size >= 2) {
+                    for (i in 0 until points.size - 1) {
+                        val (t0, v0) = points[i]
+                        val (t1, v1) = points[i + 1]
+                        val span = (t1 - t0).coerceAtLeast(0.001)
+                        val slope = (v1 - v0) / span
+                        val expr = "($v0+($slope)*(t-$t0))"
+                        val cond = if (i == 0) "between(t,$t0,$t1)" else "gte(t,$t0)"
+                        append("if($cond,$expr,")
+                    }
+                    append(points.last().second)
+                    append(")".repeat(points.size - 1))
+                }
+            }
+        }
+        if (posXExpr.isNotBlank() || posYExpr.isNotBlank()) {
+            val xExpr = if (posXExpr.isNotBlank()) "'(iw*0.1)*($posXExpr)'" else "'0'"
+            val yExpr = if (posYExpr.isNotBlank()) "'(ih*0.1)*($posYExpr)'" else "'0'"
+            filters.add("crop=w=iw*0.9:h=ih*0.9:x=$xExpr:y=$yExpr")
+        }
+
+        piecewise("scale", "1.0", "scale") { "'iw*$it:ih*$it'" }
         piecewise("rotation", "0.0", "rotate") { "a='$it'" }
         piecewise("opacity", "1.0", "colorchannelmixer") { "aa='$it'" }
 
