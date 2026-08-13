@@ -9,6 +9,8 @@ import com.arthenica.ffmpegkit.ReturnCode
 import com.arthenica.ffmpegkit.SessionState
 import com.powercut.editor.data.TimelineClip
 import com.powercut.editor.data.VideoProject
+import com.powercut.editor.data.KeyframeTrack
+import com.powercut.editor.data.Keyframe
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -1570,6 +1572,9 @@ class VideoProcessor @Inject constructor(
                     speedFactor = c.speedFactor,
                     aspectPreset = project.aspectPreset,
                     transitionType = project.transitionType,
+                    // v7.1 Keyframe animation
+                    keyframeTracks = project.keyframeTracks,
+                    keyframeClipId = c.id,
                     onProgress = onProgress
                 )
             }
