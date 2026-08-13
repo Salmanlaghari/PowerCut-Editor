@@ -474,7 +474,7 @@ class MainActivity : ComponentActivity() {
                                         onOpenStickers = { showStickersGallery = true },
                                         onUndo = { viewModel.undo() },
                                         onRedo = { viewModel.redo() },
-                                        onUpdateKeyframeAnim = { preset -> viewModel.updateKeyframePreset(preset) }
+                                        onUpdateKeyframeAnim = { command -> viewModel.handleKeyframeAnimUpdate(command) }
                                     )
                                 } ?: viewModel.resetToHome()
                             }

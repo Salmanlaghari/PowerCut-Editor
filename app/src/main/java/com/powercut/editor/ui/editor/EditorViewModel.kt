@@ -1484,11 +1484,213 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    // ── Keyframe animation preset support ──
-    fun updateKeyframePreset(preset: String) {
+    // ── Keyframe animation support ──
+    fun handleKeyframeAnimUpdate(command: String) {
         pushUndoState()
         projectRepository.updateProject { project ->
-            project.copy(activeKeyframePreset = preset)
+            val selectedClip = project.timeline.tracks.flatMap { it.clips }.find { it.isSelected }
+                ?: project.timeline.tracks.flatMap { it.clips }.firstOrNull()
+            val clipId = selectedClip?.id ?: "main_video"
+            val clipDuration = selectedClip?.durationMs ?: project.durationMs
+            val clipStart = selectedClip?.startTimeMs ?: 0L
+            val playhead = project.timeline.playheadPosMs
+
+            fun easingFromString(s: String): KeyframeEasing = when (s.lowercase()) {
+                "linear" -> KeyframeEasing.LINEAR
+                "easein" -> KeyframeEasing.EASE_IN
+                "easeout" -> KeyframeEasing.EASE_OUT
+                "easeinout" -> KeyframeEasing.EASE_IN_OUT
+                "bounce" -> KeyframeEasing.BOUNCE
+                "elastic" -> KeyframeEasing.ELASTIC
+                "back" -> KeyframeEasing.EASE_IN_OUT
+                "spring" -> KeyframeEasing.EASE_OUT
+                else -> KeyframeEasing.LINEAR
+            }
+
+            fun buildPresetKeyframes(preset: String): List<KeyframeTrack> = when (preset.lowercase()) {
+                "zoomin", "zoomin" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "scale", value = 1.0f, easing = KeyframeEasing.EASE_IN_OUT),
+                        Keyframe(timeMs = clipDuration / 2, property = "scale", value = 1.25f, easing = KeyframeEasing.EASE_IN_OUT),
+                        Keyframe(timeMs = clipDuration, property = "scale", value = 1.5f, easing = KeyframeEasing.EASE_IN_OUT)
+                    ))
+                )
+                "zoomout", "zoomout" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "scale", value = 1.5f, easing = KeyframeEasing.EASE_IN_OUT),
+                        Keyframe(timeMs = clipDuration / 2, property = "scale", value = 1.25f, easing = KeyframeEasing.EASE_IN_OUT),
+                        Keyframe(timeMs = clipDuration, property = "scale", value = 1.0f, easing = KeyframeEasing.EASE_IN_OUT)
+                    ))
+                )
+                "panlr", "panlr" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "position_x", value = 0.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "position_x", value = 1.0f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                "panrl", "panrl" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "position_x", value = 1.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "position_x", value = 0.0f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                "spin360", "spin360" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "rotation", value = 0.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "rotation", value = 360.0f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                "fadeio", "fadeio" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "opacity", value = 0.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = (clipDuration * 0.2f).toLong(), property = "opacity", value = 1.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = (clipDuration * 0.8f).toLong(), property = "opacity", value = 1.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "opacity", value = 0.0f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                "pulse", "pulse" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "scale", value = 1.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 4, property = "scale", value = 1.1f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 2, property = "scale", value = 1.0f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration * 3 / 4, property = "scale", value = 1.1f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "scale", value = 1.0f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                "wobble", "wobble" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "position_x", value = 0.5f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 4, property = "position_x", value = 0.6f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 2, property = "position_x", value = 0.5f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration * 3 / 4, property = "position_x", value = 0.4f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "position_x", value = 0.5f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                "slideup", "slideup" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "position_y", value = 1.0f, easing = KeyframeEasing.EASE_IN_OUT),
+                        Keyframe(timeMs = clipDuration, property = "position_y", value = 0.0f, easing = KeyframeEasing.EASE_IN_OUT)
+                    ))
+                )
+                "slidedown", "slidedown" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "position_y", value = 0.0f, easing = KeyframeEasing.EASE_IN_OUT),
+                        Keyframe(timeMs = clipDuration, property = "position_y", value = 1.0f, easing = KeyframeEasing.EASE_IN_OUT)
+                    ))
+                )
+                "bouncein", "bouncein" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "scale", value = 0.0f, easing = KeyframeEasing.EASE_OUT),
+                        Keyframe(timeMs = (clipDuration * 0.6f).toLong(), property = "scale", value = 1.05f, easing = KeyframeEasing.EASE_OUT),
+                        Keyframe(timeMs = (clipDuration * 0.8f).toLong(), property = "scale", value = 0.95f, easing = KeyframeEasing.EASE_OUT),
+                        Keyframe(timeMs = clipDuration, property = "scale", value = 1.0f, easing = KeyframeEasing.EASE_OUT)
+                    ))
+                )
+                "shake", "shake" -> listOf(
+                    KeyframeTrack(clipId, listOf(
+                        Keyframe(timeMs = 0, property = "position_x", value = 0.5f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 6, property = "position_x", value = 0.55f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 3, property = "position_x", value = 0.45f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration / 2, property = "position_x", value = 0.5f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration * 2 / 3, property = "position_x", value = 0.55f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration * 5 / 6, property = "position_x", value = 0.45f, easing = KeyframeEasing.LINEAR),
+                        Keyframe(timeMs = clipDuration, property = "position_x", value = 0.5f, easing = KeyframeEasing.LINEAR)
+                    ))
+                )
+                else -> emptyList()
+            }
+
+            when {
+                command.startsWith("preset:", ignoreCase = true) -> {
+                    val presetId = command.substringAfter("preset:", "").lowercase()
+                    val newTracks = buildPresetKeyframes(presetId)
+                    val otherTracks = project.keyframeTracks.filter { it.clipId != clipId }
+                    project.copy(
+                        activeKeyframePreset = presetId,
+                        keyframeTracks = otherTracks + newTracks
+                    )
+                }
+                command.startsWith("add:", ignoreCase = true) -> {
+                    val property = command.substringAfter("add:", "").lowercase()
+                    val currentKfs = project.keyframeTracks.filter { it.clipId == clipId }.flatMap { it.keyframes }
+                    val existingForProp = currentKfs.filter { it.property == property }
+                    val value = when (property) {
+                        "scale" -> selectedClip?.scale ?: 1.0f
+                        "position_x" -> selectedClip?.posX ?: 0.5f
+                        "position_y" -> selectedClip?.posY ?: 0.5f
+                        "rotation" -> selectedClip?.rotation ?: 0f
+                        "opacity" -> selectedClip?.opacity ?: 1.0f
+                        else -> 1.0f
+                    }
+                    val newKf = Keyframe(timeMs = playhead.coerceIn(0, clipDuration), property = property, value = value, easing = KeyframeEasing.LINEAR)
+                    val updatedTracks = project.keyframeTracks.map { track ->
+                        if (track.clipId == clipId && track.keyframes.any { it.property == property }) {
+                            track.copy(keyframes = track.keyframes + newKf)
+                        } else if (track.clipId == clipId) {
+                            track.copy(keyframes = track.keyframes + newKf)
+                        } else {
+                            track
+                        }
+                    }
+                    val hasTrackForClip = updatedTracks.any { it.clipId == clipId && it.keyframes.any { kf -> kf.property == property } }
+                    val finalTracks = if (!hasTrackForClip) {
+                        updatedTracks + KeyframeTrack(clipId, listOf(newKf))
+                    } else {
+                        updatedTracks
+                    }
+                    project.copy(keyframeTracks = finalTracks)
+                }
+                command.startsWith("clear", ignoreCase = true) -> {
+                    project.copy(
+                        keyframeTracks = project.keyframeTracks.filter { it.clipId != clipId },
+                        activeKeyframePreset = "none"
+                    )
+                }
+                command.startsWith("copy:", ignoreCase = true) -> {
+                    val property = command.substringAfter("copy:", "").lowercase()
+                    val sourceKfs = project.keyframeTracks.filter { it.clipId == clipId }.flatMap { it.keyframes }.filter { it.property == property }
+                    if (sourceKfs.isNotEmpty()) {
+                        val allProps = listOf("position_x", "position_y", "scale", "rotation", "opacity").filter { it != property }
+                        val newTracks = allProps.map { prop ->
+                            KeyframeTrack(clipId, sourceKfs.map { kf -> kf.copy(property = prop) })
+                        }
+                        val otherTracks = project.keyframeTracks.filter { it.clipId != clipId }
+                        project.copy(keyframeTracks = otherTracks + newTracks)
+                    } else {
+                        project.copy(keyframeTracks = project.keyframeTracks.filter { it.clipId != clipId })
+                    }
+                }
+                command.startsWith("reverse", ignoreCase = true) -> {
+                    val currentKfs = project.keyframeTracks.filter { it.clipId == clipId }.flatMap { it.keyframes }
+                    val reversed = currentKfs.map { it.copy(timeMs = (clipDuration - it.timeMs).coerceAtLeast(0)) }.sortedBy { it.timeMs }
+                    val updated = reversed.groupBy { it.property }.map { (prop, kfs) ->
+                        KeyframeTrack(clipId, kfs)
+                    }
+                    val otherTracks = project.keyframeTracks.filter { it.clipId != clipId }
+                    project.copy(keyframeTracks = otherTracks + updated)
+                }
+                command.contains(":") -> {
+                    val parts = command.split(":")
+                    if (parts.size >= 2) {
+                        val property = parts[0].lowercase()
+                        val easingStr = parts[1]
+                        val easing = easingFromString(easingStr)
+                        val updated = project.keyframeTracks.map { track ->
+                            if (track.clipId == clipId) {
+                                track.copy(keyframes = track.keyframes.map { kf ->
+                                    if (kf.property == property) kf.copy(easing = easing) else kf
+                                })
+                            } else track
+                        }
+                        project.copy(keyframeTracks = updated)
+                    } else {
+                        project.copy(activeKeyframePreset = command)
+                    }
+                }
+                else -> {
+                    project.copy(activeKeyframePreset = command)
+                }
+            }
         }
     }
 

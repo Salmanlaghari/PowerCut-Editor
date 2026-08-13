@@ -1618,6 +1618,9 @@ class VideoProcessor @Inject constructor(
 
             val (tw, th) = getTargetDimensions(resolution, project.aspectPreset)
             val n = videoClips.size
+            val totalDurSec = videoClips.sumOf {
+                ((it.trimEndMs - it.trimStartMs) / 1000.0 / it.speedFactor.toDouble())
+            }
             val fcParts = mutableListOf<String>()
 
             // Per-clip trim + speed + scale/fps chain
@@ -1634,7 +1637,7 @@ class VideoProcessor @Inject constructor(
                     if (speed != 1.0f) append(",setpts=PTS/$speed")
                     append(",scale=$tw:$th:force_original_aspect_ratio=decrease")
                     append(",pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
-                    append(",fps=${project.targetFps ?: 30}")
+                    append(",fps=${project.targetFps}")
                     append(",format=yuv420p[v$idx]")
                 }
                 fcParts.add(vChain)
@@ -1658,7 +1661,7 @@ class VideoProcessor @Inject constructor(
             val concatAIn = aLabels.joinToString("") { "[$it]" }
             fcParts.add("${concatAIn}concat=n=$n:v=0:a=1[aout]")
 
-            // Apply project-level color grade / effects on the concatenated output
+            // Apply project-level effects on the concatenated output
             val postFilters = mutableListOf<String>()
             val colorChain = colorGradeChain(project.selectedFilter)
             if (colorChain.isNotEmpty()) postFilters.add(colorChain)
@@ -1668,15 +1671,130 @@ class VideoProcessor @Inject constructor(
             if (blendFilter.isNotEmpty()) postFilters.add(blendFilter)
             val vignetteFilter = vignetteStyleChain(project.vignetteStyle)
             if (vignetteFilter.isNotEmpty()) postFilters.add(vignetteFilter)
+            val effectFilter = effectChain(project.selectedEffect, totalDurSec, tw, th)
+            if (effectFilter.isNotEmpty()) postFilters.addAll(effectFilter)
+            val borderFilter = borderStyleChain(project.borderStyle, tw, th)
+            if (borderFilter.isNotEmpty()) postFilters.add(borderFilter)
+            if (project.rotationDegrees != 0f) {
+                postFilters.add("rotate=${project.rotationDegrees}*PI/180")
+            }
+            if (project.isFlippedHorizontal) postFilters.add("hflip")
+            if (project.isFlippedVertical) postFilters.add("vflip")
+            when (project.cropPreset.lowercase()) {
+                "16:9" -> postFilters.add("crop=w=ih*16/9:h=ih")
+                "9:16" -> postFilters.add("crop=w=ih*9/16:h=ih")
+                "1:1" -> postFilters.add("crop=w=ih:h=ih")
+                "4:5" -> postFilters.add("crop=w=ih*4/5:h=ih")
+                "3:4" -> postFilters.add("crop=w=ih*3/4:h=ih")
+                "2:3" -> postFilters.add("crop=w=ih*2/3:h=ih")
+                "21:9" -> postFilters.add("crop=w=ih*21/9:h=ih")
+            }
+            if (project.activeTextOverlay?.isNotBlank() == true) {
+                val textFilter = buildTextOverlay(project.activeTextOverlay, project.textAnimationType, totalDurSec, project.textPositionX, project.textPositionY, project.textColorHex, project.textFontSize, project.textStyleId, project.textBold, project.textItalic, project.textShadow, project.textOutline, project.textGlow, project.textNeon, project.textBgColor, project.textBgOpacity)
+                if (textFilter.isNotEmpty()) postFilters.add(textFilter)
+            }
+            val stickerFilter = stickerOverlay(project.stickerType)
+            if (stickerFilter.isNotEmpty()) postFilters.add(stickerFilter)
+            if (project.visualizerStyle != "none") {
+                val vizFilters = buildVisualizerChain(project.visualizerStyle, totalDurSec, tw, th)
+                postFilters.addAll(vizFilters)
+            }
+            val maskChain = threeDMaskChain(project.active3DShapeMask, tw, th)
+            if (maskChain.isNotEmpty()) postFilters.addAll(maskChain)
+            if (project.isReverseEnabled) postFilters.add("reverse")
+            if (project.freezeFrameMs > 0L) {
+                val freezeSec = project.freezeFrameMs / 1000.0
+                postFilters.add("tpad=start_duration=$freezeSec:start_mode=clone")
+            }
+            val transChain = transitionChain(project.transitionType, totalDurSec, tw, th)
+            if (transChain.isNotEmpty()) postFilters.addAll(transChain)
+
+            // Image editor adjustments
+            val ieParts = mutableListOf<String>()
+            if (project.imageEditorBrightness != 0f) ieParts.add("brightness=${project.imageEditorBrightness / 100.0}")
+            if (project.imageEditorContrast != 1f) ieParts.add("contrast=${project.imageEditorContrast}")
+            if (project.imageEditorExposure != 0f) ieParts.add("exposure=${project.imageEditorExposure / 50.0}")
+            if (project.imageEditorSaturation != 1f) ieParts.add("saturation=${project.imageEditorSaturation}")
+            if (project.imageEditorHighlights != 0f) ieParts.add("gamma_r=${1.0 - project.imageEditorHighlights / 200.0}")
+            if (project.imageEditorShadows != 0f) ieParts.add("gamma_g=${1.0 + project.imageEditorShadows / 200.0}")
+            if (ieParts.isNotEmpty()) postFilters.add("eq=${ieParts.joinToString(":")}")
+            if (project.imageEditorSharpen > 0f) postFilters.add("unsharp=5:5:${project.imageEditorSharpen / 10.0}:5:5:0")
+            if (project.imageEditorBlur > 0f) postFilters.add("boxblur=luma_radius=${(project.imageEditorBlur * 2).toInt()}:luma_power=1")
+            if (project.imageEditorTemperature != 0f) {
+                val r = 1.0f + project.imageEditorTemperature / 100.0f
+                val b = 1.0f - project.imageEditorTemperature / 100.0f
+                postFilters.add("colorbalance=rs=$r:bs=$b")
+            }
+            if (project.imageEditorVignette > 0f) postFilters.add("vignette=angle=PI/${(2 + project.imageEditorVignette / 10.0).toInt()}")
+            if (project.imageEditorGrain > 0f) postFilters.add("noise=alls=${(project.imageEditorGrain * 20).toInt()}:allf=t+u")
+            if (project.imageEditorFade > 0f) postFilters.add("eq=saturation=${1.0f - project.imageEditorFade / 2.0f}:contrast=${1.0f - project.imageEditorFade / 4.0f}")
+            if (project.colorLift != 0f || project.colorGamma != 0f || project.colorGain != 0f) {
+                val lift = project.colorLift / 100.0f
+                val gamma = 1.0f + project.colorGamma / 100.0f
+                val gain = 1.0f + project.colorGain / 100.0f
+                postFilters.add("colorbalance=rs=$lift:gs=$lift:bs=$lift:rm=${gain - 1.0f}:gm=${gain - 1.0f}:bm=${gain - 1.0f},eq=gamma=$gamma")
+            }
+            if (project.activeAiFeature != "none") {
+                val aiChain = com.powercut.editor.domain.premium.PremiumFeatureCatalog.videoChainFor(project.activeAiFeature)
+                if (aiChain.isNotBlank()) postFilters.add(aiChain)
+            }
+            if (project.socialPreset != "none") {
+                val socialChain = com.powercut.editor.domain.premium.PremiumFeatureCatalog.videoChainFor(project.socialPreset)
+                if (socialChain.isNotBlank()) postFilters.add(socialChain)
+            }
+            when (project.speedCurve.lowercase()) {
+                "ease-in" -> postFilters.add("setpts='PTS/(1+0.5*min(1\\,t/2))'")
+                "ease-out" -> postFilters.add("setpts='PTS/(1+0.5*max(0\\,1-(t-2)/2))'")
+                "ease-in-out" -> postFilters.add("setpts='PTS/(1+0.3*sin(t/2))'")
+                "ramp" -> postFilters.add("setpts='PTS/(1+0.1*t)'")
+                "smooth" -> postFilters.add("setpts='PTS/(1+0.2*(1-cos(t/3)))'")
+                "hero" -> postFilters.add("setpts='PTS/(1+0.4*min(1\\,t))'")
+            }
+            if (project.horizontalLetterbox) postFilters.add("pad=iw:iw*9/16:(ow-iw)/2:(oh-ih)/2:black")
+            if (project.verticalSafeZone) postFilters.add("drawbox=x=iw*0.05:y=ih*0.05:w=iw*0.9:h=ih*0.9:color=yellow@0.2:t=2")
 
             // Apply post-filters via a second pass on vout → vfinal
-            if (postFilters.isNotEmpty()) {
+            var finalVideoLabel = if (postFilters.isNotEmpty()) {
                 fcParts.add("[vout]${postFilters.joinToString(",")}[vfinal]")
-                args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
-                args.addAll(listOf("-map", "[vfinal]", "-map", "[aout]"))
+                "[vfinal]"
             } else {
-                args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
-                args.addAll(listOf("-map", "[vout]", "-map", "[aout]"))
+                "[vout]"
+            }
+            var finalAudioLabel = "[aout]"
+
+            // BGM mixing and audio effects
+            val hasBgm = !project.backgroundMusicPath.isNullOrBlank()
+            if (hasBgm) {
+                val bgmIdx = n
+                args.addAll(listOf("-i", project.backgroundMusicPath))
+                val vVol = if (project.isMuted) 0.0f else project.videoVolume
+                val duckVol = if (project.isAudioDuckingEnabled) vVol * 0.3f else vVol
+                var mainAudioChain = "[aout]volume=$duckVol"
+                if (project.voiceChangerPitch != 0f) {
+                    val factor = Math.pow(2.0, project.voiceChangerPitch / 12.0)
+                    mainAudioChain += ",asetrate=44100*${String.format("%.4f", factor)},aresample=44100,atempo=${String.format("%.4f", 1.0 / factor)}"
+                }
+                val aeChain = audioEffectChain(project.audioEffect)
+                if (aeChain.isNotEmpty()) mainAudioChain += "," + aeChain.joinToString(",")
+                if (project.isSilenceRemoverEnabled) {
+                    mainAudioChain += ",silenceremove=start_periods=1:start_duration=0:start_threshold=-50dB:start_silence=0.1:stop_periods=-1:stop_duration=0.5:stop_threshold=-50dB:stop_silence=0.2"
+                }
+                fcParts.add("$mainAudioChain[a1]")
+                fcParts.add("[$bgmIdx:a]volume=${project.backgroundMusicVolume},atrim=duration=$totalDurSec[bgm]")
+                fcParts.add("[a1][bgm]amix=inputs=2:duration=first[aoutmixed]")
+                finalAudioLabel = "[aoutmixed]"
+            } else if (project.isMuted || project.videoVolume == 0f) {
+                finalAudioLabel = null
+            }
+
+            // Add the unified -filter_complex
+            args.addAll(listOf("-filter_complex", fcParts.joinToString(";")))
+            // Add -map flags AFTER -filter_complex
+            args.addAll(listOf("-map", finalVideoLabel))
+            if (finalAudioLabel != null) {
+                args.addAll(listOf("-map", finalAudioLabel))
+            } else {
+                args.add("-an")
             }
 
             // Encoding settings (same proven pipeline as processAndExport)
@@ -1694,7 +1812,7 @@ class VideoProcessor @Inject constructor(
                     "-profile:v", "high", "-level", "4.0",
                     "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-map_metadata", "0"))
             }
-            if (!project.isMuted) {
+            if (finalAudioLabel != null) {
                 args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
             } else {
                 args.add("-an")
@@ -1731,14 +1849,14 @@ class VideoProcessor @Inject constructor(
         return when (f) {
             "none" -> ""
             "sepia" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"
-            "grayscale", "mono", "black_white" -> "format=gray,lut=a=val"
+            "grayscale", "mono", "black_white" -> "hue=s=0"
             "invert", "negative" -> "negate"
             "warm" -> "eq=saturation=1.1,colorbalance=rs=0.08:gs=0.02:rm=0.05"
             "cool" -> "eq=saturation=1.05,colorbalance=bs=0.1:gm=-0.03:bm=0.05"
             "vintage" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.8:contrast=1.1:gamma=1.1,vignette=angle=PI/4"
-            "dramatic" -> "eq=contrast=1.4:saturation=1.3:gamma=0.9,curves=preset=strong_contrast"
+            "dramatic" -> "eq=contrast=1.4:saturation=1.3:gamma=0.9"
             "vivid" -> "eq=saturation=1.6:contrast=1.2"
-            "noir" -> "format=gray,eq=contrast=1.5:gamma=0.8,vignette=angle=PI/3"
+            "noir" -> "hue=s=0,eq=contrast=1.5:gamma=0.8,vignette=angle=PI/3"
             "bloom" -> "eq=brightness=0.05:contrast=1.1,boxblur=luma_radius=5:luma_power=1,tblend=all_mode=screen"
             "tealorange", "teal_orange" -> "colorbalance=rs=0.12:gs=-0.05:bs=0.05:rm=0.1:bm=0.08,eq=saturation=1.3:contrast=1.15"
             "pastel" -> "eq=saturation=0.7:brightness=0.08:contrast=0.95,colorbalance=rs=0.03:gs=0.02:bs=0.05"
@@ -1750,25 +1868,25 @@ class VideoProcessor @Inject constructor(
             "rose" -> "colorbalance=rs=0.1:rm=0.08:gs=-0.02:bs=0.04,eq=saturation=1.3:brightness=0.03"
             "golden" -> "colorbalance=rs=0.12:rm=0.1:gs=0.03,eq=saturation=1.35:contrast=1.1:gamma=1.05,vignette=angle=PI/4"
             "mist" -> "eq=contrast=0.9:saturation=0.8:brightness=0.1,boxblur=luma_radius=3:luma_power=1,tblend=all_mode=screen:all_opacity=0.3"
-            "cinematic" -> "curves=preset=strong_contrast,eq=saturation=0.85:contrast=1.2:gamma=0.95,colorbalance=rs=0.04:bs=0.06"
+            "cinematic" -> "eq=saturation=0.85:contrast=1.2:gamma=0.95,colorbalance=rs=0.04:bs=0.06"
             "teal" -> "colorbalance=bs=0.15:bm=0.1:gs=0.03,eq=saturation=1.1:contrast=1.1"
             "orange" -> "colorbalance=rs=0.15:rm=0.12,eq=saturation=1.2:contrast=1.1:gamma=1.05"
             "lomo" -> "vignette=angle=PI/3,eq=saturation=1.5:contrast=1.3:gamma=0.9"
             "polaroid" -> "eq=saturation=0.7:contrast=0.95:brightness=0.08,colorbalance=rs=0.05:bs=0.03,vignette=angle=PI/4"
             "holga" -> "vignette=angle=PI/2,eq=saturation=1.3:contrast=1.1,noise=alls=10:allf=t"
             "diana" -> "eq=saturation=1.4:contrast=0.9:vignette=angle=PI/2"
-            "film" -> "curves=preset=vintage,eq=saturation=0.9:contrast=1.05,noise=alls=8:allf=t"
-            "super8" -> "curves=preset=vintage,eq=saturation=1.2:brightness=0.05,noise=alls=15:allf=t,vignette=angle=PI/3"
-            "vhs_tape" -> "curves=preset=vintage,eq=saturation=1.1:contrast=0.95,noise=alls=12:allf=t"
+            "film" -> "eq=saturation=0.9:contrast=1.05,noise=alls=8:allf=t"
+            "super8" -> "eq=saturation=1.2:brightness=0.05,noise=alls=15:allf=t,vignette=angle=PI/3"
+            "vhs_tape" -> "eq=saturation=1.1:contrast=0.95,noise=alls=12:allf=t"
             "kodak" -> "eq=saturation=1.1:contrast=1.05:gamma=1.05,colorbalance=rs=0.05:gs=0.02"
             "fuji" -> "eq=saturation=1.15:contrast=1.1,colorbalance=bs=0.04:gs=0.03"
             "agfa" -> "eq=saturation=1.2:contrast=1.1,colorbalance=rs=0.06:bs=0.03"
-            "ilford" -> "format=gray,eq=contrast=1.2:gamma=1.05"
+            "ilford" -> "hue=s=0,eq=contrast=1.2:gamma=1.05"
             "portra" -> "eq=saturation=0.95:contrast=1.05:gamma=1.02,colorbalance=rs=0.04:gs=0.02:bs=0.02"
             "velvia" -> "eq=saturation=1.5:contrast=1.2"
             "provia" -> "eq=saturation=1.1:contrast=1.05"
             "astia" -> "eq=saturation=1.0:contrast=1.0:gamma=1.05,colorbalance=rs=0.03:bs=0.03"
-            "monochrome" -> "format=gray,eq=contrast=1.3:gamma=0.9"
+            "monochrome" -> "hue=s=0,eq=contrast=1.3:gamma=0.9"
             "high_contrast" -> "eq=contrast=1.5:saturation=1.1"
             "low_contrast" -> "eq=contrast=0.85:saturation=0.95"
             "high_saturation" -> "eq=saturation=2.0:contrast=1.1"
@@ -1780,8 +1898,8 @@ class VideoProcessor @Inject constructor(
             "dreamy" -> "eq=saturation=1.1:brightness=0.08:contrast=0.95,boxblur=luma_radius=4:luma_power=1,tblend=all_mode=screen:all_opacity=0.3"
             "glow" -> "eq=brightness=0.1:contrast=1.1,boxblur=luma_radius=6:luma_power=1,tblend=all_mode=screen:all_opacity=0.4"
             "haze" -> "eq=contrast=0.85:saturation=0.8:brightness=0.12,boxblur=luma_radius=3:luma_power=1"
-            "matte" -> "eq=saturation=0.85:contrast=0.9:brightness=0.05,curves=preset=lighter"
-            "litho" -> "format=gray,eq=contrast=1.6:gamma=0.8,curves=preset=strong_contrast"
+            "matte" -> "eq=saturation=0.85:contrast=0.9:brightness=0.05"
+            "litho" -> "hue=s=0,eq=contrast=1.6:gamma=0.8"
             "sepia_warm" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=1.1"
             "sepia_cool" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=saturation=0.9"
             "red_boost" -> "colorbalance=rs=0.2:rm=0.15,eq=saturation=1.2:contrast=1.1"
@@ -1798,7 +1916,7 @@ class VideoProcessor @Inject constructor(
             "neon_city" -> "colorbalance=rs=0.15:bs=0.2:rm=0.1:bm=0.12,eq=saturation=1.8:contrast=1.3"
             "retro_wave" -> "colorbalance=rs=0.18:bs=0.2:rm=0.1,eq=saturation=1.6:contrast=1.2,hue=h=-10"
             "synthwave" -> "colorbalance=rs=0.15:bs=0.22,eq=saturation=1.7:contrast=1.25,hue=h=-15"
-            "analog" -> "curves=preset=vintage,eq=saturation=0.95:contrast=1.05,noise=alls=6:allf=t"
+            "analog" -> "eq=saturation=0.95:contrast=1.05,noise=alls=6:allf=t"
             "tokyo" -> "colorbalance=rs=0.12:bs=0.1:rm=0.08,eq=saturation=1.4:contrast=1.15"
             "nyc" -> "eq=saturation=0.9:contrast=1.3:gamma=0.95,colorbalance=bs=0.05"
             "paris" -> "eq=saturation=1.05:contrast=1.1:gamma=1.02,colorbalance=rs=0.04:bs=0.03"
@@ -1809,6 +1927,18 @@ class VideoProcessor @Inject constructor(
             "winter" -> "eq=saturation=0.85:contrast=1.1,colorbalance=bs=0.1:bm=0.05"
             "spring" -> "colorbalance=gs=0.08:bs=0.05:rs=0.03,eq=saturation=1.2:brightness=0.05"
             "summer" -> "eq=saturation=1.3:contrast=1.1:brightness=0.05,colorbalance=rs=0.05:bs=0.03"
+            "vibrant" -> "eq=saturation=1.8:contrast=1.15"
+            "moody" -> "eq=saturation=0.7:contrast=1.4:brightness=-0.05,vignette=angle=PI/3"
+            "ethereal" -> "eq=saturation=1.1:brightness=0.12:contrast=0.9,boxblur=luma_radius=2:luma_power=1"
+            "gritty" -> "eq=saturation=0.8:contrast=1.5:brightness=-0.03,noise=alls=15:allf=t"
+            "futuristic" -> "hue=h=180,eq=saturation=1.6:contrast=1.2"
+            "romantic" -> "eq=saturation=1.1:brightness=0.06:contrast=0.95,colorbalance=rs=0.06:bs=0.02"
+            "horror" -> "eq=saturation=0.6:brightness=-0.1:contrast=1.4,colorbalance=gs=-0.05:bs=-0.03"
+            "dream" -> "eq=saturation=1.2:brightness=0.1:contrast=0.9,boxblur=luma_radius=3:luma_power=1"
+            "noir_classic" -> "hue=s=0,eq=contrast=1.4:gamma=0.85,vignette=angle=PI/2"
+            "retro_film" -> "eq=saturation=1.05:contrast=1.08:gamma=1.03,noise=alls=10:allf=t,colorbalance=rs=0.03"
+            "candy" -> "colorbalance=rs=0.08:bs=0.1:gs=0.02,eq=saturation=2.0:brightness=0.04"
+            "noir_modern" -> "hue=s=0,eq=contrast=1.6:gamma=0.9,colorbalance=bs=0.04"
             else -> ""
         }
     }
