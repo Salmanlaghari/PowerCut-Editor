@@ -140,21 +140,25 @@ public:
                         if (match) continue;
                     }
 
-                    // Apply effects
+                    // Apply effects (with keyframe support)
                     for (size_t ei = 0; ei < seg.effects.size(); ++ei) {
                         const EffectNode& eff = seg.effects[ei];
+                        double intensity = eff.intensity;
+                        if (!eff.params.empty()) {
+                            intensity = interpolate_keyframes(eff.params, t);
+                        }
+                        float fi = (float)intensity;
                         if (eff.type == EffectNode::COLOR_GRADE) {
-                            float f = (float)eff.intensity;
-                            float contrast = 1.0f + f * 0.5f;
-                            r = (uint8_t)std::max(0, std::min(255, (int)(((float)r - 128.0f) * contrast + 128.0f + f * 20.0f)));
-                            g = (uint8_t)std::max(0, std::min(255, (int)(((float)g - 128.0f) * contrast + 128.0f + f * 20.0f)));
-                            b = (uint8_t)std::max(0, std::min(255, (int)(((float)b - 128.0f) * contrast + 128.0f + f * 20.0f)));
+                            float contrast = 1.0f + fi * 0.5f;
+                            r = (uint8_t)std::max(0, std::min(255, (int)(((float)r - 128.0f) * contrast + 128.0f + fi * 20.0f)));
+                            g = (uint8_t)std::max(0, std::min(255, (int)(((float)g - 128.0f) * contrast + 128.0f + fi * 20.0f)));
+                            b = (uint8_t)std::max(0, std::min(255, (int)(((float)b - 128.0f) * contrast + 128.0f + fi * 20.0f)));
                         }
                         if (eff.type == EffectNode::VIGNETTE) {
                             float nx = (float)dx / dw - 0.5f;
                             float ny = (float)dy / dh - 0.5f;
                             float dist = (float)sqrt(nx * nx + ny * ny) * 2.0f;
-                            float vig = 1.0f - dist * (float)eff.intensity;
+                            float vig = 1.0f - dist * fi;
                             if (vig < 0.0f) vig = 0.0f;
                             r = (uint8_t)(r * vig);
                             g = (uint8_t)(g * vig);
@@ -165,19 +169,70 @@ public:
                                 float sr = 0.393f * r + 0.769f * g + 0.189f * b;
                                 float sg = 0.349f * r + 0.686f * g + 0.168f * b;
                                 float sb = 0.272f * r + 0.534f * g + 0.131f * b;
-                                float i = (float)eff.intensity;
-                                r = (uint8_t)std::max(0, std::min(255, (int)(r + (sr - r) * i)));
-                                g = (uint8_t)std::max(0, std::min(255, (int)(g + (sg - g) * i)));
-                                b = (uint8_t)std::max(0, std::min(255, (int)(b + (sb - b) * i)));
+                                r = (uint8_t)std::max(0, std::min(255, (int)(r + (sr - r) * fi)));
+                                g = (uint8_t)std::max(0, std::min(255, (int)(g + (sg - g) * fi)));
+                                b = (uint8_t)std::max(0, std::min(255, (int)(b + (sb - b) * fi)));
                             }
                             if (eff.name.find("grayscale") != std::string::npos ||
                                 eff.name.find("mono") != std::string::npos) {
                                 float gray = 0.299f * r + 0.587f * g + 0.114f * b;
-                                float i = (float)eff.intensity;
-                                r = (uint8_t)std::max(0, std::min(255, (int)(r + (gray - r) * i)));
-                                g = (uint8_t)std::max(0, std::min(255, (int)(g + (gray - g) * i)));
-                                b = (uint8_t)std::max(0, std::min(255, (int)(b + (gray - b) * i)));
+                                r = (uint8_t)std::max(0, std::min(255, (int)(r + (gray - r) * fi)));
+                                g = (uint8_t)std::max(0, std::min(255, (int)(g + (gray - g) * fi)));
+                                b = (uint8_t)std::max(0, std::min(255, (int)(b + (gray - b) * fi)));
                             }
+                        }
+                        if (eff.type == EffectNode::BLUR && fi > 0.001f) {
+                            float blurR = fi * 4.0f;
+                            int kr = (int)blurR;
+                            if (kr > 0) {
+                                uint8_t br = 0, bg = 0, bb = 0, ba = 0;
+                                int count = 0;
+                                for (int ky = -kr; ky <= kr; ++ky) {
+                                    for (int kx = -kr; kx <= kr; ++kx) {
+                                        int nsx = sx + kx, nsy = sy + ky;
+                                        if (nsx >= 0 && nsx < src->width && nsy >= 0 && nsy < src->height) {
+                                            const uint8_t* nsp = src->data + nsy * src->stride + nsx * 4;
+                                            br += nsp[0]; bg += nsp[1]; bb += nsp[2]; ba += nsp[3];
+                                            ++count;
+                                        }
+                                    }
+                                }
+                                if (count > 0) {
+                                    r = (uint8_t)(br / count); g = (uint8_t)(bg / count);
+                                    b = (uint8_t)(bb / count); a = (uint8_t)(ba / count);
+                                }
+                            }
+                        }
+                        if (eff.type == EffectNode::SHARPEN && fi > 0.001f) {
+                            float amount = fi * 0.5f;
+                            float sum_r = 0.0f, sum_g = 0.0f, sum_b = 0.0f;
+                            int count = 0;
+                            for (int ky = -1; ky <= 1; ++ky) {
+                                for (int kx = -1; kx <= 1; ++kx) {
+                                    if (kx == 0 && ky == 0) continue;
+                                    int nsx = sx + kx, nsy = sy + ky;
+                                    if (nsx >= 0 && nsx < src->width && nsy >= 0 && nsy < src->height) {
+                                        const uint8_t* nsp = src->data + nsy * src->stride + nsx * 4;
+                                        sum_r += nsp[0]; sum_g += nsp[1]; sum_b += nsp[2];
+                                        ++count;
+                                    }
+                                }
+                            }
+                            if (count > 0) {
+                                float avg_r = sum_r / count, avg_g = sum_g / count, avg_b = sum_b / count;
+                                float nr = r * (1.0f + 8.0f * amount) - avg_r * amount;
+                                float ng = g * (1.0f + 8.0f * amount) - avg_g * amount;
+                                float nb = b * (1.0f + 8.0f * amount) - avg_b * amount;
+                                r = (uint8_t)std::max(0, std::min(255, (int)nr));
+                                g = (uint8_t)std::max(0, std::min(255, (int)ng));
+                                b = (uint8_t)std::max(0, std::min(255, (int)nb));
+                            }
+                        }
+                        if (eff.type == EffectNode::GRAIN && fi > 0.001f) {
+                            float grain = ((float)rand() / RAND_MAX - 0.5f) * fi * 80.0f;
+                            r = (uint8_t)std::max(0, std::min(255, (int)(r + grain)));
+                            g = (uint8_t)std::max(0, std::min(255, (int)(g + grain)));
+                            b = (uint8_t)std::max(0, std::min(255, (int)(b + grain)));
                         }
                     }
 

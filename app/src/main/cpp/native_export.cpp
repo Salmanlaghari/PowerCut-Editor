@@ -228,6 +228,78 @@ static jint read_int_field(JNIEnv* env, jobject obj, jclass cls, const char* fie
     return fid ? env->GetIntField(obj, fid) : 0;
 }
 
+// ===========================================================================
+// JNI list reader helpers
+// ===========================================================================
+static std::vector<jobject> read_object_list(JNIEnv* env, jobject obj, jclass cls, const char* fieldName) {
+    std::vector<jobject> result;
+    jfieldID fid = env->GetFieldID(cls, fieldName, "Ljava/util/List;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return result; }
+    if (!fid) return result;
+    jobject listObj = env->GetObjectField(obj, fid);
+    if (!listObj) return result;
+    jclass listClass = env->GetObjectClass(listObj);
+    jmethodID iteratorMid = env->GetMethodID(listClass, "iterator", "()Ljava/util/Iterator;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(listObj); return result; }
+    jobject iterator = env->CallObjectMethod(listObj, iteratorMid);
+    if (env->ExceptionCheck() || !iterator) { env->DeleteLocalRef(listObj); if (iterator) env->DeleteLocalRef(iterator); return result; }
+    jclass iterClass = env->GetObjectClass(iterator);
+    jmethodID hasNextMid = env->GetMethodID(iterClass, "hasNext", "()Z");
+    jmethodID nextMid = env->GetMethodID(iterClass, "next", "()Ljava/lang/Object;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(listObj); env->DeleteLocalRef(iterator); return result; }
+    while (env->CallBooleanMethod(iterator, hasNextMid)) {
+        jobject item = env->CallObjectMethod(iterator, nextMid);
+        if (item) result.push_back(env->NewLocalRef(item));
+    }
+    env->DeleteLocalRef(listObj);
+    env->DeleteLocalRef(iterator);
+    return result;
+}
+
+// ===========================================================================
+// v7.1 Keyframe reading helpers
+// ===========================================================================
+static void read_keyframes_for_property(
+    JNIEnv* env, jobject kfListObj,
+    const char* propertyName,
+    std::vector<Keyframe>& outKfs
+) {
+    if (!kfListObj) return;
+    jclass listCls = env->GetObjectClass(kfListObj);
+    jmethodID iterMid = env->GetMethodID(listCls, "iterator", "()Ljava/util/Iterator;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+    jobject iter = env->CallObjectMethod(kfListObj, iterMid);
+    if (env->ExceptionCheck() || !iter) { if (iter) env->DeleteLocalRef(iter); return; }
+    jclass iterCls = env->GetObjectClass(iter);
+    jmethodID hasNext = env->GetMethodID(iterCls, "hasNext", "()Z");
+    jmethodID next = env->GetMethodID(iterCls, "next", "()Ljava/lang/Object;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(iter); return; }
+    while (env->CallBooleanMethod(iter, hasNext)) {
+        jobject kfObj = env->CallObjectMethod(iter, next);
+        if (!kfObj) continue;
+        jclass kfCls = env->GetObjectClass(kfObj);
+        jfieldID fTime = env->GetFieldID(kfCls, "timeMs", "J");
+        jfieldID fValue = env->GetFieldID(kfCls, "value", "F");
+        jfieldID fProp = env->GetFieldID(kfCls, "property", "Ljava/lang/String;");
+        if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(kfObj); continue; }
+        if (!fTime || !fValue || !fProp) { env->DeleteLocalRef(kfObj); continue; }
+        jlong timeMs = fTime ? env->GetLongField(kfObj, fTime) : 0;
+        float value = fValue ? env->GetFloatField(kfObj, fValue) : 0.0f;
+        jstring jsProp = fProp ? (jstring)env->GetObjectField(kfObj, fProp) : nullptr;
+        const char* propChars = jsProp ? env->GetStringUTFChars(jsProp, nullptr) : "";
+        std::string prop = propChars ? propChars : "";
+        if (jsProp) env->ReleaseStringUTFChars(jsProp, propChars);
+        if (prop == propertyName) {
+            Keyframe kf;
+            kf.time = (TimeMicros)(timeMs * 1000);
+            kf.value = (double)value;
+            outKfs.push_back(kf);
+        }
+        env->DeleteLocalRef(kfObj);
+    }
+    env->DeleteLocalRef(iter);
+}
+
 // ---------------------------------------------------------------------------
 // Helper: read an ExportPreset from the Kotlin ExportPreset data class.
 // ---------------------------------------------------------------------------
@@ -422,6 +494,51 @@ static PowerCutDAG* build_dag_from_project(JNIEnv* env, jobject projectObj) {
     }
     if (selectedEffect != "none" && !selectedEffect.empty()) {
         add_effect(EffectNode::FILTER, selectedEffect, 1.0);
+    }
+
+    // v7.1: Read keyframe tracks and apply animated transforms to video segment
+    jobject kfTracksList = nullptr;
+    jfieldID fKfTracks = env->GetFieldID(cls, "keyframeTracks", "Ljava/util/List;");
+    if (!env->ExceptionCheck() && fKfTracks) {
+        kfTracksList = env->GetObjectField(projectObj, fKfTracks);
+    }
+    if (kfTracksList && !env->ExceptionCheck()) {
+        jclass listCls = env->GetObjectClass(kfTracksList);
+        jmethodID iterMid = env->GetMethodID(listCls, "iterator", "()Ljava/util/Iterator;");
+        if (!env->ExceptionCheck() && iterMid) {
+            jobject iter = env->CallObjectMethod(kfTracksList, iterMid);
+            if (iter && !env->ExceptionCheck()) {
+                jclass iterCls = env->GetObjectClass(iter);
+                jmethodID hasNext = env->GetMethodID(iterCls, "hasNext", "()Z");
+                jmethodID next = env->GetMethodID(iterCls, "next", "()Ljava/lang/Object;");
+                if (!env->ExceptionCheck() && hasNext && next) {
+                    while (env->CallBooleanMethod(iter, hasNext)) {
+                        jobject kfTrackObj = env->CallObjectMethod(iter, next);
+                        if (!kfTrackObj) continue;
+                        jclass kfTrackCls = env->GetObjectClass(kfTrackObj);
+                        jfieldID fClipId = env->GetFieldID(kfTrackCls, "clipId", "Ljava/lang/String;");
+                        jfieldID fKfs = env->GetFieldID(kfTrackCls, "keyframes", "Ljava/util/List;");
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(kfTrackObj); continue; }
+                        jstring jsClipId = fClipId ? (jstring)env->GetObjectField(kfTrackObj, fClipId) : nullptr;
+                        const char* clipIdChars = jsClipId ? env->GetStringUTFChars(jsClipId, nullptr) : "";
+                        std::string clipId = clipIdChars ? clipIdChars : "";
+                        if (jsClipId) env->ReleaseStringUTFChars(jsClipId, clipIdChars);
+                        jobject kfList = fKfs ? env->GetObjectField(kfTrackObj, fKfs) : nullptr;
+                        if (clipId == "main_video" && kfList) {
+                            read_keyframes_for_property(env, kfList, "scale", videoSeg.kf_scale);
+                            read_keyframes_for_property(env, kfList, "position_x", videoSeg.kf_pos_x);
+                            read_keyframes_for_property(env, kfList, "position_y", videoSeg.kf_pos_y);
+                            read_keyframes_for_property(env, kfList, "rotation", videoSeg.kf_rotation);
+                            read_keyframes_for_property(env, kfList, "opacity", videoSeg.kf_opacity);
+                        }
+                        if (kfList) env->DeleteLocalRef(kfList);
+                        env->DeleteLocalRef(kfTrackObj);
+                    }
+                }
+                env->DeleteLocalRef(iter);
+            }
+        }
+        env->DeleteLocalRef(kfTracksList);
     }
 
     segments.push_back(videoSeg);
