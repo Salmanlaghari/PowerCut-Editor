@@ -661,6 +661,9 @@ class ExportManager @Inject constructor(
                     isHighBitrateEnabled = project.isHighBitrateEnabled,
                     activeAiFeature = project.activeAiFeature,
                     socialPreset = project.socialPreset,
+                    // v7.1 Keyframe animation
+                    keyframeTracks = project.keyframeTracks,
+                    keyframeClipId = "",
                     onProgress = { pct -> updateProgress(pct) }
                 )
             }
@@ -769,6 +772,9 @@ class ExportManager @Inject constructor(
                         isHighBitrateEnabled = project.isHighBitrateEnabled,
                         activeAiFeature = project.activeAiFeature,
                         socialPreset = project.socialPreset,
+                        // v7.1 Keyframe animation
+                        keyframeTracks = project.keyframeTracks,
+                        keyframeClipId = "",
                         onProgress = { pct -> updateProgress(pct) }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {

@@ -228,6 +228,34 @@ static jint read_int_field(JNIEnv* env, jobject obj, jclass cls, const char* fie
     return fid ? env->GetIntField(obj, fid) : 0;
 }
 
+// ===========================================================================
+// JNI list reader helpers
+// ===========================================================================
+static std::vector<jobject> read_object_list(JNIEnv* env, jobject obj, jclass cls, const char* fieldName) {
+    std::vector<jobject> result;
+    jfieldID fid = env->GetFieldID(cls, fieldName, "Ljava/util/List;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return result; }
+    if (!fid) return result;
+    jobject listObj = env->GetObjectField(obj, fid);
+    if (!listObj) return result;
+    jclass listClass = env->GetObjectClass(listObj);
+    jmethodID iteratorMid = env->GetMethodID(listClass, "iterator", "()Ljava/util/Iterator;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(listObj); return result; }
+    jobject iterator = env->CallObjectMethod(listObj, iteratorMid);
+    if (env->ExceptionCheck() || !iterator) { env->DeleteLocalRef(listObj); if (iterator) env->DeleteLocalRef(iterator); return result; }
+    jclass iterClass = env->GetObjectClass(iterator);
+    jmethodID hasNextMid = env->GetMethodID(iterClass, "hasNext", "()Z");
+    jmethodID nextMid = env->GetMethodID(iterClass, "next", "()Ljava/lang/Object;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(listObj); env->DeleteLocalRef(iterator); return result; }
+    while (env->CallBooleanMethod(iterator, hasNextMid)) {
+        jobject item = env->CallObjectMethod(iterator, nextMid);
+        if (item) result.push_back(env->NewLocalRef(item));
+    }
+    env->DeleteLocalRef(listObj);
+    env->DeleteLocalRef(iterator);
+    return result;
+}
+
 // ---------------------------------------------------------------------------
 // Helper: read an ExportPreset from the Kotlin ExportPreset data class.
 // ---------------------------------------------------------------------------

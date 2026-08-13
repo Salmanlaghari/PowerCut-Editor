@@ -117,6 +117,12 @@ struct DAGSegment {
     double pos_y_at(TimeMicros t) const { return interpolate_keyframes(kf_pos_y, t); }
     double rotation_at(TimeMicros t) const { return interpolate_keyframes(kf_rotation, t); }
     double opacity_at(TimeMicros t) const { return interpolate_keyframes(kf_opacity, t); }
+
+    // Resolve animated effect param at time t. If no keyframes, return default_val.
+    double effect_param_at(const std::vector<Keyframe>& kfs, TimeMicros t, double default_val = 1.0) const {
+        if (kfs.empty()) return default_val;
+        return interpolate_keyframes(kfs, t);
+    }
 };
 
 // ---- Audio segment ---------------------------------------------------------

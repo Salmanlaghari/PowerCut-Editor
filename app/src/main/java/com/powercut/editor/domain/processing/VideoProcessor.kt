@@ -808,6 +808,10 @@ class VideoProcessor @Inject constructor(
         isHighBitrateEnabled: Boolean = false,
         activeAiFeature: String = "none",
         socialPreset: String = "none",
+        // ── v7.1 KEYFRAME ANIMATION ──
+        keyframeTracks: List<KeyframeTrack> = emptyList(),
+        keyframeClipId: String = "",
+        // ── Progress callback ──
         onProgress: (Int) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
         if (isAudioFile(inputPath)) {
@@ -1114,6 +1118,24 @@ class VideoProcessor @Inject constructor(
         // real FFmpeg grade (was a single generic cinematic-bars placeholder).
         if (activeTemplateId != "none" && activeTemplateId != "free") {
             vfFilters.addAll(templateChain(activeTemplateId))
+        }
+
+        // ── v7.1 KEYFRAME ANIMATION ──────────────────────────────────────
+        // Inject user-defined keyframe expressions into the video filter chain
+        // so that position, scale, rotation, and opacity animate over time.
+        val filteredKeyframeTracks = if (keyframeClipId.isNotBlank()) {
+            keyframeTracks.filter { it.clipId == keyframeClipId }
+        } else {
+            keyframeTracks
+        }
+        if (filteredKeyframeTracks.isNotEmpty()) {
+            val kfFilters = buildKeyframeExpressions(
+                keyframeTracks = filteredKeyframeTracks,
+                clipStartTimeMs = startMs,
+                clipDurationMs = (endMs - startMs),
+                clipSpeedFactor = speedFactor
+            )
+            vfFilters.addAll(kfFilters)
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -2976,6 +2998,60 @@ class VideoProcessor @Inject constructor(
             }
             else -> ""
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    //  KEYFRAME ANIMATION EXPRESSIONS (v7.1 — real keyframes to FFmpeg)
+    // ════════════════════════════════════════════════════════════════════════════
+    //
+    // Converts per-clip KeyframeTrack data into real FFmpeg time-based
+    // expressions so that user-defined keyframes animate correctly in export.
+    // Supports: position_x, position_y, scale, rotation, opacity.
+    fun buildKeyframeExpressions(
+        keyframeTracks: List<KeyframeTrack>,
+        clipStartTimeMs: Long,
+        clipDurationMs: Long,
+        clipSpeedFactor: Float = 1.0f
+    ): List<String> {
+        if (keyframeTracks.isEmpty()) return emptyList()
+        val filters = mutableListOf<String>()
+        val startSec = clipStartTimeMs / 1000.0
+        val durSec = (clipDurationMs / 1000.0).coerceAtLeast(0.1)
+        val speed = clipSpeedFactor.coerceAtLeast(0.1f).coerceAtMost(10.0f).toDouble()
+
+        val kfsByProperty = keyframeTracks.flatMap { it.keyframes }.groupBy { it.property }
+
+        fun piecewise(property: String, default: String, filterName: String, formatExpr: (String) -> String) {
+            val sorted = kfsByProperty[property]?.sortedBy { it.timeMs } ?: return
+            if (sorted.size < 2) return
+            val points = sorted.map { kf ->
+                val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
+                localTime.coerceIn(0.0, durSec) to kf.value.toDouble()
+            }.distinctBy { it.first }
+
+            if (points.size < 2) return
+            val parts = mutableListOf<String>()
+            for (i in 0 until points.size - 1) {
+                val (t0, v0) = points[i]
+                val (t1, v1) = points[i + 1]
+                val span = (t1 - t0).coerceAtLeast(0.001)
+                val slope = (v1 - v0) / span
+                val expr = "($v0+($slope)*(t-$t0))"
+                val cond = if (i == 0) "between(t,$t0,$t1)" else "gte(t,$t0)"
+                parts.add("if($cond,$expr,")
+            }
+            val lastVal = points.last().second
+            val closing = ")".repeat(points.size - 1)
+            filters.add("${filterName}=${formatExpr(parts.joinToString("") + lastVal + closing)}")
+        }
+
+        piecewise("position_x", "0.5", "crop") { "x='$it'" }
+        piecewise("position_y", "0.5", "crop") { "y='$it'" }
+        piecewise("scale", "1.0", "scale") { "'$it'" }
+        piecewise("rotation", "0.0", "rotate") { "a='$it'" }
+        piecewise("opacity", "1.0", "colorchannelmixer") { "aa='$it'" }
+
+        return filters
     }
 
     // ════════════════════════════════════════════════════════════════════════════
