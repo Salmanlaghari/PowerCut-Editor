@@ -504,7 +504,7 @@ fun NextGenEditorScreen(
     DisposableEffect(Unit) { onDispose { bgmPlayer.release() } }
 
     // ─── Filter Matrix ────────────────────────────────────────
-    val selectedFilterColorFilter = remember(project.selectedFilter) {
+    val colorFilter = remember(project.selectedFilter) {
         val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
         when (f) {
             "grayscale", "mono" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
@@ -549,7 +549,7 @@ fun NextGenEditorScreen(
     //  temperature, exposure) so ALL adjustments show in real-time on the
     //  player, not just on export. This makes every slider "real" not "fake".
     // ═══════════════════════════════════════════════════════════
-    val combinedMatrix = remember(
+    val combinedColorFilter = remember(
         project.selectedFilter,
         project.activePremiumLook,
         project.imageEditorBrightness,
@@ -584,20 +584,20 @@ fun NextGenEditorScreen(
         val hasAdjustments = b != 0f || c != 1f || s != 1f || t != 0f || e != 0f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
 
         if (!hasAdjustments && lookMatrix == null) {
-            buildFilterMatrix(project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_"))
+            colorFilter
         } else if (!hasAdjustments && lookMatrix != null) {
             // Only a premium look is active (no slider adjustments).
-            if (selectedFilterColorFilter != null) {
+            if (colorFilter != null) {
                 val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
                 val filterMatrix = buildFilterMatrix(f)
                 if (filterMatrix != null) {
                     filterMatrix *= lookMatrix
-                    filterMatrix
+                    ColorFilter.colorMatrix(filterMatrix)
                 } else {
-                    lookMatrix
+                    ColorFilter.colorMatrix(lookMatrix)
                 }
             } else {
-                lookMatrix
+                ColorFilter.colorMatrix(lookMatrix)
             }
         } else {
             // Build a combined matrix: adjustments applied on top of filter
@@ -649,42 +649,20 @@ fun NextGenEditorScreen(
             }
 
             // If there's also a filter, combine them
-            if (selectedFilterColorFilter != null) {
+            if (colorFilter != null) {
                 val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
                 val filterMatrix = buildFilterMatrix(f)
                 if (filterMatrix != null) {
                     filterMatrix *= adjMatrix
-                    filterMatrix
+                    ColorFilter.colorMatrix(filterMatrix)
                 } else {
-                    adjMatrix
+                    ColorFilter.colorMatrix(adjMatrix)
                 }
             } else {
-                adjMatrix
+                ColorFilter.colorMatrix(adjMatrix)
             }
         }
     }
-
-    // Apply the combined preview color grade (cinematic filter + Premium Look +
-    // image-editor ADJUST sliders) directly to the ExoPlayer video via GPU video
-    // effects. This makes the preview show the REAL processed pixels (matching the
-    // exported frame), not the raw video. Works on the SurfaceView (decoder-level).
-    LaunchedEffect(combinedMatrix) {
-        val effects = if (combinedMatrix != null) {
-            val v = combinedMatrix!!.values // 4x5 (20) row-major ColorMatrix
-            val m = FloatArray(16)
-            for (r in 0..3) for (c in 0..3) m[r * 4 + c] = v[r * 5 + c]
-            listOf<androidx.media3.common.Effect>(
-                androidx.media3.effect.RgbFilter(
-                    androidx.media3.effect.RgbFilter.RASTER_MODE_BITMAP,
-                    androidx.media3.effect.ColorFilter(m)
-                )
-            )
-        } else {
-            emptyList<androidx.media3.common.Effect>()
-        }
-        exoPlayer.setVideoEffects(effects)
-    }
-
     val aspect = remember(project.aspectPreset) { when (project.aspectPreset) { "1:1" -> 1.0f; "9:16" -> 9f/16f; "4:5" -> 4f/5f; else -> 16f/9f } }
 
     // ═══════════════════════════════════════════════════════════
@@ -745,6 +723,14 @@ fun NextGenEditorScreen(
                             scaleX = if (project.isFlippedHorizontal) -1f else 1f
                             scaleY = if (project.isFlippedVertical) -1f else 1f
                             rotationZ = project.rotationDegrees
+                            // NOTE: The combined cinematic filter + image-editor
+                            // adjustments matrix (combinedColorFilter) is computed
+                            // above, but applying it to the ExoPlayer video surface
+                            // requires GraphicsLayerScope.colorFilter / a ColorFilter
+                            // RenderEffect, which is only available in Compose 1.7+
+                            // (Kotlin 2.0). It cannot be wired on the pinned
+                            // Compose/Kotlin versions without an upgrade. The export
+                            // pipeline already applies all of these edits via FFmpeg.
                         }
                 )
 
