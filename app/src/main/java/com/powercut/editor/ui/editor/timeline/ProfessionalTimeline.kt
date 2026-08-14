@@ -141,6 +141,7 @@ fun ProfessionalTimeline(
                                 track = track,
                                 pxPerMs = pxPerMs,
                                 allClips = project.timeline.tracks.flatMap { it.clips },
+                                keyframeTracks = project.keyframeTracks,
                                 onClipSelected = onClipSelected,
                                 onClipMoved = onClipMoved,
                                 onClipTrimmed = onClipTrimmed,
@@ -233,6 +234,7 @@ fun TimelineTrackRow(
     track: TimelineTrack,
     pxPerMs: Float,
     allClips: List<TimelineClip>,
+    keyframeTracks: List<KeyframeTrack>,
     onClipSelected: (TimelineClip) -> Unit,
     onClipMoved: (TimelineClip, Long) -> Unit,
     onClipTrimmed: (TimelineClip, Long, Long) -> Unit,
@@ -262,10 +264,12 @@ fun TimelineTrackRow(
         )
 
         track.clips.forEach { clip ->
+            val clipKeyframes = keyframeTracks.find { it.clipId == clip.id }?.keyframes ?: emptyList()
             TimelineClipItem(
                 clip = clip,
                 pxPerMs = pxPerMs,
                 allClips = allClips,
+                keyframes = clipKeyframes,
                 onSelected = { onClipSelected(clip) },
                 onMoved = { newStartMs -> onClipMoved(clip, newStartMs) },
                 onTrimmed = { newTrimStart, newTrimEnd -> 
@@ -282,6 +286,7 @@ fun TimelineClipItem(
     clip: TimelineClip,
     pxPerMs: Float,
     allClips: List<TimelineClip>,
+    keyframes: List<Keyframe>,
     onSelected: () -> Unit,
     onMoved: (Long) -> Unit,
     onTrimmed: (Long, Long) -> Unit,
@@ -326,6 +331,27 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                 color = if (clip.isSelected) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
+            .drawBehind {
+                val clipW = size.width
+                val clipH = size.height
+                keyframes.forEach { kf ->
+                    val localMs = (kf.timeMs - clip.startTimeMs).coerceIn(0, clip.durationMs)
+                    val xPx = (localMs / clip.durationMs.toFloat()) * clipW
+                    if (xPx in 0f..clipW) {
+                        val diamondSize = 6f
+                        val y = 8f
+                        val diamond = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(xPx, y - diamondSize)
+                            lineTo(xPx + diamondSize, y)
+                            lineTo(xPx, y + diamondSize)
+                            lineTo(xPx - diamondSize, y)
+                            close()
+                        }
+                        drawPath(diamond, Color.White.copy(alpha = 0.9f))
+                        drawPath(diamond, Color.White.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f))
+                    }
+                }
+            }
             .pointerInput(clip.id) {
                 detectTapGestures { onSelected() }
             }
