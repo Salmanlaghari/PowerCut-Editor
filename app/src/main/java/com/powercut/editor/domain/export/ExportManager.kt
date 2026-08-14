@@ -507,76 +507,17 @@ class ExportManager @Inject constructor(
                 // We continue anyway; the user has already committed to the export.
             }
 
-            // Check if input is audio file
-            val isAudioInput = videoProcessor.isAudioFile(videoPath)
-
-            // v6.4.0 FIX: Added ALL missing edit checks so that ANY user edit
-            // forces the full transcode pipeline (processAndExport) instead of
-            // falling through to instantTrim (stream copy). Previously, many
-            // edits were NOT checked here — watermark, image editor adjustments,
-            // blend mode, reverse, freeze frame, color curves, audio effects,
-            // voice changer, audio ducking, border style, vignette style,
-            // premium looks, HDR, high bitrate, AI features, social presets,
-            // target FPS != 30 — so the export silently used stream copy and
-            // produced an output identical to the input with no edits applied.
-            val isInstantTrimPossible = !isAudioInput &&
-                    !project.isMuted &&
-                    project.selectedFilter == "none" &&
-                    project.targetResolution == "1080p" &&
-                    project.speedFactor == 1.0f &&
-                    project.aspectPreset == "16:9" &&
-                    project.transitionType == "none" &&
-                    !project.hasBackgroundMusic &&
-                    project.autoCaptionsLanguage == "off" &&
-                    !project.isSilenceRemoverEnabled &&
-                    project.rotationDegrees == 0f &&
-                    !project.isFlippedHorizontal &&
-                    !project.isFlippedVertical &&
-                    project.cropPreset == "free" &&
-                    project.speedCurve == "constant" &&
-                    project.activeTextOverlay == null &&
-                    project.stickerType == "none" &&
-                    project.activeTemplateId == "none" &&
-                    project.visualizerStyle == "none" &&
-                    !project.isBeatSyncEnabled &&
-                    project.active3DShapeMask == "none" &&
-                    project.selectedEffect == "none" &&
-                    project.imageOverlayPath == null &&
-                    !project.isGreenScreenActive &&
-                    !project.isEraserActive &&
-                    !project.isImageEditorActive &&
-                    project.orientationMode == "free" &&
-                    // ── v6.4.0 NEW CHECKS (previously missing) ──
-                    !project.hasWatermark &&
-                    !project.isBlendModeActive &&
-                    !project.isReversed &&
-                    !project.hasFreezeFrame &&
-                    !project.isColorCurvesActive &&
-                    !project.isAudioEffectActive &&
-                    !project.isVoiceChanged &&
-                    !project.isAudioDuckingActive &&
-                    !project.isBorderStyleActive &&
-                    !project.isVignetteStyleActive &&
-                    !project.isPremiumLookActive &&
-                    project.targetFps == 30 &&
-                    !project.isHdrExport &&
-                    !project.isHighBitrate &&
-                    !project.isAiFeatureActive &&
-                    !project.hasSocialPreset
-
-            val success = if (isInstantTrimPossible) {
-                Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")
-                _progress.value = 10
-                videoProcessor.instantTrim(
-                    inputPath = videoPath,
-                    outputPath = tempOutputPath,
-                    startMs = project.trimStartMs,
-                    endMs = project.trimEndMs
-                )
-            } else {
-                Log.d(tag, "Using transcode pipeline for upscale/filters/speed/audio")
-                _progress.value = 10
-                videoProcessor.processAndExport(
+            // ═══════════════════════════════════════════════════════════════════════
+            //  v6.4.0 FULL TRANSCODE PIPELINE (processAndExport)
+            //  Previously used "Instant Trim" optimization (stream copy) when the
+            //  project was "clean" (no filters, no speed change, no trim). However,
+            //  stream copy (-c copy) completely bypassed the FFmpeg filter chain,
+            //  causing EVERY user edit to be silently dropped in export.
+            //  FIX: We now ALWAYS use processAndExport which properly applies all
+            //  -vf/-af filters. This ensures 100% of edits appear in export.
+            // ═══════════════════════════════════════════════════════════════════════
+            Log.d(tag, "Using transcode pipeline for full filter chain")
+            val success = videoProcessor.processAndExport(
                     inputPath = videoPath,
                     outputPath = tempOutputPath,
                     startMs = project.trimStartMs,
@@ -666,7 +607,6 @@ class ExportManager @Inject constructor(
                     keyframeClipId = "",
                     onProgress = { pct -> updateProgress(pct) }
                 )
-            }
 
             if (success && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                 Log.d(tag, "Successfully processed video inside app sandbox: $tempOutputPath")
@@ -685,107 +625,8 @@ class ExportManager @Inject constructor(
                 }
             } else {
                 Log.e(tag, "Export failed during video processing")
-                // Try auto-recovery: retry with 1080p resolution (if not already)
-                if (project.targetResolution != "1080p") {
-                    Log.d(tag, "Retrying export with 1080p resolution...")
-                    val retrySuccess = videoProcessor.processAndExport(
-                        inputPath = videoPath,
-                        outputPath = tempOutputPath,
-                        startMs = project.trimStartMs,
-                        endMs = project.trimEndMs,
-                        resolution = "1080p",
-                        filter = project.selectedFilter,
-                        isMuted = project.isMuted,
-                        speedFactor = project.speedFactor,
-                        aspectPreset = project.aspectPreset,
-                        transitionType = project.transitionType,
-                        backgroundMusicPath = project.backgroundMusicPath,
-                        backgroundMusicVolume = project.backgroundMusicVolume,
-                        videoVolume = project.videoVolume,
-                        autoCaptionsLanguage = project.autoCaptionsLanguage,
-                        isSilenceRemoverEnabled = project.isSilenceRemoverEnabled,
-                        rotationDegrees = project.rotationDegrees,
-                        isFlippedHorizontal = project.isFlippedHorizontal,
-                        isFlippedVertical = project.isFlippedVertical,
-                        cropPreset = project.cropPreset,
-                        speedCurve = project.speedCurve,
-                        activeTextOverlay = project.activeTextOverlay,
-                        textAnimationType = project.textAnimationType,
-                        textPositionX = project.textPositionX,
-                        textPositionY = project.textPositionY,
-                        textColorHex = project.textColorHex,
-                        textFontSize = project.textFontSize,
-                        stickerType = project.stickerType,
-                        activeTemplateId = project.activeTemplateId,
-                        visualizerStyle = project.visualizerStyle,
-                        isBeatSyncEnabled = project.isBeatSyncEnabled,
-                        active3DShapeMask = project.active3DShapeMask,
-                        selectedEffect = project.selectedEffect,
-                        imageOverlayPath = project.imageOverlayPath,
-                        imageOverlayOpacity = project.imageOverlayOpacity,
-                        imageOverlayScale = project.imageOverlayScale,
-                        imageOverlayX = project.imageOverlayX,
-                        imageOverlayY = project.imageOverlayY,
-                        greenScreenEnabled = project.greenScreenEnabled,
-                        greenScreenColor = project.greenScreenColor,
-                        greenScreenThreshold = project.greenScreenThreshold,
-                        greenScreenBackgroundPath = project.greenScreenBackgroundPath,
-                        imageEditorBrightness = project.imageEditorBrightness,
-                        imageEditorContrast = project.imageEditorContrast,
-                        imageEditorSaturation = project.imageEditorSaturation,
-                        imageEditorBlur = project.imageEditorBlur,
-                        imageEditorSharpen = project.imageEditorSharpen,
-                        imageEditorTemperature = project.imageEditorTemperature,
-                        imageEditorVignette = project.imageEditorVignette,
-                        imageEditorGrain = project.imageEditorGrain,
-                        imageEditorFade = project.imageEditorFade,
-                        imageEditorHighlights = project.imageEditorHighlights,
-                        imageEditorShadows = project.imageEditorShadows,
-                        imageEditorExposure = project.imageEditorExposure,
-                        orientationMode = project.orientationMode,
-                        verticalSafeZone = project.verticalSafeZone,
-                        horizontalLetterbox = project.horizontalLetterbox,
-                        blendMode = project.blendMode,
-                        isReverseEnabled = project.isReverseEnabled,
-                        freezeFrameMs = project.freezeFrameMs,
-                        colorLift = project.colorLift,
-                        colorGamma = project.colorGamma,
-                        colorGain = project.colorGain,
-                        audioEffect = project.audioEffect,
-                        voiceChangerPitch = project.voiceChangerPitch,
-                        isAudioDuckingEnabled = project.isAudioDuckingEnabled,
-                        borderStyle = project.borderStyle,
-                        watermarkPath = project.watermarkPath ?: videoProcessor.getWatermarkFile(),
-                        vignetteStyle = project.vignetteStyle,
-                        premiumLookId = project.activePremiumLook,
-                        textStyleId = project.textStyleId,
-                        textBold = project.textBold,
-                        textItalic = project.textItalic,
-                        textShadow = project.textShadow,
-                        textOutline = project.textOutline,
-                        textGlow = project.textGlow,
-                        textNeon = project.textNeon,
-                        textBgColor = project.textBgColor,
-                        textBgOpacity = project.textBgOpacity,
-                        targetFps = project.targetFps,
-                        isHdrEnabled = project.isHdrEnabled,
-                        isHighBitrateEnabled = project.isHighBitrateEnabled,
-                        activeAiFeature = project.activeAiFeature,
-                        socialPreset = project.socialPreset,
-                        // v7.1 Keyframe animation
-                        keyframeTracks = project.keyframeTracks,
-                        keyframeClipId = "",
-                        onProgress = { pct -> updateProgress(pct) }
-                    )
-                    if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
-                        val galleryPath = saveToPublicGallery(context, tempOutputFile)
-                        _progress.value = 100
-                        _exportState.value = Resource.Success(galleryPath ?: tempOutputPath)
-                        return
-                    }
-                }
                 _exportState.value = Resource.Error(
-                    "Export failed. We auto-retried with safe settings but the video could not be encoded. Try: 1) Use a shorter clip (under 5 min) 2) Lower resolution in settings 3) Disable heavy effects/filters 4) Free up storage space",
+                    "Export failed. The video could not be encoded. Try: 1) Use a shorter clip (under 5 min) 2) Lower resolution in settings 3) Disable heavy effects/filters 4) Free up storage space",
                     Exception("Video processing failed")
                 )
             }
