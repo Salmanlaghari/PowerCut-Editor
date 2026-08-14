@@ -723,12 +723,14 @@ fun NextGenEditorScreen(
                             scaleX = if (project.isFlippedHorizontal) -1f else 1f
                             scaleY = if (project.isFlippedVertical) -1f else 1f
                             rotationZ = project.rotationDegrees
-                            // Apply the combined cinematic filter + image-editor
-                            // adjustments matrix directly to the video surface so
-                            // the preview shows the REAL processed pixels, not a
-                            // fake tint overlay. This makes preview == export.
-                            this.colorFilter = combinedColorFilter
-
+                            // NOTE: The combined cinematic filter + image-editor
+                            // adjustments matrix (combinedColorFilter) is computed
+                            // above, but applying it to the ExoPlayer video surface
+                            // requires GraphicsLayerScope.colorFilter / a ColorFilter
+                            // RenderEffect, which is only available in Compose 1.7+
+                            // (Kotlin 2.0). It cannot be wired on the pinned
+                            // Compose/Kotlin versions without an upgrade. The export
+                            // pipeline already applies all of these edits via FFmpeg.
                         }
                 )
 
