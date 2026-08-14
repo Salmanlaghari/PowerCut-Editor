@@ -1,6 +1,7 @@
 package com.powercut.editor.domain.processing
 
 import android.content.Context
+import android.media.MediaCodecList
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
@@ -456,6 +457,153 @@ class VideoProcessor @Inject constructor(
     }
 
     /**
+     * REAL EXPORT FIX (v7.0):
+     * The bundled ffmpeg-kit-full build does NOT contain the `libx264` software
+     * H.264 encoder (nor `libx265`). Every prior encode path requested
+     * `-c:v libx264`, which fails immediately at encoder init with
+     * "Unknown encoder 'libx264'" — this was the universal export failure /
+     * app-returns-to-Home bug.
+     *
+     * We now select a video encoder that is ACTUALLY present in this build:
+     *   1. libx264            (preferred, best compatibility) — usually absent here
+     *   2. h264_mediacodec    (Android MediaCodec H.264) — only if a device
+     *                         hardware/software AVC encoder is available
+     *   3. mpeg4              (always-available software MPEG-4 Part-2 encoder)
+     *                         — guaranteed fallback so export NEVER dies.
+     */
+    private var cachedVideoCodec: String? = null
+    private fun pickVideoCodec(): String {
+        cachedVideoCodec?.let { return it }
+        val codec = when {
+            isEncoderAvailable("libx264") -> "libx264"
+            isEncoderAvailable("h264_mediacodec") && deviceHasAvcEncoder() -> "h264_mediacodec"
+            isEncoderAvailable("mpeg4") -> "mpeg4"
+            else -> "mpeg4"
+        }
+        cachedVideoCodec = codec
+        Log.d(tag, "REAL EXPORT FIX: selected video encoder = $codec")
+        return codec
+    }
+
+    private fun deviceHasAvcEncoder(): Boolean {
+        return try {
+            val list = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+            list.codecInfos.any { info ->
+                info.isEncoder && info.supportedTypes.any { it.equals("video/avc", ignoreCase = true) }
+            }
+        } catch (_: Exception) { false }
+    }
+
+    /**
+     * Builds the full `-c:v ...` argument list for the selected encoder.
+     * Parameters that are invalid for the chosen codec (e.g. `-crf`/`-profile:v`
+     * for mpeg4, or `-crf` for h264_mediacodec) are only emitted where supported.
+     */
+    private fun videoEncodeArgs(isHdr: Boolean, isHighBitrate: Boolean, gopSize: String): List<String> {
+        val codec = pickVideoCodec()
+        val crf = if (isHighBitrate) "18" else "24"
+        val maxrate = if (isHighBitrate) "16M" else "6M"
+        val bufsize = if (isHighBitrate) "32M" else "12M"
+        return when (codec) {
+            "libx264" -> {
+                if (isHdr && isEncoderAvailable("libx265")) {
+                    listOf(
+                        "-c:v", "libx265", "-preset", "veryfast", "-crf", crf,
+                        "-x265-params", "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:max-cll=1000,400:hdr10-opt=1:repeat-headers=1",
+                        "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
+                        "-maxrate", "20M", "-bufsize", "40M", "-pix_fmt", "yuv420p10le",
+                        "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"
+                    )
+                } else {
+                    mutableListOf(
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
+                        "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
+                        "-maxrate", maxrate, "-bufsize", bufsize,
+                        "-profile:v", "high", "-level", "4.0",
+                        "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-map_metadata", "0"
+                    )
+                }
+            }
+            "h264_mediacodec" -> {
+                // MediaCodec hardware encoder: bitrate-based, no CRF.
+                listOf(
+                    "-c:v", "h264_mediacodec", "-b:v", maxrate, "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart", "-map_metadata", "0"
+                )
+            }
+            else -> { // mpeg4 — guaranteed software fallback
+                listOf(
+                    "-c:v", "mpeg4", "-b:v", maxrate, "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart", "-map_metadata", "0"
+                )
+            }
+        }
+    }
+
+    /**
+     * Simple encoder args for auxiliary pipelines (trim/compress/audio-slideshow)
+     * that previously hard-coded libx264.
+     */
+    private fun simpleVideoEncodeArgs(crf: String = "24", bitrate: String = "6M"): List<String> {
+        return when (pickVideoCodec()) {
+            "libx264" -> listOf("-c:v", "libx264", "-preset", "veryfast", "-crf", crf, "-pix_fmt", "yuv420p")
+            "h264_mediacodec" -> listOf("-c:v", "h264_mediacodec", "-b:v", bitrate, "-pix_fmt", "yuv420p")
+            else -> listOf("-c:v", "mpeg4", "-b:v", bitrate, "-pix_fmt", "yuv420p")
+        }
+    }
+
+    /**
+     * REAL EXPORT FIX (v7.0) — Filter-graph validator + pruner.
+     *
+     * Many effect/transition/keyframe generator functions in this file were
+     * written against an idealised FFmpeg and emit chains that this ffmpeg-kit
+     * build cannot parse (e.g. `crop`/`scale` expressions using the time
+     * variable `t` without `eval=frame`, `lenscorrection`/`chromashift` with
+     * `t`, `noise=...:allc=color`, `drawtext:bold=1`, etc.). A single invalid
+     * segment makes the WHOLE `-filter_complex`/`-vf` fail to initialise, which
+     * previously aborted the entire export.
+     *
+     * Instead of trusting every generated chain, we DRY-RUN the graph against the
+     * real input with a 1-frame null sink. If it fails we drop the LAST optional
+     * filter segment and retry, until the graph parses (or the optional list is
+     * empty). This guarantees the export always produces a valid video while
+     * applying as many real effects as the build supports. Dropped segments are
+     * logged so they can be fixed individually later.
+     */
+    private fun validateVideoFilterChain(inputPath: String, chain: String): Boolean {
+        if (chain.isBlank()) return true
+        return try {
+            val session = FFmpegKit.executeWithArguments(
+                arrayOf("-hide_banner", "-i", inputPath, "-vf", chain, "-frames:v", "1", "-f", "null", "-")
+            )
+            ReturnCode.isSuccess(session.returnCode)
+        } catch (e: Exception) {
+            Log.w(tag, "validateVideoFilterChain: exception during dry-run ($e)")
+            false
+        }
+    }
+
+    private fun pruneInvalidFilters(inputPath: String, filters: List<String>): List<String> {
+        if (filters.isEmpty()) return emptyList()
+        if (!File(inputPath).exists()) return filters // can't validate; trust as-is
+        // 1) Drop any individual segment that cannot be parsed/initialised on its
+        //    own. This keeps every OTHER valid effect (order-independent).
+        val kept = filters.filterTo(mutableListOf()) { seg ->
+            val ok = validateVideoFilterChain(inputPath, seg)
+            if (!ok) Log.w(tag, "REAL EXPORT FIX: dropping unsupported filter segment -> $seg")
+            ok
+        }
+        // 2) Safety: if the combined chain still fails, trim from the tail until it
+        //    parses (handles rare cross-segment incompatibilities).
+        while (kept.isNotEmpty()) {
+            if (validateVideoFilterChain(inputPath, kept.joinToString(","))) return kept
+            Log.w(tag, "REAL EXPORT FIX: combined chain invalid, trimming -> ${kept.last()}")
+            kept.removeAt(kept.lastIndex)
+        }
+        return emptyList()
+    }
+
+    /**
      * Executes a fast trim without re-encoding (Instant Trim).
      *
      * EXPORT FIX: Uses OUTPUT-side seeking (-ss AFTER -i) which works with
@@ -497,10 +645,9 @@ class VideoProcessor @Inject constructor(
             Log.d(tag, "Retrying trim with re-encode fallback...")
             val reArgs = mutableListOf("-analyzeduration", "100M", "-probesize", "100M", "-i", inputPath)
             if (startSec > 0) reArgs.addAll(listOf("-ss", startSec.toString()))
-            reArgs.addAll(listOf("-t", durationSec.toString(),
-                "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-                "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-y", outputPath))
+            reArgs.addAll(listOf("-t", durationSec.toString()))
+            reArgs.addAll(simpleVideoEncodeArgs("28"))
+            reArgs.addAll(listOf("-c:a", "aac", "-movflags", "+faststart", "-y", outputPath))
             val retry = FFmpegKit.executeWithArguments(reArgs.toTypedArray())
             if (ReturnCode.isSuccess(retry.returnCode)) {
                 Log.d(tag, "Trim re-encode fallback succeeded!")
@@ -540,7 +687,7 @@ class VideoProcessor @Inject constructor(
 
             args.addAll(listOf("-vf", vf))
             args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
-            args.addAll(listOf("-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency"))
+            args.addAll(simpleVideoEncodeArgs("28"))
             args.addAll(listOf("-shortest", "-y", outputPath))
 
             Log.d(tag, "Audio to video: ffmpeg ${args.joinToString(" ")}")
@@ -593,8 +740,7 @@ class VideoProcessor @Inject constructor(
             args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
             args.addAll(listOf("-i", inputPath))
             args.addAll(listOf("-vf", "$scaleClause,format=yuv420p"))
-            args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast",
-                "-crf", crf.toString(), "-pix_fmt", "yuv420p"))
+            args.addAll(simpleVideoEncodeArgs(crf.toString()))
             args.addAll(listOf("-c:a", "aac", "-b:a", "128k"))
             args.addAll(listOf("-movflags", "+faststart"))
             args.addAll(listOf("-threads", "0", "-y", outputPath))
@@ -654,7 +800,7 @@ class VideoProcessor @Inject constructor(
             val args = mutableListOf<String>()
             args.addAll(listOf("-y", "-safe", "0", "-f", "concat", "-i", listFile.absolutePath))
             args.addAll(listOf("-vf", vf))
-            args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"))
+            args.addAll(simpleVideoEncodeArgs())
             // No audio track → add silent AAC so the MP4 is valid for gallery.
             args.addAll(listOf("-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"))
             args.addAll(listOf("-c:a", "aac", "-b:a", "128k", "-shortest"))
@@ -697,7 +843,7 @@ class VideoProcessor @Inject constructor(
             args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
             args.addAll(listOf("-i", inputPath))
             args.addAll(listOf("-vf", vf))
-            args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast", "-crf", "22"))
+            args.addAll(simpleVideoEncodeArgs("22"))
             args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
             args.addAll(listOf("-movflags", "+faststart", "-threads", "0", "-y", outputPath))
 
@@ -1138,6 +1284,13 @@ class VideoProcessor @Inject constructor(
                 clipSpeedFactor = speedFactor
             )
             vfFilters.addAll(kfFilters)
+
+            // REAL EXPORT FIX: prune any effect/transition/keyframe segment whose
+            // FFmpeg chain this build cannot parse, so one bad filter can never
+            // abort the whole single-clip export.
+            val prunedVf = pruneInvalidFilters(inputPath, vfFilters)
+            vfFilters.clear()
+            vfFilters.addAll(prunedVf)
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -1178,7 +1331,7 @@ class VideoProcessor @Inject constructor(
         //    The old overlay chain used `format=rgba` on the overlay image then
         //    overlaid it on a yuv420p base. Some FFmpeg-Kit builds fail to
         //    auto-negotiate the pixel format in overlay. Now we use
-        //    `format=auto` on the overlay and explicitly set `format=yuv420p`
+        //    `format=yuv420p` on the overlay and explicitly set `format=yuv420p`
         //    on the final output.
         //
         // STRATEGY: We build ONE filter_complex string that chains:
@@ -1231,16 +1384,16 @@ class VideoProcessor @Inject constructor(
                     // Clamp overlay position so it's never negative or off-screen
                     val ox = (tw * imageOverlayX - overlayW / 2).toInt().coerceIn(0, (tw - overlayW).coerceAtLeast(0))
                     val oy = (th * imageOverlayY - overlayH / 2).toInt().coerceIn(0, (th - overlayH).coerceAtLeast(0))
-                    // FIX #8: use format=auto for overlay, not format=rgba
-                    fcParts.add("[$overlayIdx:v]scale=$overlayW:$overlayH,format=auto,colorchannelmixer=aa=${imageOverlayOpacity}[ovl]")
-                    fcParts.add("[$currentLabel][ovl]overlay=$ox:$oy:format=auto[vimg]")
+                    // FIX #8: use format=yuv420p for overlay, not format=rgba
+                    fcParts.add("[$overlayIdx:v]scale=$overlayW:$overlayH,format=yuv420p,colorchannelmixer=aa=${imageOverlayOpacity}[ovl]")
+                    fcParts.add("[$currentLabel][ovl]overlay=$ox:$oy:format=yuv420p[vimg]")
                     currentLabel = "vimg"
                 }
 
                 // Watermark overlay
                 if (hasWatermark) {
                     fcParts.add("[$wmIdx:v]scale=iw*0.1:-1[wm]")
-                    fcParts.add("[$currentLabel][wm]overlay=W-w-20:20:format=auto[vwm]")
+                    fcParts.add("[$currentLabel][wm]overlay=W-w-20:20:format=yuv420p[vwm]")
                     currentLabel = "vwm"
                 }
 
@@ -1384,79 +1537,10 @@ class VideoProcessor @Inject constructor(
         //    retains maximum detail — ideal for mastering / re-editing.
         //  • Default: the proven libx264 veryfast CRF 24 pipeline above.
         val gopSize = (targetFps * 8).toString()  // ~8s GOP, adaptive to fps
-        if (isHdrEnabled) {
-            // CRASH FIX #6: Check if libx265 (HEVC) is available in this FFmpeg
-            // build. The ffmpeg-kit-full package should include it, but if it
-            // is missing (custom build, stripped binary, etc.) the export would
-            // crash with "Unknown encoder 'libx265'". In that case we fall back
-            // to libx264 SDR and log a warning.
-            if (isEncoderAvailable("libx265")) {
-                // ── HDR 10-bit HEVC pipeline ──
-                args.addAll(listOf("-c:v", "libx265"))
-                args.addAll(listOf("-preset", "veryfast"))
-                args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
-                args.addAll(listOf("-x265-params",
-                    "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:" +
-                    "max-cll=1000,400:hdr10-opt=1:repeat-headers=1"))
-                args.addAll(listOf("-g", gopSize))
-                args.addAll(listOf("-keyint_min", gopSize))
-                args.addAll(listOf("-sc_threshold", "0"))
-                // HDR needs a much higher bitrate ceiling (10-bit HDR is ~2.5x the data)
-                val hdrMaxrate = if (isHighBitrateEnabled) "40M" else "20M"
-                val hdrBufsize = if (isHighBitrateEnabled) "80M" else "40M"
-                args.addAll(listOf("-maxrate", hdrMaxrate, "-bufsize", hdrBufsize))
-                args.addAll(listOf("-pix_fmt", "yuv420p10le"))
-                args.addAll(listOf("-tag:v", "hvc1"))  // Apple/QuickTime HEVC tag
-                args.addAll(listOf("-movflags", "+faststart"))
-                args.addAll(listOf("-map_metadata", "0"))
-                Log.d(tag, "v6.0.0 HDR export: libx265 10-bit BT.2020 PQ, CRF=${if (isHighBitrateEnabled) 18 else 22}, maxrate=$hdrMaxrate")
-            } else {
-                // ── Fallback: libx265 not available → SDR H.264 ──
-                Log.w(tag, "CRASH FIX #6: libx265 not available in this FFmpeg build — falling back to libx264 SDR for HDR request")
-                args.addAll(listOf("-c:v", "libx264"))
-                args.addAll(listOf("-preset", "veryfast"))
-                args.addAll(listOf("-crf", if (isHighBitrateEnabled) "18" else "22"))
-                args.addAll(listOf("-g", gopSize))
-                args.addAll(listOf("-keyint_min", gopSize))
-                args.addAll(listOf("-sc_threshold", "0"))
-                val fbMaxrate = if (isHighBitrateEnabled) "20M" else "10M"
-                val fbBufsize = if (isHighBitrateEnabled) "40M" else "20M"
-                args.addAll(listOf("-maxrate", fbMaxrate, "-bufsize", fbBufsize))
-                args.addAll(listOf("-profile:v", "high"))
-                args.addAll(listOf("-pix_fmt", "yuv420p"))
-                args.addAll(listOf("-movflags", "+faststart"))
-                args.addAll(listOf("-map_metadata", "0"))
-            }
-        } else if (isHighBitrateEnabled) {
-            // ── High-bitrate visually-lossless H.264 pipeline ──
-            args.addAll(listOf("-c:v", "libx264"))
-            args.addAll(listOf("-preset", "slow"))  // slower = better compression at low CRF
-            args.addAll(listOf("-crf", "18"))        // near-lossless
-            args.addAll(listOf("-g", gopSize))
-            args.addAll(listOf("-keyint_min", gopSize))
-            args.addAll(listOf("-sc_threshold", "0"))
-            args.addAll(listOf("-maxrate", "16M", "-bufsize", "32M"))
-            args.addAll(listOf("-profile:v", "high"))
-            args.addAll(listOf("-level", "5.1"))     // 4K-capable level
-            args.addAll(listOf("-pix_fmt", "yuv420p"))
-            args.addAll(listOf("-movflags", "+faststart"))
-            args.addAll(listOf("-map_metadata", "0"))
-            Log.d(tag, "v6.0.0 High Bitrate export: libx264 slow CRF 18, maxrate 16M")
-        } else {
-            // ── Standard proven pipeline (v4.2) ──
-            args.addAll(listOf("-c:v", "libx264"))
-            args.addAll(listOf("-preset", "veryfast"))
-            args.addAll(listOf("-crf", "24"))
-            args.addAll(listOf("-g", gopSize))
-            args.addAll(listOf("-keyint_min", gopSize))
-            args.addAll(listOf("-sc_threshold", "0"))
-            args.addAll(listOf("-maxrate", "6M", "-bufsize", "12M"))
-            args.addAll(listOf("-profile:v", "high"))
-            args.addAll(listOf("-level", "4.0"))
-            args.addAll(listOf("-pix_fmt", "yuv420p"))
-            args.addAll(listOf("-movflags", "+faststart"))
-            args.addAll(listOf("-map_metadata", "0"))
-        }
+        // REAL EXPORT FIX: use the encoder that actually exists in this FFmpeg
+        // build (libx264 preferred, else h264_mediacodec, else mpeg4).
+        args.addAll(videoEncodeArgs(isHdrEnabled, isHighBitrateEnabled, gopSize))
+        Log.d(tag, "v7.0 export encoder args: ${args.takeLast(12).joinToString(" ")}")
         args.addAll(listOf("-y", outputPath))
 
         Log.d(tag, "ProcessAndExport: ffmpeg ${args.joinToString(" ")}")
@@ -1498,12 +1582,9 @@ class VideoProcessor @Inject constructor(
                     "-i", inputPath
                 )
                 if (startSec > 0) recovery2Args.addAll(listOf("-ss", startSec.toString()))
-                recovery2Args.addAll(listOf("-t", finalDurationSec.toString(),
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
-                    "-g", "250", "-keyint_min", "250", "-sc_threshold", "0",
-                    "-maxrate", "6M", "-bufsize", "12M",
-                    "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                    "-y", outputPath))
+                recovery2Args.addAll(listOf("-t", finalDurationSec.toString()))
+                recovery2Args.addAll(videoEncodeArgs(false, false, "250"))
+                recovery2Args.addAll(listOf("-c:a", "aac", "-y", outputPath))
                 val rec2Success = executeFFmpegSync(recovery2Args.toTypedArray())
                 if (rec2Success) {
                     Log.d(tag, "Recovery 2 (minimal re-encode) succeeded — overlays were lost")
@@ -1753,6 +1834,13 @@ class VideoProcessor @Inject constructor(
             if (project.horizontalLetterbox) postFilters.add("pad=iw:iw*9/16:(ow-iw)/2:(oh-ih)/2:black")
             if (project.verticalSafeZone) postFilters.add("drawbox=x=iw*0.05:y=ih*0.05:w=iw*0.9:h=ih*0.9:color=yellow@0.2:t=2")
 
+            // REAL EXPORT FIX: prune any effect/transition/keyframe segment whose
+            // FFmpeg chain this build cannot parse, so one bad filter can never
+            // abort the whole multi-clip export.
+            val prunedPost = pruneInvalidFilters(resolvedClipPaths.first(), postFilters)
+            postFilters.clear()
+            postFilters.addAll(prunedPost)
+
             // Apply post-filters via a second pass on vout → vfinal
             var finalVideoLabel = if (postFilters.isNotEmpty()) {
                 fcParts.add("[vout]${postFilters.joinToString(",")}[vfinal]")
@@ -1797,21 +1885,7 @@ class VideoProcessor @Inject constructor(
                 args.add("-an")
             }
 
-            // Encoding settings (same proven pipeline as processAndExport)
-            if (project.isHdrEnabled && isEncoderAvailable("libx265")) {
-                args.addAll(listOf("-c:v", "libx265", "-preset", "veryfast",
-                    "-crf", "22", "-pix_fmt", "yuv420p10le",
-                    "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"))
-            } else {
-                if (project.isHdrEnabled) {
-                    Log.w(tag, "CRASH FIX #6: libx265 not available — multi-clip HDR falling back to libx264 SDR")
-                }
-                args.addAll(listOf("-c:v", "libx264", "-preset", "veryfast",
-                    "-crf", "24", "-g", "250", "-keyint_min", "250",
-                    "-sc_threshold", "0", "-maxrate", "6M", "-bufsize", "12M",
-                    "-profile:v", "high", "-level", "4.0",
-                    "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-map_metadata", "0"))
-            }
+            args.addAll(videoEncodeArgs(project.isHdrEnabled, project.isHighBitrateEnabled, "250"))
             if (finalAudioLabel != null) {
                 args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
             } else {
@@ -2077,7 +2151,7 @@ class VideoProcessor @Inject constructor(
         "lightleak" to "eq=brightness=0.1:saturation=1.2,tblend=all_mode=screen",
         "filmgrain" to "noise=alls=12:allf=t",
         "dust" to "noise=alls=5:allf=t+u,eq=contrast=0.95:brightness=0.03",
-        "scratch" to "noise=alls=15:allf=t+u:allc=color",
+        "scratch" to "noise=alls=15:allf=t+u",
         "grunge" to "noise=alls=20:allf=t,eq=contrast=1.15:saturation=0.85",
         "echo" to "tmix=frames=3:weights=1 0.5 0.25",
         "trail" to "tmix=frames=5:weights=1 0.7 0.5 0.3 0.15",
@@ -2129,15 +2203,15 @@ class VideoProcessor @Inject constructor(
             e == "glitch" || e.contains("chromatic") || e.contains("electric") ->
                 listOf("noise=alls=20:allf=t+u", "chromashift=cbh=-3:cbv=2:crh=3:crv=-2")
             e.contains("glitch") && e.contains("data") ->
-                listOf("noise=alls=30:allf=t+u:allc=color", "chromashift=cbh=-4:cbv=2:crh=4:crv=-2")
+                listOf("noise=alls=30:allf=t+u", "chromashift=cbh=-4:cbv=2:crh=4:crv=-2")
             e.contains("vhs") && e.contains("old") ->
                 listOf("noise=alls=15:allf=t+u", "curves=preset=vintage", "boxblur=luma_radius=3:luma_power=1")
             e.contains("vhs") ->
                 listOf("noise=alls=8:allf=t+u", "curves=preset=vintage", "boxblur=luma_radius=2:luma_power=1")
             e.contains("snow") && e.contains("heavy") ->
-                listOf("noise=alls=60:allf=t+u:allc=color")
+                listOf("noise=alls=60:allf=t+u")
             e.contains("snow") ->
-                listOf("noise=alls=40:allf=t+u:allc=color")
+                listOf("noise=alls=40:allf=t+u")
             e.contains("rain") && e.contains("heavy") ->
                 listOf("noise=alls=25:allf=t+u", "boxblur=luma_radius=2:luma_power=1")
             e.contains("rain") ->
@@ -2175,13 +2249,13 @@ class VideoProcessor @Inject constructor(
             e.contains("bokeh") ->
                 listOf("boxblur=luma_radius=15:luma_power=2", "eq=brightness=0.05")
             e.contains("particles") && e.contains("color") ->
-                listOf("noise=alls=12:allf=t+u:allc=color", "eq=saturation=1.3")
+                listOf("noise=alls=12:allf=t+u", "eq=saturation=1.3")
             e.contains("particles") ->
                 listOf("noise=alls=12:allf=t+u", "eq=saturation=1.2")
             e.contains("zoom_pulse") ->
                 listOf("zoompan=z='min(zoom+0.0015\\,1.5)':d=1:s=${w}x${h}")
             e.contains("wave") || e.contains("tidal") ->
-                listOf("lenscorrection=k1='-0.1*sin(t*2)':k2='0.1*cos(t*2)'")
+                listOf("lenscorrection=k1=0.1:k2=0.1")
             e.contains("swirl") ->
                 listOf("lenscorrection=k1=0.3:k2=0.3")
             e.contains("explosion") ->
@@ -2288,13 +2362,13 @@ class VideoProcessor @Inject constructor(
             e.contains("stage_light") ->
                 listOf("vignette=angle=PI/2", "colorbalance=rs=0.1:rm=0.08", "eq=brightness=0.05:contrast=1.15")
             e.contains("concert") ->
-                listOf("eq=saturation=1.4:contrast=1.2", "vignette=angle=PI/4", "noise=alls=8:allf=t+u:allc=color")
+                listOf("eq=saturation=1.4:contrast=1.2", "vignette=angle=PI/4", "noise=alls=8:allf=t+u")
             e.contains("party") ->
-                listOf("hue=h='t*80'", "eq=saturation=1.6", "noise=alls=10:allf=t+u:allc=color")
+                listOf("hue=h='t*80'", "eq=saturation=1.6", "noise=alls=10:allf=t+u")
             e.contains("disco") ->
-                listOf("hue=h='t*120'", "eq=saturation=1.8:contrast=1.2", "noise=alls=12:allf=t+u:allc=color")
+                listOf("hue=h='t*120'", "eq=saturation=1.8:contrast=1.2", "noise=alls=12:allf=t+u")
             e.contains("festival") ->
-                listOf("eq=saturation=1.5:contrast=1.15", "colorbalance=rs=0.08:bs=0.08", "noise=alls=8:allf=t+u:allc=color")
+                listOf("eq=saturation=1.5:contrast=1.15", "colorbalance=rs=0.08:bs=0.08", "noise=alls=8:allf=t+u")
             // ── v6.0.0 NEW EFFECTS (real FFmpeg chains, no placeholders) ──
             e.contains("fog") ->
                 listOf("boxblur=4:1", "eq=brightness=0.05:contrast=0.9", "colorbalance=bs=0.05:gs=0.03")
@@ -2496,7 +2570,7 @@ class VideoProcessor @Inject constructor(
             "spiral" -> listOf("rotate=angle='4*PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'")
             "shake_in" -> listOf("crop=iw-10:ih-10:'5*sin(t*20)':'5*cos(t*20)':enable='between(t,0,$fadeDur)'")
             "glitch_in" -> listOf("noise=alls=25:allf=t+u:enable='between(t,0,$fadeDur)'", "chromashift=cbh=-4:cbv=2:crh=4:crv=-2:enable='between(t,0,$fadeDur)'")
-            "tv_static" -> listOf("noise=alls=50:allf=t+u:allc=color:enable='between(t,0,$fadeDur)'")
+            "tv_static" -> listOf("noise=alls=50:allf=t+u:enable='between(t,0,$fadeDur)'")
             "channel_change" -> listOf("noise=alls=40:allf=t+u:enable='between(t,0,0.2)'", "eq=brightness='0.5*exp(-t*10)':enable='between(t,0,0.2)'")
             "vhs_transition" -> listOf("noise=alls=20:allf=t+u:enable='between(t,0,$fadeDur)'", "curves=preset=vintage:enable='between(t,0,$fadeDur)'")
             "rgb_glitch" -> listOf("chromashift=cbh=-5:cbv=3:crh=5:crv=-3:enable='between(t,0,$fadeDur)'")
@@ -2578,10 +2652,13 @@ class VideoProcessor @Inject constructor(
         val yExpr = "h*${String.format("%.3f", posY)}-text_h/2"
         val fs = fontSize.toInt().coerceIn(8, 200)
         // Build style-specific box/flags
+        // NOTE: drawtext has no `bold`/`italic` options — weight/style is chosen
+        // via the font file itself (fontfile). We intentionally omit them to keep
+        // the filter graph valid.
         val shadowFlag = if (textShadow) ":shadowx=3:shadowy=3:shadowcolor=black@0.8" else ""
         val outlineFlag = if (textOutline) ":borderw=3:bordercolor=black" else ""
-        val boldFlag = if (textBold) ":bold=1" else ""
-        val italicFlag = if (textItalic) ":italic=1" else ""
+        val boldFlag = ""
+        val italicFlag = ""
         val glowFlag = if (textGlow) ":fontcolor_expr=0x${fcHex}@'0.7+0.3*sin(t*4)'" else ""
         val neonFlag = if (textNeon) ":fontcolor_expr=0x${fcHex}@'0.5+0.5*sin(t*6)'" else ""
         // Background box
@@ -2771,7 +2848,7 @@ class VideoProcessor @Inject constructor(
             "smoke" -> listOf("noise=alls=15:allf=t+u", "boxblur=luma_radius=3:luma_power=1")
             "water" -> listOf("boxblur=luma_radius=2:luma_power=1")
             "fire" -> listOf("colorbalance=rs=0.2:rm=0.15", "eq=brightness=0.08:saturation=1.3")
-            "particles" -> listOf("noise=alls=12:allf=t+u:allc=color")
+            "particles" -> listOf("noise=alls=12:allf=t+u")
             "bokeh" -> listOf("boxblur=luma_radius=15:luma_power=2", "eq=brightness=0.05")
             "glitch_3d", "chromatic" -> listOf("noise=alls=15:allf=t+u", "chromashift=cbh=-2:cbv=1:crh=2:crv=-1")
             "anamorphic" -> listOf("crop=iw:ih*0.42:0:ih*0.29", "scale=$w:${(h * 0.42).toInt()}")
@@ -3079,7 +3156,7 @@ class VideoProcessor @Inject constructor(
         val pipLabel = "pip"
         val opacityFilter = if (opacity < 1.0f) ",colorchannelmixer=aa=$opacity" else ""
         val videoFilter = "[$inputIdx:v]scale=$pipW:$pipH${opacityFilter}[$pipLabel]"
-        val overlayFilter = "[vbase][$pipLabel]overlay=$pipPixelX:$pipPixelY:format=auto[vout]"
+        val overlayFilter = "[vbase][$pipLabel]overlay=$pipPixelX:$pipPixelY:format=yuv420p[vout]"
 
         // Audio: mix PIP audio with main audio (if applicable)
         val audioFilter = "[$inputIdx:a]volume=${scale}[pipA]"
