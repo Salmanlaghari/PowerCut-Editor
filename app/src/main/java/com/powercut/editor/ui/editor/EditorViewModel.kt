@@ -1855,4 +1855,11 @@ class EditorViewModel @Inject constructor(
         exportManager.resetState()
         _currentScreen.value = "editor"
     }
+
+    /** Update the target frame rate for export. */
+    fun updateTargetFps(fps: Int) {
+        projectRepository.updateProject { project ->
+            project.copy(targetFps = fps)
+        }
+    }
 }
