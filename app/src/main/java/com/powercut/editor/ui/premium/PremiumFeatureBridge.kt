@@ -107,6 +107,65 @@ object PremiumFeatureBridge {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
+    //  VIDEO EFFECTS & COLOR GRADING
+    //  Uses the selectedFilter field which maps to FFmpeg -vf chains.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Apply a video effect / color filter (e.g. "vivid", "cinematic", "tealorange").
+     * The filterId must match one of the VisualEffect ids from EffectCatalog.
+     */
+    fun applyVideoEffect(viewModel: EditorViewModel, filterId: String) {
+        viewModel.updateFilter(filterId)
+    }
+
+    /**
+     * Apply a color grading preset.
+     * Uses the same selectedFilter field as video effects.
+     */
+    fun applyColorGrading(viewModel: EditorViewModel, filterId: String) {
+        viewModel.updateFilter(filterId)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  AUDIO EFFECTS
+    //  Uses the audioEffect field which maps to PremiumFeatureCatalog audioChain.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Apply an audio effect (e.g. "au_echo", "au_reverb", "au_chorus").
+     */
+    fun applyAudioEffect(viewModel: EditorViewModel, effectId: String) {
+        viewModel.updateAudioEffect(effectId)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  TRANSITIONS
+    //  Uses the transitionType field.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Apply a transition type (e.g. "crossfade", "wipe_left", "slide_up").
+     */
+    fun applyTransition(viewModel: EditorViewModel, transitionId: String) {
+        viewModel.updateTransition(transitionId)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  RESOLUTION & FPS
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /** Update the export resolution (e.g. "1080p", "720p", "4k"). */
+    fun updateResolution(viewModel: EditorViewModel, resolution: String) {
+        viewModel.updateResolution(resolution)
+    }
+
+    /** Update the frame rate for export (24, 30, 60, 120). */
+    fun updateFps(viewModel: EditorViewModel, fps: Int) {
+        viewModel.updateTargetFps(fps)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
     //  SOCIAL PRESET IDS  (match the catalog socialMedia list ids)
     // ─────────────────────────────────────────────────────────────────────────────
     const val SOCIAL_PRESET_TIKTOK = "sm_tiktok"
@@ -174,4 +233,56 @@ object PremiumFeatureBridge {
         append("  |  Pro: ")
         append(if (viewModel.isProTier.value) "Unlocked" else "Locked")
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  TRANSITION IDS
+    // ─────────────────────────────────────────────────────────────────────────────
+    const val TRANSITION_NONE = "none"
+    const val TRANSITION_CROSSFADE = "crossfade"
+    const val TRANSITION_WIPE_LEFT = "wipe_left"
+    const val TRANSITION_WIPE_RIGHT = "wipe_right"
+    const val TRANSITION_SLIDE_UP = "slide_up"
+    const val TRANSITION_SLIDE_DOWN = "slide_down"
+    const val TRANSITION_ZOOM = "zoom"
+    const val TRANSITION_PUSH_LEFT = "push_left"
+    const val TRANSITION_PUSH_RIGHT = "push_right"
+    const val TRANSITION_ROTATE = "rotate"
+    const val TRANSITION_CUBE = "cube"
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  COLOR GRADING / VIDEO FILTER PRESET IDS
+    // ─────────────────────────────────────────────────────────────────────────────
+    const val FILTER_NONE = "none"
+    const val FILTER_VIVID = "vivid"
+    const val FILTER_CINEMATIC = "cinematic"
+    const val FILTER_TEALORANGE = "tealorange"
+    const val FILTER_NOIR = "noir"
+    const val FILTER_VINTAGE = "vintage"
+    const val FILTER_FADE = "fade"
+    const val FILTER_WARM = "warm"
+    const val FILTER_COOL = "cool"
+    const val FILTER_PUNCHY = "punchy"
+    const val FILTER_MUTED = "muted"
+    const val FILTER_LOMO = "lomo"
+    const val FILTER_PASTEL = "pastel"
+    const val FILTER_MONO = "mono"
+    const val FILTER_SEPIA = "sepia"
+    const val FILTER_INVERT = "invert"
+    const val FILTER_POLAROID = "polaroid"
+    const val FILTER_KODAK = "kodak"
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  AUDIO EFFECT IDS
+    // ─────────────────────────────────────────────────────────────────────────────
+    const val AUDIO_NONE = "none"
+    const val AUDIO_ECHO = "au_echo"
+    const val AUDIO_REVERB = "au_reverb"
+    const val AUDIO_CHORUS = "au_chorus"
+    const val AUDIO_ROOM = "au_room"
+    const val AUDIO_VIRTUAL = "au_virtual"
+    const val AUDIO_DRUMS = "au_drums"
+    const val AUDIO_SILENCE_REMOVER = "au_noise_removal"
+    const val AUDIO_VOICE_CHANGER = "au_voice_changer"
+    const val AUDIO_DUCKING = "au_ducking"
+    const val AUDIO_BATTERY = "au_battery"
 }
