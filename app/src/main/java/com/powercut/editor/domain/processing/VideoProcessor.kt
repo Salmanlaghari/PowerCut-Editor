@@ -1760,13 +1760,13 @@ class VideoProcessor @Inject constructor(
             } else {
                 "[vout]"
             }
-            var finalAudioLabel = "[aout]"
+            var finalAudioLabel: String? = "[aout]"
 
             // BGM mixing and audio effects
             val hasBgm = !project.backgroundMusicPath.isNullOrBlank()
             if (hasBgm) {
                 val bgmIdx = n
-                args.addAll(listOf("-i", project.backgroundMusicPath))
+                args.addAll(listOf("-i", project.backgroundMusicPath ?: ""))
                 val vVol = if (project.isMuted) 0.0f else project.videoVolume
                 val duckVol = if (project.isAudioDuckingEnabled) vVol * 0.3f else vVol
                 var mainAudioChain = "[aout]volume=$duckVol"
@@ -1822,10 +1822,6 @@ class VideoProcessor @Inject constructor(
             onProgress(10)
             Log.d(tag, "processMultiClipTimeline ($n clips): ffmpeg ${args.joinToString(" ")}")
 
-            // Estimate total duration for progress tracking
-            val totalDurSec = videoClips.sumOf {
-                ((it.trimEndMs - it.trimStartMs) / 1000.0 / it.speedFactor.toDouble())
-            }
             val success = executeFFmpegWithProgress(args.toTypedArray(), totalDurSec, onProgress)
 
             if (success) {
