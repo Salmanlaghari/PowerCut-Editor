@@ -1250,7 +1250,7 @@ fun NextGenEditorScreen(
             onClipSelected = { clip -> onSelectClip(clip.id) },
             onClipMoved = { clip, newStart -> onMoveClip(clip.id, newStart) },
             onClipTrimmed = { clip, newStart, newEnd -> onTrimClip(clip.id, newStart, newEnd) },
-            modifier = Modifier.fillMaxWidth().height(108.dp)
+            modifier = Modifier.fillMaxWidth().height(92.dp)
         )
 
         // ─── 5. TOOL PANEL (expandable) ───────────────────────
