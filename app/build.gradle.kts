@@ -126,8 +126,8 @@ dependencies {
     implementation(libs.gpuimage)
 
     // Hilt
-    implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    implementation("com.google.dagger:hilt-android:2.53.1")
+    kapt("com.google.dagger:hilt-android-compiler:2.53.1")
     implementation(libs.androidx.hilt.navigation.compose)
 
     // Coroutines
