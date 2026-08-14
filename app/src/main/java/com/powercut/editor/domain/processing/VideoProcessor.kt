@@ -1025,7 +1025,7 @@ class VideoProcessor @Inject constructor(
         // Color curves (lift/gamma/gain)
         if (colorLift != 0f || colorGamma != 0f || colorGain != 0f) {
             val lift = colorLift / 100.0f
-            val gamma = 1.0f + colorGamma / 100.0f
+            val gamma = (1.0f + colorGamma / 100.0f).coerceIn(0.01f, 10.0f)
             val gain = 1.0f + colorGain / 100.0f
             vfFilters.add("colorbalance=rs=${lift}:gs=${lift}:bs=${lift}:rm=${gain - 1.0f}:gm=${gain - 1.0f}:bm=${gain - 1.0f},eq=gamma=${gamma}")
         }
@@ -1715,8 +1715,8 @@ class VideoProcessor @Inject constructor(
             if (project.imageEditorContrast != 1f) ieParts.add("contrast=${project.imageEditorContrast}")
             if (project.imageEditorExposure != 0f) ieParts.add("exposure=${project.imageEditorExposure / 50.0}")
             if (project.imageEditorSaturation != 1f) ieParts.add("saturation=${project.imageEditorSaturation}")
-            if (project.imageEditorHighlights != 0f) ieParts.add("gamma_r=${1.0 - project.imageEditorHighlights / 200.0}")
-            if (project.imageEditorShadows != 0f) ieParts.add("gamma_g=${1.0 + project.imageEditorShadows / 200.0}")
+            if (project.imageEditorHighlights != 0f) ieParts.add("gamma_r=${(1.0 - project.imageEditorHighlights / 200.0).coerceIn(0.1, 10.0)}")
+            if (project.imageEditorShadows != 0f) ieParts.add("gamma_g=${(1.0 + project.imageEditorShadows / 200.0).coerceIn(0.1, 10.0)}")
             if (ieParts.isNotEmpty()) postFilters.add("eq=${ieParts.joinToString(":")}")
             if (project.imageEditorSharpen > 0f) postFilters.add("unsharp=5:5:${project.imageEditorSharpen / 10.0}:5:5:0")
             if (project.imageEditorBlur > 0f) postFilters.add("boxblur=luma_radius=${(project.imageEditorBlur * 2).toInt()}:luma_power=1")
@@ -1730,7 +1730,7 @@ class VideoProcessor @Inject constructor(
             if (project.imageEditorFade > 0f) postFilters.add("eq=saturation=${1.0f - project.imageEditorFade / 2.0f}:contrast=${1.0f - project.imageEditorFade / 4.0f}")
             if (project.colorLift != 0f || project.colorGamma != 0f || project.colorGain != 0f) {
                 val lift = project.colorLift / 100.0f
-                val gamma = 1.0f + project.colorGamma / 100.0f
+                val gamma = (1.0f + project.colorGamma / 100.0f).coerceIn(0.01f, 10.0f)
                 val gain = 1.0f + project.colorGain / 100.0f
                 postFilters.add("colorbalance=rs=$lift:gs=$lift:bs=$lift:rm=${gain - 1.0f}:gm=${gain - 1.0f}:bm=${gain - 1.0f},eq=gamma=$gamma")
             }
