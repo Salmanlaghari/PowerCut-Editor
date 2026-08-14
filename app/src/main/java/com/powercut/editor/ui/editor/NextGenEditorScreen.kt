@@ -581,7 +581,7 @@ fun NextGenEditorScreen(
         val fa = project.imageEditorFade
         val hi = project.imageEditorHighlights
         val sh = project.imageEditorShadows
-        val hasAdjustments = b != 0f || c != 1f || s != 1f || t != 0f || e != 1f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
+        val hasAdjustments = b != 0f || c != 1f || s != 1f || t != 0f || e != 0f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
 
         if (!hasAdjustments && lookMatrix == null) {
             colorFilter
@@ -606,7 +606,9 @@ fun NextGenEditorScreen(
             val contrastShift = (1f - c) * 128f
             val tempRed = 1f + t * 0.25f
             val tempBlue = 1f - t * 0.25f
-            val expScale = e
+            // Exposure: default 0 => gain 1 (no change), matching the export
+            // pipeline (FFmpeg eq/exposure uses imageEditorExposure/50).
+            val expScale = 1f + e / 50f
 
             // Fade: lifts blacks (adds to all channels equally)
             val fadeAdd = fa * 60f
@@ -725,6 +727,7 @@ fun NextGenEditorScreen(
                             // adjustments matrix directly to the video surface so
                             // the preview shows the REAL processed pixels, not a
                             // fake tint overlay. This makes preview == export.
+                            this.colorFilter = combinedColorFilter
 
                         }
                 )
