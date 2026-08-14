@@ -652,7 +652,7 @@ class ExportManager @Inject constructor(
                     voiceChangerPitch = project.voiceChangerPitch,
                     isAudioDuckingEnabled = project.isAudioDuckingEnabled,
                     borderStyle = project.borderStyle,
-                    watermarkPath = project.watermarkPath,
+                    watermarkPath = project.watermarkPath ?: videoProcessor.getWatermarkFile(),
                     vignetteStyle = project.vignetteStyle,
                     premiumLookId = project.activePremiumLook,
                     // v6.0.0 Premium export + AI + social
@@ -755,7 +755,7 @@ class ExportManager @Inject constructor(
                         voiceChangerPitch = project.voiceChangerPitch,
                         isAudioDuckingEnabled = project.isAudioDuckingEnabled,
                         borderStyle = project.borderStyle,
-                        watermarkPath = project.watermarkPath,
+                        watermarkPath = project.watermarkPath ?: videoProcessor.getWatermarkFile(),
                         vignetteStyle = project.vignetteStyle,
                         premiumLookId = project.activePremiumLook,
                         textStyleId = project.textStyleId,
