@@ -302,3 +302,4 @@ object PremiumFeatureBridge {
     fun toggleHighBitrate(viewModel: EditorViewModel) {
         viewModel.toggleHighBitrate()
     }
+}
