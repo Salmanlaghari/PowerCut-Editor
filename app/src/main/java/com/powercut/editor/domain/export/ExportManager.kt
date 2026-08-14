@@ -507,76 +507,16 @@ class ExportManager @Inject constructor(
                 // We continue anyway; the user has already committed to the export.
             }
 
-            // Check if input is audio file
-            val isAudioInput = videoProcessor.isAudioFile(videoPath)
-
-            // v6.4.0 FIX: Added ALL missing edit checks so that ANY user edit
-            // forces the full transcode pipeline (processAndExport) instead of
-            // falling through to instantTrim (stream copy). Previously, many
-            // edits were NOT checked here — watermark, image editor adjustments,
-            // blend mode, reverse, freeze frame, color curves, audio effects,
-            // voice changer, audio ducking, border style, vignette style,
-            // premium looks, HDR, high bitrate, AI features, social presets,
-            // target FPS != 30 — so the export silently used stream copy and
-            // produced an output identical to the input with no edits applied.
-            val isInstantTrimPossible = !isAudioInput &&
-                    !project.isMuted &&
-                    project.selectedFilter == "none" &&
-                    project.targetResolution == "1080p" &&
-                    project.speedFactor == 1.0f &&
-                    project.aspectPreset == "16:9" &&
-                    project.transitionType == "none" &&
-                    !project.hasBackgroundMusic &&
-                    project.autoCaptionsLanguage == "off" &&
-                    !project.isSilenceRemoverEnabled &&
-                    project.rotationDegrees == 0f &&
-                    !project.isFlippedHorizontal &&
-                    !project.isFlippedVertical &&
-                    project.cropPreset == "free" &&
-                    project.speedCurve == "constant" &&
-                    project.activeTextOverlay == null &&
-                    project.stickerType == "none" &&
-                    project.activeTemplateId == "none" &&
-                    project.visualizerStyle == "none" &&
-                    !project.isBeatSyncEnabled &&
-                    project.active3DShapeMask == "none" &&
-                    project.selectedEffect == "none" &&
-                    project.imageOverlayPath == null &&
-                    !project.isGreenScreenActive &&
-                    !project.isEraserActive &&
-                    !project.isImageEditorActive &&
-                    project.orientationMode == "free" &&
-                    // ── v6.4.0 NEW CHECKS (previously missing) ──
-                    !project.hasWatermark &&
-                    !project.isBlendModeActive &&
-                    !project.isReversed &&
-                    !project.hasFreezeFrame &&
-                    !project.isColorCurvesActive &&
-                    !project.isAudioEffectActive &&
-                    !project.isVoiceChanged &&
-                    !project.isAudioDuckingActive &&
-                    !project.isBorderStyleActive &&
-                    !project.isVignetteStyleActive &&
-                    !project.isPremiumLookActive &&
-                    project.targetFps == 30 &&
-                    !project.isHdrExport &&
-                    !project.isHighBitrate &&
-                    !project.isAiFeatureActive &&
-                    !project.hasSocialPreset
-
-            val success = if (isInstantTrimPossible) {
-                Log.d(tag, "Using ultra-fast Instant Trim (Sab se Tez)")
-                _progress.value = 10
-                videoProcessor.instantTrim(
-                    inputPath = videoPath,
-                    outputPath = tempOutputPath,
-                    startMs = project.trimStartMs,
-                    endMs = project.trimEndMs
-                )
-            } else {
-                Log.d(tag, "Using transcode pipeline for upscale/filters/speed/audio")
-                _progress.value = 10
-                videoProcessor.processAndExport(
+            // ═══════════════════════════════════════════════════════════════════════
+            //  v6.4.0 FULL TRANSCODE PIPELINE
+            //  Previously used "Instant Trim" optimization (stream copy -c copy) when
+            //  the project was "clean", but this completely bypassed the FFmpeg filter
+            //  chain, causing EVERY user edit to be silently dropped in export.
+            //  FIX: We now ALWAYS use processAndExport which properly applies all
+            //  -vf/-af filters. This ensures 100% of edits appear in export.
+            // ═══════════════════════════════════════════════════════════════════════
+            Log.d(tag, "Using transcode pipeline for full filter chain")
+            val success = videoProcessor.processAndExport(
                     inputPath = videoPath,
                     outputPath = tempOutputPath,
                     startMs = project.trimStartMs,
@@ -665,8 +605,7 @@ class ExportManager @Inject constructor(
                     keyframeTracks = project.keyframeTracks,
                     keyframeClipId = "",
                     onProgress = { pct -> updateProgress(pct) }
-                )
-            }
+            )
 
             if (success && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                 Log.d(tag, "Successfully processed video inside app sandbox: $tempOutputPath")
@@ -775,7 +714,7 @@ class ExportManager @Inject constructor(
                         // v7.1 Keyframe animation
                         keyframeTracks = project.keyframeTracks,
                         keyframeClipId = "",
-                        onProgress = { pct -> updateProgress(pct) }
+onProgress = { pct -> updateProgress(pct) }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                         val galleryPath = saveToPublicGallery(context, tempOutputFile)
