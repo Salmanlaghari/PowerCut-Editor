@@ -18,6 +18,10 @@
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
 
+#ifndef COLOR_FormatSurface
+#define COLOR_FormatSurface 0x7F000100
+#endif
+
 #include <chrono>
 #include <cstring>
 #include <thread>

@@ -17,14 +17,14 @@ void visit(const std::string& id,
            std::vector<std::string>& out) {
     auto it = color.find(id);
     if (it == color.end()) throw std::runtime_error("DAG: missing node " + id);
-    if (it->second == GRAY) throw std::runtime_error("DAG: cycle detected at " + id);
-    if (it->second == BLACK) return;
-    it->second = GRAY;
+    if (it->second == Color::GRAY) throw std::runtime_error("DAG: cycle detected at " + id);
+    if (it->second == Color::BLACK) return;
+    it->second = Color::GRAY;
     auto node_it = map.find(id);
     if (node_it != map.end()) {
         for (const auto& dep : node_it->second->deps) visit(dep, map, color, out);
     }
-    it->second = BLACK;
+    it->second = Color::BLACK;
     out.push_back(id);
 }
 } // namespace

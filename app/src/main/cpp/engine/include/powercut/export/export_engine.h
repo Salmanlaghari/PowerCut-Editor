@@ -66,6 +66,14 @@ public:
     // Tear down everything. Idempotent. Called from JNI_OnUnload / dtor.
     void teardown();
 
+    bool Impl_make_encoder(bool hardware, void* surface_window);
+
+    void render_test_frame(std::vector<uint8_t>& buf, int w, int h,
+                           int fi, int total) const;
+
+    int64_t av_rescale_q_portable(int64_t v, AVRational bq,
+                                  AVRational cq) const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
