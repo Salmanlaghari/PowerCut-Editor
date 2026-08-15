@@ -13,6 +13,15 @@ data class VideoProject(
     val speedFactor: Float = 1.0f,
     val aspectPreset: String = "16:9",
     val transitionType: String = "none",
+    /**
+     * Duration, in seconds, of each inter-clip transition.
+     *
+     * This is the amount of footage the transition OVERLAPS at every cut point,
+     * so the exported timeline is sum(clips) - (transitions * this value).
+     * Clamped per cut point at export time so it can never exceed the clips it
+     * joins (see TransitionCatalog.clampDuration).
+     */
+    val transitionDurationSec: Float = 0.7f,
     val backgroundMusicPath: String? = null,
     val backgroundMusicVolume: Float = 0.5f,
     val videoVolume: Float = 1.0f,

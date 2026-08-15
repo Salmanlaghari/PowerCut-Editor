@@ -461,8 +461,10 @@ class ExportManager @Inject constructor(
             // ═══════════════════════════════════════════════════════════
             // MULTI-CLIP TIMELINE EXPORT
             // If the timeline has multiple VIDEO clips, use the multi-clip
-            // pipeline (FFmpeg concat + xfade transitions). Otherwise,
-            // fall through to the single-clip pipeline below.
+            // pipeline, which joins the clips with REAL inter-clip `xfade`
+            // transitions at each cut point (or a plain concat when the project
+            // has no transition selected). Otherwise, fall through to the
+            // single-clip pipeline below.
             // ═══════════════════════════════════════════════════════════
             val videoClips = project.timeline.tracks
                 .filter { it.type == com.powercut.editor.data.TrackType.VIDEO }

@@ -254,6 +254,7 @@ class EditorViewModel @Inject constructor(
         json.put("speedFactor", project.speedFactor.toDouble())
         json.put("aspectPreset", project.aspectPreset)
         json.put("transitionType", project.transitionType)
+        json.put("transitionDurationSec", project.transitionDurationSec.toDouble())
         json.put("backgroundMusicPath", project.backgroundMusicPath ?: "")
         json.put("backgroundMusicVolume", project.backgroundMusicVolume.toDouble())
         json.put("videoVolume", project.videoVolume.toDouble())
@@ -420,6 +421,7 @@ class EditorViewModel @Inject constructor(
             speedFactor = json.optDouble("speedFactor", 1.0).toFloat(),
             aspectPreset = json.optString("aspectPreset", "16:9"),
             transitionType = json.optString("transitionType", "none"),
+            transitionDurationSec = json.optDouble("transitionDurationSec", 0.7).toFloat(),
             backgroundMusicPath = json.optString("backgroundMusicPath", "").let { if (it.isEmpty()) null else it },
             backgroundMusicVolume = json.optDouble("backgroundMusicVolume", 0.5).toFloat(),
             videoVolume = json.optDouble("videoVolume", 1.0).toFloat(),
@@ -948,6 +950,18 @@ class EditorViewModel @Inject constructor(
     fun updateTransition(transitionType: String) {
         projectRepository.updateProject { project ->
             project.copy(transitionType = transitionType)
+        }
+    }
+
+    /**
+     * Sets how long each inter-clip transition lasts, in seconds.
+     *
+     * Clamped to a sane authoring range here; the export pipeline clamps again
+     * per cut point so a long transition can never exceed the clips it joins.
+     */
+    fun updateTransitionDuration(durationSec: Float) {
+        projectRepository.updateProject { project ->
+            project.copy(transitionDurationSec = durationSec.coerceIn(0.1f, 5.0f))
         }
     }
 

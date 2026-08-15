@@ -107,4 +107,11 @@ jobs:
 
     - name: Run VideoProcessor FFmpeg validation
       run: python3 scripts/validate_video_processor_ffmpeg.py --ffmpeg "$(which ffmpeg)"
+
+    - name: Validate time-based transitions with real FFmpeg
+      # Renders real MP4s for every transition the editor exposes and verifies
+      # xfade names, per-transition render, transition timing (decoded frames),
+      # multi-clip A->B->C offsets/duration, A/V lock, the production graph
+      # shape, and the hard-cut fallback.
+      run: python3 scripts/validate_transitions_ffmpeg.py --ffmpeg "$(which ffmpeg)" --ffprobe "$(which ffprobe)"
 # trigger
