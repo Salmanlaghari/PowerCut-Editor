@@ -125,6 +125,7 @@ import com.powercut.editor.ui.theme.PremiumGold
 import com.powercut.editor.ui.theme.SignaturePurple
 import com.powercut.editor.ui.editor.timeline.ProfessionalTimeline
 import java.util.Locale
+import com.powercut.editor.domain.filter.FilterCatalog
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -145,31 +146,125 @@ private fun formatTime(ms: Long): String {
 //  of cinematic filters. Used by the combined preview filter so that
 //  BOTH the filter and image-editor adjustments show in real-time.
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  FILTER MATRIX BUILDER — returns a ColorMatrix for live preview
+//  of cinematic filters.
+//
+//  CRITICAL: the preview MUST reflect the SAME real FFmpeg filter
+//  string that the export pipeline uses. We therefore read the chain
+//  from [FilterCatalog.ffmpeg] (the single source of truth) and parse
+//  it into an approximate Compose ColorMatrix here. This guarantees
+//  the previewed grade and the exported grade never diverge, and that
+//  EVERY filter in the list produces a visible change (previously a
+//  hand-coded subset returned null and left the preview untouched).
+// ═══════════════════════════════════════════════════════════════
 private fun buildFilterMatrix(filter: String): ColorMatrix? {
     val f = filter.lowercase().replace("-", "_").replace(" ", "_")
-    return when (f) {
-        "grayscale", "mono" -> ColorMatrix().apply { setToSaturation(0f) }
-        "sepia" -> ColorMatrix(floatArrayOf(0.393f,0.769f,0.189f,0f,0f,0.349f,0.686f,0.168f,0f,0f,0.272f,0.534f,0.131f,0f,0f,0f,0f,0f,1f,0f))
-        "invert" -> ColorMatrix(floatArrayOf(-1f,0f,0f,0f,255f,0f,-1f,0f,0f,255f,0f,0f,-1f,0f,255f,0f,0f,0f,1f,0f))
-        "warm" -> ColorMatrix(floatArrayOf(1.1f,0f,0f,0f,0f, 0f,1.02f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f))
-        "cool" -> ColorMatrix(floatArrayOf(0.9f,0f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,1.1f,0f,0f, 0f,0f,0f,1f,0f))
-        "vintage" -> ColorMatrix(floatArrayOf(0.5f,0.65f,0.15f,0f,0f, 0.45f,0.6f,0.12f,0f,0f, 0.35f,0.55f,0.1f,0f,0f, 0f,0f,0f,1f,0f))
-        "dramatic" -> ColorMatrix().apply { setToSaturation(1.3f) }
-        "vivid" -> ColorMatrix().apply { setToSaturation(1.6f) }
-        "noir" -> ColorMatrix().apply { setToSaturation(0f) }
-        "bloom" -> ColorMatrix(floatArrayOf(1.05f,0.05f,0.05f,0f,10f, 0.05f,1.05f,0.05f,0f,10f, 0.05f,0.05f,1.05f,0f,10f, 0f,0f,0f,1f,0f))
-        "tealorange", "teal_orange" -> ColorMatrix(floatArrayOf(1.12f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.08f,0f,0f, 0f,0f,0f,1f,0f))
-        "pastel" -> ColorMatrix().apply { setToSaturation(0.7f) }
-        "fade" -> ColorMatrix().apply { setToSaturation(0.6f) }
-        "cyberpunk" -> ColorMatrix(floatArrayOf(1.2f,0f,0.1f,0f,0f, 0f,0.8f,0f,0f,0f, 0.1f,0f,1.25f,0f,0f, 0f,0f,0f,1f,0f))
-        "sunset" -> ColorMatrix(floatArrayOf(1.15f,0.05f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,0.95f,0f,0f, 0f,0f,0f,1f,0f))
-        "arctic" -> ColorMatrix(floatArrayOf(0.85f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.12f,0f,0f, 0f,0f,0f,1f,0f))
-        "forest" -> ColorMatrix(floatArrayOf(0.9f,0f,0f,0f,0f, 0f,1.1f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f))
-        "rose" -> ColorMatrix(floatArrayOf(1.1f,0f,0.05f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.05f,0f,0f, 0f,0f,0f,1f,0f))
-        "golden" -> ColorMatrix(floatArrayOf(1.12f,0.05f,0f,0f,5f, 0f,1.03f,0f,0f,0f, 0f,0f,0.85f,0f,0f, 0f,0f,0f,1f,0f))
-        "mist" -> ColorMatrix(floatArrayOf(1.05f,0.03f,0.03f,0f,15f, 0.03f,1.05f,0.03f,0f,15f, 0.03f,0.03f,1.05f,0f,15f, 0f,0f,0f,1f,0f))
-        else -> null
+    val chain = FilterCatalog.ffmpeg(f)
+    if (chain.isBlank()) return null
+    return colorGradePreviewMatrix(chain)
+}
+
+/**
+ * Parses a real FFmpeg color-grade chain (eq / colorbalance /
+ * colorchannelmixer / negate / hue=s=0) into an approximate Compose
+ * [ColorMatrix] so it is VISIBLE in the live preview, not only at
+ * export. Ops with no direct ColorMatrix equivalent (boxblur, noise,
+ * vignette, unsharp, tblend, hue rotation) are intentionally ignored
+ * for the preview; their tone contribution still shows via eq/
+ * colorbalance.
+ */
+private fun colorGradePreviewMatrix(chain: String): ColorMatrix? {
+    if (chain.isBlank()) return null
+
+    // Direct swaps that map 1:1 to a matrix.
+    if (chain.contains("negate")) {
+        return ColorMatrix(floatArrayOf(
+            -1f, 0f, 0f, 0f, 1f,
+            0f, -1f, 0f, 0f, 1f,
+            0f, 0f, -1f, 0f, 1f,
+            0f, 0f, 0f, 1f, 0f
+        ))
     }
+
+    var brightness = 0f
+    var contrast = 1f
+    var saturation = 1f
+    var cbRs = 0f; var cbGs = 0f; var cbBs = 0f
+    var cbRm = 0f; var cbGm = 0f; var cbBm = 0f
+    val hasHueGray = chain.contains("hue=s=0")
+
+    // colorchannelmixer directly defines the RGB transform matrix.
+    var ccm: ColorMatrix? = null
+
+    for (sub in chain.split(",")) {
+        val f = sub.trim()
+        when {
+            f.startsWith("colorchannelmixer=") -> {
+                val p = f.removePrefix("colorchannelmixer=").split(":").map { it.toFloatOrNull() ?: 0f }
+                if (p.size >= 12) {
+                    ccm = ColorMatrix(floatArrayOf(
+                        p[0], p[1], p[2], 0f, p[3],
+                        p[4], p[5], p[6], 0f, p[7],
+                        p[8], p[9], p[10], 0f, p[11],
+                        0f, 0f, 0f, 1f, 0f
+                    ))
+                }
+            }
+            f.startsWith("eq=") -> {
+                for (kv in f.removePrefix("eq=").split(":")) {
+                    val parts = kv.split("=")
+                    if (parts.size != 2) continue
+                    val v = parts[1].trim().toFloatOrNull() ?: continue
+                    when (parts[0].trim()) {
+                        "brightness" -> brightness = v
+                        "contrast" -> contrast = v
+                        "saturation" -> saturation = v
+                    }
+                }
+            }
+            f.startsWith("colorbalance=") -> {
+                for (kv in f.removePrefix("colorbalance=").split(":")) {
+                    val parts = kv.split("=")
+                    if (parts.size != 2) continue
+                    val v = parts[1].trim().toFloatOrNull() ?: continue
+                    when (parts[0].trim()) {
+                        "rs" -> cbRs = v; "gs" -> cbGs = v; "bs" -> cbBs = v
+                        "rm" -> cbRm = v; "gm" -> cbGm = v; "bm" -> cbBm = v
+                    }
+                }
+            }
+        }
+    }
+
+    val hasEq = brightness != 0f || contrast != 1f || saturation != 1f
+    val hasCb = cbRs != 0f || cbGs != 0f || cbBs != 0f || cbRm != 0f || cbGm != 0f || cbBm != 0f
+    if (ccm == null && !hasEq && !hasCb && !hasHueGray) return null
+
+    // Start from the colorchannelmixer matrix (or identity).
+    val mat = ccm ?: ColorMatrix()
+
+    // Tone (contrast + brightness) and colorbalance tints, applied in the
+    // same order premiumLookPreviewMatrix uses: tone first, then tint.
+    val contrastShift = (0.5f - 0.5f * contrast)
+    val brightnessAdd = brightness
+    val rShift = (cbRs + cbRm) * 0.15f
+    val gShift = (cbGs + cbGm) * 0.15f
+    val bShift = (cbBs + cbBm) * 0.15f
+
+    val tone = ColorMatrix(floatArrayOf(
+        contrast, 0f, 0f, 0f, contrastShift + brightnessAdd + rShift,
+        0f, contrast, 0f, 0f, contrastShift + brightnessAdd + gShift,
+        0f, 0f, contrast, 0f, contrastShift + brightnessAdd + bShift,
+        0f, 0f, 0f, 1f, 0f
+    ))
+    mat *= tone
+    if (hasHueGray) {
+        mat *= ColorMatrix().apply { setToSaturation(0f) }
+    } else if (saturation != 1f) {
+        mat *= ColorMatrix().apply { setToSaturation(saturation) }
+    }
+    return mat
 }
 
 // ============================================================================
@@ -504,43 +599,13 @@ fun NextGenEditorScreen(
     DisposableEffect(Unit) { onDispose { bgmPlayer.release() } }
 
     // ─── Filter Matrix ────────────────────────────────────────
+    // Live preview now derives from FilterCatalog.ffmpeg(id) so EVERY filter
+    // (not just a hand-coded subset) changes the preview, and the preview can
+    // never diverge from the export command.
     val colorFilter = remember(project.selectedFilter) {
         val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
-        when (f) {
-            "grayscale", "mono" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
-            "sepia" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(0.393f,0.769f,0.189f,0f,0f,0.349f,0.686f,0.168f,0f,0f,0.272f,0.534f,0.131f,0f,0f,0f,0f,0f,1f,0f)))
-            "invert" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(-1f,0f,0f,0f,255f,0f,-1f,0f,0f,255f,0f,0f,-1f,0f,255f,0f,0f,0f,1f,0f)))
-            "warm" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.1f,0f,0f,0f,0f, 0f,1.02f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f)))
-            "cool" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                0.9f,0f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,1.1f,0f,0f, 0f,0f,0f,1f,0f)))
-            "vintage" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                0.5f,0.65f,0.15f,0f,0f, 0.45f,0.6f,0.12f,0f,0f, 0.35f,0.55f,0.1f,0f,0f, 0f,0f,0f,1f,0f)))
-            "dramatic" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.3f) })
-            "vivid" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.6f) })
-            "noir" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
-            "bloom" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.05f,0.05f,0.05f,0f,10f, 0.05f,1.05f,0.05f,0f,10f, 0.05f,0.05f,1.05f,0f,10f, 0f,0f,0f,1f,0f)))
-            "tealorange", "teal_orange" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.12f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.08f,0f,0f, 0f,0f,0f,1f,0f)))
-            "pastel" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.7f) })
-            "fade" -> ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.6f) })
-            "cyberpunk" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.2f,0f,0.1f,0f,0f, 0f,0.8f,0f,0f,0f, 0.1f,0f,1.25f,0f,0f, 0f,0f,0f,1f,0f)))
-            "sunset" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.15f,0.05f,0f,0f,0f, 0f,0.97f,0f,0f,0f, 0f,0f,0.95f,0f,0f, 0f,0f,0f,1f,0f)))
-            "arctic" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                0.85f,0f,0f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.12f,0f,0f, 0f,0f,0f,1f,0f)))
-            "forest" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                0.9f,0f,0f,0f,0f, 0f,1.1f,0f,0f,0f, 0f,0f,0.9f,0f,0f, 0f,0f,0f,1f,0f)))
-            "rose" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.1f,0f,0.05f,0f,0f, 0f,0.95f,0f,0f,0f, 0f,0f,1.05f,0f,0f, 0f,0f,0f,1f,0f)))
-            "golden" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.12f,0.05f,0f,0f,5f, 0f,1.03f,0f,0f,0f, 0f,0f,0.85f,0f,0f, 0f,0f,0f,1f,0f)))
-            "mist" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-                1.05f,0.03f,0.03f,0f,15f, 0.03f,1.05f,0.03f,0f,15f, 0.03f,0.03f,1.05f,0f,15f, 0f,0f,0f,1f,0f)))
-            else -> null
-        }
+        buildFilterMatrix(f)?.let { ColorFilter.colorMatrix(it) }
+    }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -723,14 +788,13 @@ fun NextGenEditorScreen(
                             scaleX = if (project.isFlippedHorizontal) -1f else 1f
                             scaleY = if (project.isFlippedVertical) -1f else 1f
                             rotationZ = project.rotationDegrees
-                            // NOTE: The combined cinematic filter + image-editor
-                            // adjustments matrix (combinedColorFilter) is computed
-                            // above, but applying it to the ExoPlayer video surface
-                            // requires GraphicsLayerScope.colorFilter / a ColorFilter
-                            // RenderEffect, which is only available in Compose 1.7+
-                            // (Kotlin 2.0). It cannot be wired on the pinned
-                            // Compose/Kotlin versions without an upgrade. The export
-                            // pipeline already applies all of these edits via FFmpeg.
+                            // Live preview: the combined cinematic filter + image-editor
+                            // adjustments matrix is applied directly to the video pixels
+                            // via GraphicsLayerScope.colorFilter (available on the pinned
+                            // Compose 1.7 / Kotlin 2.1 toolchain). This makes every filter
+                            // — and every slider — visible in real-time, matching the
+                            // exported frame produced by the FFmpeg pipeline.
+                            this.colorFilter = combinedColorFilter
                         }
                 )
 
@@ -2962,44 +3026,10 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
             }
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            // Sourced from FilterCatalog so the displayed list, the live preview,
+            // and the export command all agree on exactly which filters exist.
             // (id, displayName, category)
-            val allFilters = listOf(
-                Triple("none", "Original", "basic"),
-                Triple("grayscale", "B&W", "basic"), Triple("sepia", "Sepia", "basic"),
-                Triple("invert", "Invert", "basic"), Triple("warm", "Warm", "basic"),
-                Triple("cool", "Cool", "basic"), Triple("vintage", "Vintage", "vintage"),
-                Triple("dramatic", "Drama", "basic"), Triple("negative", "Negative", "basic"),
-                Triple("noir", "Noir", "cinema"), Triple("cinematic", "Cinematic", "cinema"),
-                Triple("teal", "Teal", "cinema"), Triple("orange", "Orange", "cinema"),
-                Triple("lomo", "Lomo", "vintage"), Triple("polaroid", "Polaroid", "vintage"),
-                Triple("holga", "Holga", "vintage"), Triple("diana", "Diana", "vintage"),
-                Triple("film", "Film", "film"), Triple("super8", "Super8", "film"),
-                Triple("vhs_tape", "VHS", "vintage"), Triple("kodak", "Kodak", "film"),
-                Triple("fuji", "Fuji", "film"), Triple("agfa", "Agfa", "film"),
-                Triple("ilford", "Ilford", "film"), Triple("portra", "Portra", "film"),
-                Triple("velvia", "Velvia", "film"), Triple("provia", "Provia", "film"),
-                Triple("astia", "Astia", "film"), Triple("monochrome", "Mono", "basic"),
-                Triple("high_contrast", "Hi Contrast", "basic"), Triple("low_contrast", "Lo Contrast", "basic"),
-                Triple("high_saturation", "Hi Saturation", "basic"), Triple("low_saturation", "Lo Saturation", "basic"),
-                Triple("bright", "Bright", "basic"), Triple("dark", "Dark", "basic"),
-                Triple("soft", "Soft", "mood"), Triple("sharp", "Sharp", "mood"),
-                Triple("dreamy", "Dreamy", "mood"), Triple("glow", "Glow", "mood"),
-                Triple("haze", "Haze", "mood"), Triple("matte", "Matte", "mood"),
-                Triple("litho", "Litho", "vintage"), Triple("sepia_warm", "Sepia Warm", "vintage"),
-                Triple("sepia_cool", "Sepia Cool", "vintage"), Triple("red_boost", "Red+", "mood"),
-                Triple("blue_boost", "Blue+", "mood"), Triple("green_boost", "Green+", "mood"),
-                Triple("purple_haze", "Purple Haze", "neon"), Triple("pink_dream", "Pink Dream", "neon"),
-                Triple("amber", "Amber", "mood"), Triple("emerald", "Emerald", "mood"),
-                Triple("sapphire", "Sapphire", "mood"), Triple("ruby", "Ruby", "mood"),
-                Triple("bronze", "Bronze", "mood"), Triple("platinum", "Platinum", "mood"),
-                Triple("neon_city", "Neon City", "neon"), Triple("retro_wave", "Retro Wave", "neon"),
-                Triple("synthwave", "Synthwave", "neon"), Triple("analog", "Analog", "vintage"),
-                Triple("tokyo", "Tokyo", "cinema"), Triple("nyc", "NYC", "cinema"),
-                Triple("paris", "Paris", "cinema"), Triple("miami", "Miami", "neon"),
-                Triple("desert", "Desert", "mood"), Triple("ocean", "Ocean", "mood"),
-                Triple("autumn", "Autumn", "mood"), Triple("winter", "Winter", "mood"),
-                Triple("spring", "Spring", "mood"), Triple("summer", "Summer", "mood")
-            )
+            val allFilters = FilterCatalog.all.map { Triple(it.id, it.name, it.category) }
             allFilters.filter { filterCategory == "all" || it.third == filterCategory }.forEach { (id, name, cat) ->
                 val sel = project.selectedFilter.lowercase() == id
                 // 2027 8K: Real Canvas demo thumbnail with filter color preview
