@@ -87,6 +87,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.ColorMatrixColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
@@ -598,8 +599,7 @@ fun NextGenEditorScreen(
     // is visible immediately — driven by the SAME matrix the export uses.
     DisposableEffect(combinedMatrix, exoPlayer) {
         if (combinedMatrix != null) {
-            val arr = FloatArray(20)
-            combinedMatrix.getArray(arr)
+            val arr = combinedMatrix.values
             exoPlayer.setVideoEffects(listOf(Media3ColorFilter(arr)))
         } else {
             exoPlayer.setVideoEffects(emptyList())
