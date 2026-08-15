@@ -734,7 +734,7 @@ data class VideoProject(
             return Keyframe(
                 timeMs = json.optLong("time_ms", 0L),
                 property = json.optString("property", ""),
-                value = json.optFloat("value", 0f),
+                    value = json.optDouble("value", 0.0).toFloat(),
                 easing = runCatching { KeyframeEasing.valueOf(json.optString("easing", "LINEAR")) }.getOrDefault(KeyframeEasing.LINEAR)
             )
         }
