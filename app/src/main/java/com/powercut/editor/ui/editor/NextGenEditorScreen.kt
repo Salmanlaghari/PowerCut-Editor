@@ -87,7 +87,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.ColorMatrixColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
@@ -104,7 +103,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.effect.ColorFilter as Media3ColorFilter
+import androidx.media3.effect.RgbMatrix
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -599,8 +598,17 @@ fun NextGenEditorScreen(
     // is visible immediately — driven by the SAME matrix the export uses.
     DisposableEffect(combinedMatrix, exoPlayer) {
         if (combinedMatrix != null) {
-            val arr = combinedMatrix.values
-            exoPlayer.setVideoEffects(listOf(Media3ColorFilter(arr)))
+            // Media3 applies a 4x4 RGB matrix. Derive it from the Compose 4x5 (20)
+            // matrix used for the preview/export so they never diverge.
+            val m = combinedMatrix.values
+            val rgb = floatArrayOf(
+                m[0], m[1], m[2], m[4],
+                m[5], m[6], m[7], m[9],
+                m[10], m[11], m[12], m[14],
+                0f, 0f, 0f, 1f
+            )
+            val rgbMatrix = RgbMatrix { _: Long, _: Boolean -> rgb }
+            exoPlayer.setVideoEffects(listOf(rgbMatrix))
         } else {
             exoPlayer.setVideoEffects(emptyList())
         }
