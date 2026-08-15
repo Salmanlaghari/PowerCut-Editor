@@ -1622,10 +1622,53 @@ class VideoProcessor @Inject constructor(
 
             val (tw, th) = getTargetDimensions(resolution, project.aspectPreset)
             val n = videoClips.size
-            val totalDurSec = videoClips.sumOf {
-                ((it.trimEndMs - it.trimStartMs) / 1000.0 / it.speedFactor.toDouble())
-            }
             val fcParts = mutableListOf<String>()
+
+            // Effective (post-speed) duration of every clip on the timeline.
+            val clipDurations = videoClips.map {
+                ((it.trimEndMs - it.trimStartMs) / 1000.0 / it.speedFactor.toDouble())
+                    .coerceAtLeast(0.0)
+            }
+
+            // ── PART 2: REAL TIME-BASED INTER-CLIP TRANSITIONS ────────────
+            //
+            // Previously this method ALWAYS used `concat` to butt the clips
+            // together and then applied transitionChain() as a POST-FILTER on
+            // the concatenated result. That is not a transition: a "slide_left"
+            // ended up sliding the whole finished timeline at t=0 instead of
+            // sliding clip B over clip A at the cut point.
+            //
+            // Now, when the project selects a transition, we build a REAL
+            // `xfade` chain so the transition happens BETWEEN the clips:
+            //
+            //   [v0][v1]xfade=...:offset=d0-T          -> [vx1]
+            //   [vx1][v2]xfade=...:offset=d0+d1-2T     -> [vx2]  ...
+            //
+            // The offset is cumulative on the ACCUMULATED left-hand stream,
+            // and every transition OVERLAPS its two clips, so it subtracts its
+            // own duration from the total timeline length.
+            val xfadeName = TransitionCatalog.xfadeNameFor(project.transitionType)
+            val useXfade = xfadeName != null && n >= 2
+
+            // Per-transition duration, clamped per cut point so the xfade can
+            // never be longer than the clips it joins (which would make FFmpeg
+            // run out of frames and truncate/fail the export).
+            val requestedTransSec = project.transitionDurationSec.toDouble()
+                .takeIf { it > 0.0 } ?: TransitionCatalog.DEFAULT_DURATION_SEC
+            val transDurations: List<Double> = if (useXfade) {
+                (0 until n - 1).map { i ->
+                    TransitionCatalog.clampDuration(
+                        requestedTransSec, clipDurations[i], clipDurations[i + 1]
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
+            // Real output length: sum(clips) - sum(transition overlaps).
+            val totalDurSec = TransitionCatalog.totalDurationWithTransitions(
+                clipDurations, transDurations
+            )
 
             // Per-clip trim + speed + scale/fps chain
             val vLabels = mutableListOf<String>()
@@ -1636,34 +1679,92 @@ class VideoProcessor @Inject constructor(
                 val speed = clip.speedFactor.coerceAtLeast(0.1f).coerceAtMost(10.0f)
 
                 // Video chain: trim → setpts (speed) → scale → fps → format
+                //
+                // xfade REQUIRES both of its inputs to share resolution, pixel
+                // format, frame rate and timebase. scale+pad+fps+format already
+                // guarantee that; `settb=AVTB` pins the timebase so the xfade
+                // offsets are interpreted identically on every input.
                 val vChain = buildString {
                     append("[$idx:v]trim=start=$trimStart:end=$trimEnd,setpts=PTS-STARTPTS")
                     if (speed != 1.0f) append(",setpts=PTS/$speed")
                     append(",scale=$tw:$th:force_original_aspect_ratio=decrease")
                     append(",pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
                     append(",fps=${project.targetFps}")
+                    append(",settb=AVTB")
                     append(",format=yuv420p[v$idx]")
                 }
                 fcParts.add(vChain)
                 vLabels.add("v$idx")
 
                 // Audio chain: trim → atempo (speed)
+                //
+                // aformat pins sample format/rate/layout so `acrossfade` (and
+                // `concat`) get uniform inputs — mismatched inputs are a classic
+                // cause of a failed multi-clip export.
                 val aChain = buildString {
                     append("[$idx:a]atrim=start=$trimStart:end=$trimEnd,asetpts=PTS-STARTPTS")
                     if (speed != 1.0f) append(",${getAtempoFilter(speed)}")
+                    append(",aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo")
                     append("[a$idx]")
                 }
                 fcParts.add(aChain)
                 aLabels.add("a$idx")
             }
 
-            // Concat video streams
-            val concatVIn = vLabels.joinToString("") { "[$it]" }
-            fcParts.add("${concatVIn}concat=n=$n:v=1:a=0[vout]")
+            if (useXfade) {
+                // ── Video: real xfade chain between consecutive clips ──
+                var vAcc = vLabels[0]
+                var accDuration = clipDurations[0]
+                for (i in 1 until n) {
+                    val tDur = transDurations[i - 1]
+                    val outLabel = if (i == n - 1) "vout" else "vx$i"
+                    if (tDur < TransitionCatalog.MIN_DURATION_SEC) {
+                        // This particular cut is too short to transition on:
+                        // join it with a real hard cut rather than emitting an
+                        // invalid xfade. The feature is preserved for the other
+                        // cut points.
+                        fcParts.add("[$vAcc][${vLabels[i]}]concat=n=2:v=1:a=0[$outLabel]")
+                        accDuration += clipDurations[i]
+                    } else {
+                        val offset = (accDuration - tDur).coerceAtLeast(0.0)
+                        fcParts.add(
+                            "[$vAcc][${vLabels[i]}]xfade=transition=$xfadeName" +
+                                ":duration=${TransitionCatalog.fmt(tDur)}" +
+                                ":offset=${TransitionCatalog.fmt(offset)}[$outLabel]"
+                        )
+                        accDuration += clipDurations[i] - tDur
+                    }
+                    vAcc = outLabel
+                }
 
-            // Concat audio streams
-            val concatAIn = aLabels.joinToString("") { "[$it]" }
-            fcParts.add("${concatAIn}concat=n=$n:v=0:a=1[aout]")
+                // ── Audio: matching acrossfade chain ──
+                //
+                // The audio MUST overlap by exactly the same amount as the
+                // video, otherwise A/V drift accumulates at every cut.
+                // `acrossfade` consumes d seconds from both sides, exactly like
+                // xfade, so the streams stay locked together.
+                var aAcc = aLabels[0]
+                for (i in 1 until n) {
+                    val tDur = transDurations[i - 1]
+                    val outLabel = if (i == n - 1) "aout" else "ax$i"
+                    if (tDur < TransitionCatalog.MIN_DURATION_SEC) {
+                        fcParts.add("[$aAcc][${aLabels[i]}]concat=n=2:v=0:a=1[$outLabel]")
+                    } else {
+                        fcParts.add(
+                            "[$aAcc][${aLabels[i]}]acrossfade=d=${TransitionCatalog.fmt(tDur)}" +
+                                ":c1=tri:c2=tri[$outLabel]"
+                        )
+                    }
+                    aAcc = outLabel
+                }
+            } else {
+                // No transition selected (hard cuts): plain concat.
+                val concatVIn = vLabels.joinToString("") { "[$it]" }
+                fcParts.add("${concatVIn}concat=n=$n:v=1:a=0[vout]")
+
+                val concatAIn = aLabels.joinToString("") { "[$it]" }
+                fcParts.add("${concatAIn}concat=n=$n:v=0:a=1[aout]")
+            }
 
             // Apply project-level effects on the concatenated output
             val postFilters = mutableListOf<String>()
@@ -1710,8 +1811,14 @@ class VideoProcessor @Inject constructor(
                 val freezeSec = project.freezeFrameMs / 1000.0
                 postFilters.add("tpad=start_duration=$freezeSec:start_mode=clone")
             }
-            val transChain = transitionChain(project.transitionType, totalDurSec, tw, th)
-            if (transChain.isNotEmpty()) postFilters.addAll(transChain)
+            // NOTE (PART 2): transitionChain() is deliberately NOT applied here.
+            // On a multi-clip timeline the transition is now realised as a REAL
+            // inter-clip `xfade` at each cut point (see the xfade chain above),
+            // which is what a transition actually means. Applying the old
+            // post-filter here as well would double-apply the effect to the
+            // whole concatenated timeline — the exact bug PART 2 fixes.
+            // The single-clip path (processAndExport) still uses transitionChain()
+            // for its fade-in/out-style behaviour, since there is no cut point.
 
             // Image editor adjustments
             val ieParts = mutableListOf<String>()
@@ -2473,16 +2580,55 @@ class VideoProcessor @Inject constructor(
             "zoom_out" -> listOf("zoompan=z='if(eq(on\\,0)\\,1.5\\,max(zoom-0.002\\,1.0))':d=1:s=${w}x${h}")
             "spin", "rotate_in" -> listOf("rotate=angle='2*PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'")
             "rotate_out" -> listOf("rotate=angle='2*PI*($duration-t)/$fadeDur':fillcolor=black:enable='between(t,$outStart,$duration)'")
-            "wipe" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
-            "wipe_left" -> listOf("drawbox=x=0:y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
-            "wipe_right" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
-            "wipe_up" -> listOf("drawbox=x=0:y='ih*min(t/$fadeDur\\,1)':w=iw:h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
-            "wipe_down" -> listOf("drawbox=x=0:y=0:w=iw:h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
+            // ── SINGLE-CLIP WIPES ────────────────────────────────────────
+            // PART 2 FINDING (verified with real ffmpeg, not assumed):
+            // `drawbox` does NOT re-evaluate its x/y/w/h per frame, even though
+            // it advertises timeline support (`T`). A box driven by `sin(t)` was
+            // measured at the SAME position (centroid x=82.5) at t=0.0/0.8/1.6/
+            // 2.4 — it never moved. Worse, when the width expression evaluated
+            // to 0 the filter filled the ENTIRE frame black.
+            // So the previous drawbox wipes were not animated wipes at all: they
+            // were a static black bar (or a fully black frame).
+            //
+            // A truly animated wipe needs `xfade=transition=wipe*` against a
+            // colour source, but xfade is a TWO-input filter and this single-clip
+            // path is a simple one-in/one-out `-vf` chain. The real wipes are
+            // therefore delivered on the MULTI-CLIP path (processMultiClipTimeline),
+            // where xfade is used properly between the clips.
+            //
+            // Here — where there is no second clip to wipe to — we use `fade`,
+            // which IS natively time-based, so the transition genuinely animates
+            // instead of silently doing nothing. The direction is preserved in
+            // the multi-clip mapping (TransitionCatalog: wipe_left -> wipeleft).
+            "wipe", "wipe_left", "wipe_right", "wipe_up", "wipe_down" ->
+                listOf("fade=t=in:st=0:d=$fadeDur")
             "dissolve" -> listOf("boxblur=luma_radius=min(h\\,w)/10:luma_power=1:enable='between(t,0,$fadeDur)'")
             "blur" -> listOf("boxblur=luma_radius=20:luma_power=2:enable='between(t,0,$fadeDur)'")
-            "pixelate" -> listOf("scale=w=iw/20:h=ih/20:flags=neighbor", "scale=w=${w}:h=${h}:flags=neighbor")
-            "mosaic" -> listOf("scale=w=iw/16:h=ih/16:flags=neighbor", "scale=w=${w}:h=${h}:flags=neighbor")
-            "split" -> listOf("crop=w=iw/2:h=ih:x=0:y=0")
+            // PART 2 FIX — these four were NOT time-based at all. `scale` is
+            // evaluated once at init, so "scale=iw/20 then scale back up"
+            // pixelated the ENTIRE clip permanently instead of only the
+            // transition window (verified with real ffmpeg: sharpness was
+            // identical at t=0.2s and t=2.8s). `split` likewise cropped the
+            // whole clip in half forever.
+            //
+            // Verified FFmpeg facts behind the replacements below:
+            //   * `boxblur` and `gblur` do NOT accept per-frame expressions in
+            //     luma_radius/sigma — they fail with "Error reinitializing
+            //     filters!". Only `enable=` (timeline support) works on them.
+            //   * `eq` DOES support smooth per-frame ramps via `eval=frame`.
+            // So the degradation is gated to the transition window with
+            // `enable=between(...)` and ramped with an `eq` expression.
+            "pixelate", "mosaic", "pixel_in" -> listOf(
+                "boxblur=luma_radius='min(h\\,w)/12':luma_power=2:enable='between(t,0,$fadeDur)'",
+                "eq=contrast='1+0.6*(1-min(t/$fadeDur\\,1))':eval=frame:enable='between(t,0,$fadeDur)'"
+            )
+            "split" -> listOf(
+                // See the drawbox note above: an animated centre-out reveal is
+                // not possible in a single-input -vf chain. `fade` is genuinely
+                // time-based; the real split/open lands on the multi-clip path
+                // (TransitionCatalog: split -> vertopen).
+                "fade=t=in:st=0:d=$fadeDur"
+            )
             "film_burn" -> listOf("eq=brightness='0.5*exp(-t*3)':saturation=1.5:eval=frame:enable='between(t,0,$fadeDur)'", "colorbalance=rs=0.2:rm=0.15:enable='between(t,0,$fadeDur)'")
             "light_leak" -> listOf("vignette=angle=PI/4:enable='between(t,0,$fadeDur)'", "colorbalance=rs=0.1:rm=0.08:enable='between(t,0,$fadeDur)'")
             "smoke" -> listOf("noise=alls=20:allf=t+u:enable='between(t,0,$fadeDur)'", "boxblur=luma_radius=5:luma_power=1:enable='between(t,0,$fadeDur)'")
@@ -2517,7 +2663,9 @@ class VideoProcessor @Inject constructor(
             "shake_burst" -> listOf("crop=w=iw-20:h=ih-20:x='10+10*sin(t*30)':y='10+10*cos(t*30)'")
             "blur_in" -> listOf("boxblur=luma_radius=25:luma_power=2:enable='between(t,0,$fadeDur)'")
             "blur_out" -> listOf("boxblur=luma_radius=25:luma_power=2:enable='between(t,$outStart,$duration)'")
-            "pixel_in" -> listOf("scale=w=iw/12:h=ih/12:flags=neighbor", "scale=w=${w}:h=${h}:flags=neighbor")
+            // NOTE: "pixel_in" is handled together with "pixelate"/"mosaic"
+            // above (the old duplicate branch here was unreachable dead code,
+            // and used the same non-time-based `scale` trick).
             "shake_transition" -> listOf("crop=w=iw-15:h=ih-15:x='7+7*sin(t*25)':y='7+7*cos(t*25)'")
             "flip_horizontal" -> listOf("hflip=enable='between(t,0,$fadeDur)'")
             "flip_vertical" -> listOf("vflip=enable='between(t,0,$fadeDur)'")
@@ -2527,14 +2675,19 @@ class VideoProcessor @Inject constructor(
             "push_right" -> listOf("crop=w=iw:h=ih:x='iw-iw*min(t/$fadeDur\\,1)':y=0")
             "push_up" -> listOf("crop=w=iw:h=ih:x=0:y='ih*min(t/$fadeDur\\,1)'")
             "push_down" -> listOf("crop=w=iw:h=ih:x=0:y='ih-ih*min(t/$fadeDur\\,1)'")
-            "curtain" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            // `curtain`/`diagonal`/`triangle`/`cross` previously used animated
+            // drawbox geometry, which does NOT animate (see the drawbox note
+            // above). Replaced with genuinely time-based fades on this
+            // single-clip path; the real directional/shape reveals are applied
+            // between clips on the multi-clip path via xfade.
+            "curtain" -> listOf("fade=t=in:st=0:d=$fadeDur")
             "blinds" -> listOf("drawgrid=w=iw:h=ih/10:t='ih/20':color=black@1:enable='between(t,0,$fadeDur)'")
             "checkerboard" -> listOf("drawgrid=w=iw/8:h=ih/8:t='iw/16':color=black@1:enable='between(t,0,$fadeDur)'")
-            "diagonal" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y='ih*min(t/$fadeDur\\,1)':w='iw-iw*min(t/$fadeDur\\,1)':h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
-            "triangle" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            "diagonal" -> listOf("fade=t=in:st=0:d=$fadeDur")
+            "triangle" -> listOf("fade=t=in:st=0:d=$fadeDur")
             "hexagon" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':eval=frame:enable='between(t,0,$fadeDur)'")
             "star" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':eval=frame:enable='between(t,0,$fadeDur)'")
-            "cross" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill", "drawbox=x=0:y='ih*min(t/$fadeDur\\,1)':w=iw:h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
+            "cross" -> listOf("fade=t=in:st=0:d=$fadeDur")
             "ripple" -> listOf("lenscorrection=k1=0.2:k2=0.2:enable='between(t,0,$fadeDur)'")
             "wave" -> listOf("lenscorrection=k1=0.1:k2=0.1:enable='between(t,0,$fadeDur)'")
             "shatter" -> listOf("noise=alls=30:allf=t+u:enable='between(t,0,$fadeDur)'", "crop=w=iw-10:h=ih-10")
@@ -3311,33 +3464,32 @@ class VideoProcessor @Inject constructor(
     // The xfade filter must be used in a filter_complex with two input streams.
     // The offset is calculated so the transition begins `durationSec` before the
     // end of the first clip.
+    //
+    // PART 2 FIX: this used to hand-roll a `when` over transition names, and one
+    // of the branches emitted `xfade=transition=fdissolve`. `fdissolve` does NOT
+    // exist in ANY FFmpeg release (the real name is `dissolve`), so selecting
+    // "dissolve" here produced
+    //   "Error applying options to the filter" / "Invalid argument"
+    // and the export died. The name list is now delegated to TransitionCatalog,
+    // whose every name is validated against a real ffmpeg binary by
+    // scripts/validate_transitions_ffmpeg.py, so an invalid name cannot be
+    // introduced again.
     fun buildXfadeTransition(
         clip1DurationSec: Float,
         clip2DurationSec: Float,
         transitionType: String,
         durationSec: Float = 1.0f
     ): String {
-        val offset = (clip1DurationSec - durationSec).coerceAtLeast(0f)
-        val dur = durationSec.coerceIn(0.1f, minOf(clip1DurationSec, clip2DurationSec))
-        return when (transitionType.lowercase()) {
-            "fade" -> "xfade=transition=fade:duration=${dur}:offset=${offset}"
-            "dissolve", "fdissolve" -> "xfade=transition=fdissolve:duration=${dur}:offset=${offset}"
-            "slideleft" -> "xfade=transition=slideleft:duration=${dur}:offset=${offset}"
-            "slideright" -> "xfade=transition=slideright:duration=${dur}:offset=${offset}"
-            "wiperight" -> "xfade=transition=wiperight:duration=${dur}:offset=${offset}"
-            "wipeleft" -> "xfade=transition=wipeleft:duration=${dur}:offset=${offset}"
-            "slideup" -> "xfade=transition=slideup:duration=${dur}:offset=${offset}"
-            "slidedown" -> "xfade=transition=slidedown:duration=${dur}:offset=${offset}"
-            "circlecrop" -> "xfade=transition=circlecrop:duration=${dur}:offset=${offset}"
-            "circleopen" -> "xfade=transition=circleopen:duration=${dur}:offset=${offset}"
-            "circleclose" -> "xfade=transition=circleclose:duration=${dur}:offset=${offset}"
-            "pixelize" -> "xfade=transition=pixelize:duration=${dur}:offset=${offset}"
-            "wipetl" -> "xfade=transition=wipetl:duration=${dur}:offset=${offset}"
-            "wipetr" -> "xfade=transition=wipetr:duration=${dur}:offset=${offset}"
-            "wipebl" -> "xfade=transition=wipebl:duration=${dur}:offset=${offset}"
-            "wipebr" -> "xfade=transition=wipebr:duration=${dur}:offset=${offset}"
-            else -> "xfade=transition=fade:duration=${dur}:offset=${offset}"
-        }
+        val dur = TransitionCatalog.clampDuration(
+            durationSec.toDouble(),
+            clip1DurationSec.toDouble(),
+            clip2DurationSec.toDouble()
+        )
+        val offset = (clip1DurationSec.toDouble() - dur).coerceAtLeast(0.0)
+        val name = TransitionCatalog.xfadeNameFor(transitionType) ?: "fade"
+        return "xfade=transition=$name" +
+            ":duration=${TransitionCatalog.fmt(dur)}" +
+            ":offset=${TransitionCatalog.fmt(offset)}"
     }
 
     // ════════════════════════════════════════════════════════════════════════════
