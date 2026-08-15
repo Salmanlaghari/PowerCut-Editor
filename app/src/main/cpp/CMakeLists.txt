@@ -7,12 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ENGINE_SRC_DIR ${CMAKE_SOURCE_DIR}/engine)
 
 add_library(powercut_native SHARED
-    ${ENGINE_SRC_DIR}/export/export_engine.cpp
-    ${ENGINE_SRC_DIR}/core/dag_resolver.cpp
-    ${ENGINE_SRC_DIR}/core/watermark.cpp
-    ${ENGINE_SRC_DIR}/core/audio_mixer.cpp
-    ${ENGINE_SRC_DIR}/core/hw_encoder.cpp
-    ${ENGINE_SRC_DIR}/core/leveldb_cache.cpp
+    ${ENGINE_SRC_DIR}/src/export/export_engine.cpp
+    ${ENGINE_SRC_DIR}/src/core/dag_resolver.cpp
+    ${ENGINE_SRC_DIR}/src/core/watermark.cpp
+    ${ENGINE_SRC_DIR}/src/core/audio_mixer.cpp
+    ${ENGINE_SRC_DIR}/src/core/hw_encoder.cpp
+    ${ENGINE_SRC_DIR}/src/core/leveldb_cache.cpp
 )
 
 target_include_directories(powercut_native PRIVATE
