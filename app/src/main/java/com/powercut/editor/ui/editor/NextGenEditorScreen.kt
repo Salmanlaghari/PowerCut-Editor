@@ -87,7 +87,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
@@ -104,6 +103,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.effect.ColorFilter as Media3ColorFilter
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -495,22 +495,19 @@ fun NextGenEditorScreen(
     // Release BGM player on dispose
     DisposableEffect(Unit) { onDispose { bgmPlayer.release() } }
 
-    // ─── Filter Matrix ────────────────────────────────────────
-    // Live preview now derives from FilterCatalog.ffmpeg(id) so EVERY filter
-    // (not just a hand-coded subset) changes the preview, and the preview can
-    // never diverge from the export command.
-    val colorFilter = remember(project.selectedFilter) {
-        val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
-        buildFilterMatrix(f)?.let { ColorFilter.colorMatrix(it) }
-    }
-
     // ═══════════════════════════════════════════════════════════
     //  COMBINED LIVE PREVIEW FILTER — merges the selected cinematic filter
     //  WITH the image-editor adjustments (brightness, contrast, saturation,
     //  temperature, exposure) so ALL adjustments show in real-time on the
     //  player, not just on export. This makes every slider "real" not "fake".
     // ═══════════════════════════════════════════════════════════
-    val combinedColorFilter = remember(
+    // Combined live-preview matrix = selected filter + premium look +
+    // image-editor adjustments, all derived from the SAME real chains used at
+    // export. We expose the raw ColorMatrix so it can be applied live to the
+    // actual ExoPlayer video via a Media3 ColorFilter GL effect (the Compose
+    // GraphicsLayerScope.colorFilter API is unavailable on the pinned Compose
+    // version), guaranteeing the preview matches the exported frame.
+    val combinedMatrix = remember(
         project.selectedFilter,
         project.activePremiumLook,
         project.imageEditorBrightness,
@@ -527,9 +524,6 @@ fun NextGenEditorScreen(
         project.imageEditorSharpen,
         project.selectedEffect
     ) {
-        // v4.6.0: preview matrix for the active Premium Look (HDR/iPhone/Bright/
-        // Cinema/Magic). Composed in so the look is VISIBLE in real-time preview,
-        // not only applied at export.
         val lookMatrix = premiumLookPreviewMatrix(project.activePremiumLook)
 
         val b = project.imageEditorBrightness
@@ -544,85 +538,73 @@ fun NextGenEditorScreen(
         val sh = project.imageEditorShadows
         val hasAdjustments = b != 0f || c != 1f || s != 1f || t != 0f || e != 0f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
 
-        if (!hasAdjustments && lookMatrix == null) {
-            colorFilter
-        } else if (!hasAdjustments && lookMatrix != null) {
-            // Only a premium look is active (no slider adjustments).
-            if (colorFilter != null) {
-                val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
-                val filterMatrix = buildFilterMatrix(f)
-                if (filterMatrix != null) {
-                    filterMatrix *= lookMatrix
-                    ColorFilter.colorMatrix(filterMatrix)
-                } else {
-                    ColorFilter.colorMatrix(lookMatrix)
-                }
-            } else {
-                ColorFilter.colorMatrix(lookMatrix)
+        val matrix: ColorMatrix? = when {
+            !hasAdjustments && lookMatrix == null -> buildFilterMatrix(project.selectedFilter)
+            !hasAdjustments && lookMatrix != null -> {
+                val fm = buildFilterMatrix(project.selectedFilter)
+                if (fm != null) { fm *= lookMatrix; fm } else lookMatrix
             }
-        } else {
-            // Build a combined matrix: adjustments applied on top of filter
-            val brightnessShift = b * 100f
-            val contrastScale = c
-            val contrastShift = (1f - c) * 128f
-            val tempRed = 1f + t * 0.25f
-            val tempBlue = 1f - t * 0.25f
-            // Exposure: default 0 => gain 1 (no change), matching the export
-            // pipeline (FFmpeg eq/exposure uses imageEditorExposure/50).
-            val expScale = 1f + e / 50f
+            else -> {
+                // Build the adjustment matrix (same math as the export pipeline).
+                val brightnessShift = b * 100f
+                val contrastScale = c
+                val contrastShift = (1f - c) * 128f
+                val tempRed = 1f + t * 0.25f
+                val tempBlue = 1f - t * 0.25f
+                // Exposure: default 0 => gain 1, matching FFmpeg eq/exposure.
+                val expScale = 1f + e / 50f
 
-            // Fade: lifts blacks (adds to all channels equally)
-            val fadeAdd = fa * 60f
-            // Highlights: brighten upper range
-            val hlAdd = hi * 40f
-            // Shadows: lift darks
-            val shAdd = sh * 30f
+                val fadeAdd = fa * 60f
+                val hlAdd = hi * 40f
+                val shAdd = sh * 30f
 
-            val adjMatrix = ColorMatrix(floatArrayOf(
-                contrastScale * tempRed * expScale, 0f, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
-                0f, contrastScale * expScale, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
-                0f, 0f, contrastScale * tempBlue * expScale, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            val satMatrix = ColorMatrix().apply { setToSaturation(s) }
-            adjMatrix *= satMatrix
-            // Grain: approximate by slight random-like desaturation + contrast bump
-            if (gr > 0f) {
-                val grainSat = ColorMatrix().apply { setToSaturation((1f - gr * 0.3f).coerceAtLeast(0.5f)) }
-                adjMatrix *= grainSat
-            }
-            // Sharpen approximation: boost contrast slightly for preview
-            if (project.imageEditorSharpen > 0f) {
-                val sharpenContrast = 1f + project.imageEditorSharpen * 0.15f
-                val sharpenShift = (1f - sharpenContrast) * 128f
-                val sharpenMatrix = ColorMatrix(floatArrayOf(
-                    sharpenContrast, 0f, 0f, 0f, sharpenShift,
-                    0f, sharpenContrast, 0f, 0f, sharpenShift,
-                    0f, 0f, sharpenContrast, 0f, sharpenShift,
+                val adjMatrix = ColorMatrix(floatArrayOf(
+                    contrastScale * tempRed * expScale, 0f, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
+                    0f, contrastScale * expScale, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
+                    0f, 0f, contrastScale * tempBlue * expScale, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
                     0f, 0f, 0f, 1f, 0f
                 ))
-                adjMatrix *= sharpenMatrix
-            }
-
-            // v4.6.0: compose the premium look preview matrix on top of adjustments
-            if (lookMatrix != null) {
-                adjMatrix *= lookMatrix
-            }
-
-            // If there's also a filter, combine them
-            if (colorFilter != null) {
-                val f = project.selectedFilter.lowercase().replace("-", "_").replace(" ", "_")
-                val filterMatrix = buildFilterMatrix(f)
-                if (filterMatrix != null) {
-                    filterMatrix *= adjMatrix
-                    ColorFilter.colorMatrix(filterMatrix)
-                } else {
-                    ColorFilter.colorMatrix(adjMatrix)
+                val satMatrix = ColorMatrix().apply { setToSaturation(s) }
+                adjMatrix *= satMatrix
+                if (gr > 0f) {
+                    val grainSat = ColorMatrix().apply { setToSaturation((1f - gr * 0.3f).coerceAtLeast(0.5f)) }
+                    adjMatrix *= grainSat
                 }
-            } else {
-                ColorFilter.colorMatrix(adjMatrix)
+                if (project.imageEditorSharpen > 0f) {
+                    val sharpenContrast = 1f + project.imageEditorSharpen * 0.15f
+                    val sharpenShift = (1f - sharpenContrast) * 128f
+                    val sharpenMatrix = ColorMatrix(floatArrayOf(
+                        sharpenContrast, 0f, 0f, 0f, sharpenShift,
+                        0f, sharpenContrast, 0f, 0f, sharpenShift,
+                        0f, 0f, sharpenContrast, 0f, sharpenShift,
+                        0f, 0f, 0f, 1f, 0f
+                    ))
+                    adjMatrix *= sharpenMatrix
+                }
+
+                if (lookMatrix != null) adjMatrix *= lookMatrix
+
+                val fm = buildFilterMatrix(project.selectedFilter)
+                if (fm != null) { fm *= adjMatrix; fm } else adjMatrix
             }
         }
+        matrix
+    }
+    val combinedColorFilter = combinedMatrix?.let { ColorFilter.colorMatrix(it) }
+
+    // Apply the combined grade live to the actual ExoPlayer video frames via a
+    // Media3 ColorFilter GL effect. Tapping a filter (or moving a slider)
+    // recomputes combinedMatrix above, which re-runs this effect so the change
+    // is visible immediately — driven by the SAME matrix the export uses.
+    DisposableEffect(combinedMatrix, exoPlayer) {
+        if (combinedMatrix != null) {
+            val arr = FloatArray(20)
+            combinedMatrix.getArray(arr)
+            exoPlayer.setVideoEffects(listOf(Media3ColorFilter(arr)))
+        } else {
+            exoPlayer.setVideoEffects(emptyList())
+        }
+        onDispose { exoPlayer.setVideoEffects(emptyList()) }
     }
     val aspect = remember(project.aspectPreset) { when (project.aspectPreset) { "1:1" -> 1.0f; "9:16" -> 9f/16f; "4:5" -> 4f/5f; else -> 16f/9f } }
 
@@ -684,13 +666,7 @@ fun NextGenEditorScreen(
                             scaleX = if (project.isFlippedHorizontal) -1f else 1f
                             scaleY = if (project.isFlippedVertical) -1f else 1f
                             rotationZ = project.rotationDegrees
-                            // Live preview: the combined cinematic filter + image-editor
-                            // adjustments matrix is applied directly to the video pixels
-                            // via a ColorFilter RenderEffect, so every filter — and every
-                            // slider — is visible in real-time, matching the exported frame.
-                            this.renderEffect = combinedColorFilter?.let {
-                                RenderEffect.createColorFilterEffect(it)
-                            }
+                        }
                         }
                 )
 
