@@ -691,7 +691,7 @@ class VideoProcessor @Inject constructor(
             val vf = "eq=contrast=1.18:saturation=1.25:brightness=0.04," +
                     "colorbalance=rs=0.06:rm=0.04:gs=0.02," +
                     "unsharp=5:5:1.0:5:5:0," +
-                    "curves=preset=increase," +
+                    "curves=preset=increase_contrast," +
                     "format=yuv420p"
             val args = mutableListOf<String>()
             args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
@@ -2432,12 +2432,12 @@ class VideoProcessor @Inject constructor(
             "chorus" -> listOf("chorus=0.5:0.9:50|0.2:40|0.3:60|0.1:75")
             "flanger" -> listOf("flanger=delay=10:regen=0:width=5:speed=1")
             "phaser" -> listOf("aphaser=in_gain=0.8:out_gain=0.9:delay=3:decay=0.4:speed=0.5")
-            "distortion" -> listOf("acompressor=threshold=-10:ratio=10", "aecho=0.3:0.5:30:0.2")
+            "distortion" -> listOf("acompressor=threshold=-20:ratio=10", "aecho=0.3:0.5:30:0.2")
             "karaoke" -> listOf("stereotools=mlev=1")
             "vocal_remove" -> listOf("stereotools=mlev=1")
             // ── v6.0.0 NEW AUDIO EFFECTS (real FFmpeg -af chains) ──
             "limiter" -> listOf("alimiter=limit=0.9:attack=5:release=50")
-            "vocal_isolation" -> listOf("stereotools=mlev=1:mdelay=1")
+            "vocal_isolation" -> listOf("stereotools=mlev=1")
             "separate_audio" -> listOf("stereotools=mlev=1")
             "ai_noise_removal" -> listOf("afftdn=nr=20:nf=-25")
             "ai_sound_effects" -> listOf("aecho=0.6:0.3:100:0.3")
@@ -2486,7 +2486,7 @@ class VideoProcessor @Inject constructor(
             "slide_right" -> listOf("crop=iw*'t/$fadeDur':ih:0:0:enable='between(t,0,$fadeDur)'")
             "slide_up" -> listOf("crop=iw:ih*'t/$fadeDur':0:0:enable='between(t,0,$fadeDur)'")
             "slide_down" -> listOf("crop=iw:ih*'t/$fadeDur':0:'ih-ih*t/$fadeDur':enable='between(t,0,$fadeDur)'")
-            "bounce" -> listOf("fade=t=in:st=0:d=$fadeDur", "vflip:enable='between(t,0,0.3)'")
+            "bounce" -> listOf("fade=t=in:st=0:d=$fadeDur", "vflip")
             "elastic" -> listOf("fade=t=in:st=0:d=$fadeDur")
             "spring" -> listOf("fade=t=in:st=0:d=$fadeDur")
             "iris_in" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':enable='between(t,0,$fadeDur)'")
@@ -2578,10 +2578,11 @@ class VideoProcessor @Inject constructor(
         val yExpr = "h*${String.format("%.3f", posY)}-text_h/2"
         val fs = fontSize.toInt().coerceIn(8, 200)
         // Build style-specific box/flags
-        val shadowFlag = if (textShadow) ":shadowx=3:shadowy=3:shadowcolor=black@0.8" else ""
-        val outlineFlag = if (textOutline) ":borderw=3:bordercolor=black" else ""
-        val boldFlag = if (textBold) ":bold=1" else ""
-        val italicFlag = if (textItalic) ":italic=1" else ""
+        val empty = ""
+        val shadowFlag = if (textShadow) "$empty:shadowx=3:shadowy=3:shadowcolor=black@0.8" else ""
+        val outlineFlag = if (textOutline) "$empty:borderw=3:bordercolor=black" else ""
+        val boldFlag = if (textBold) "$empty:bold=1" else ""
+        val italicFlag = if (textItalic) "$empty:italic=1" else ""
         val glowFlag = if (textGlow) ":fontcolor_expr=0x${fcHex}@'0.7+0.3*sin(t*4)'" else ""
         val neonFlag = if (textNeon) ":fontcolor_expr=0x${fcHex}@'0.5+0.5*sin(t*6)'" else ""
         // Background box
@@ -2590,7 +2591,7 @@ class VideoProcessor @Inject constructor(
             val bgArgb = if (bgHex.length == 8) bgHex else "FF$bgHex"
             val bgR = bgArgb.substring(2, 4); val bgG = bgArgb.substring(4, 6); val bgB = bgArgb.substring(6, 8)
             ":box=1:boxcolor=0x${bgR}${bgG}${bgB}@${textBgOpacity}"
-        } else ":box=1:boxcolor=black@0.5"
+        } else "$empty:box=1:boxcolor=black@0.5"
         val base = "drawtext=text='$safeText':fontsize=$fs:fontcolor=$fontColor$bgBox:x=($xExpr):y=($yExpr)${fontFileClause()}$shadowFlag$outlineFlag$boldFlag$italicFlag$glowFlag$neonFlag"
         return when (anim) {
             "none", "fade_in", "fade" -> "$base:alpha='if(lt(t,1)\\,t\\,1)'"
@@ -2666,7 +2667,7 @@ class VideoProcessor @Inject constructor(
             // Vlog — bright clean neutral
             "vlog" -> listOf(
                 "eq=brightness=0.06:contrast=1.08:saturation=1.1",
-                "curves=preset=increase"
+                "curves=preset=increase_contrast"
             )
             // Poetry — muted dreamy low-contrast
             "poetry" -> listOf(

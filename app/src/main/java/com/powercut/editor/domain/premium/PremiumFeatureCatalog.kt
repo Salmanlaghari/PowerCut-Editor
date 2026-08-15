@@ -173,7 +173,7 @@ object PremiumFeatureCatalog {
         PremiumFeature("au_voice_fx", "Voice Effects", "🗣️", "Audio", "Robot, phone, chipmunk voices", "", "asetrate=44100*2,aresample=44100,atempo=0.5", alreadyImplemented = true),
         PremiumFeature("au_speed", "Audio Speed", "⏩", "Audio", "Speed up / slow down audio", "", "atempo=1.5", alreadyImplemented = true),
         PremiumFeature("au_noise_reduction", "Noise Reduction", "🔇", "Audio", "Reduce background noise", "", "afftdn=nr=15:nf=-25", alreadyImplemented = true),
-        PremiumFeature("au_vocal_isolation", "Vocal Isolation", "🎤", "Audio", "Isolate vocals from mix", "", "stereotools=mlev=1:mdelay=1", isPro = true),
+        PremiumFeature("au_vocal_isolation", "Vocal Isolation", "🎤", "Audio", "Isolate vocals from mix", "", "stereotools=mlev=1", isPro = true),
         PremiumFeature("au_beat_sync", "Beat Sync", "🥁", "Audio", "Sync edits to beat", alreadyImplemented = true),
         PremiumFeature("au_ducking", "Audio Ducking", "🔻", "Audio", "Auto-duck music under voice", "", "sidechaincompress=threshold=0.05:ratio=8:attack=5:release=300", alreadyImplemented = true)
     )
