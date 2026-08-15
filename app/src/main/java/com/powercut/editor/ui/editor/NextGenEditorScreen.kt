@@ -87,6 +87,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
@@ -685,11 +686,11 @@ fun NextGenEditorScreen(
                             rotationZ = project.rotationDegrees
                             // Live preview: the combined cinematic filter + image-editor
                             // adjustments matrix is applied directly to the video pixels
-                            // via GraphicsLayerScope.colorFilter (available on the pinned
-                            // Compose 1.7 / Kotlin 2.1 toolchain). This makes every filter
-                            // — and every slider — visible in real-time, matching the
-                            // exported frame produced by the FFmpeg pipeline.
-                            this.colorFilter = combinedColorFilter
+                            // via a ColorFilter RenderEffect, so every filter — and every
+                            // slider — is visible in real-time, matching the exported frame.
+                            this.renderEffect = combinedColorFilter?.let {
+                                RenderEffect.createColorFilterEffect(it)
+                            }
                         }
                 )
 
