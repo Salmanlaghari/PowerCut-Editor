@@ -120,7 +120,7 @@ object EffectCatalog {
         // Stylize
         VisualEffect("cartoon", "Cartoon", "🦸", "filterboxes=luma=1:w=8:h=8,edges=0.08"),
         VisualEffect("sketch", "Sketch", "✏️", "edgedetect=low=0.1:high=0.4,hue=s=0"),
-        VisualEffect("oilpaint", "Oil Paint", "🖌️", "oilpaint=radius=8", isPro = true),
+        VisualEffect("oilpaint", "Oil Paint", "🖌️", "median=radius=5,eq=saturation=1.2:contrast=1.05", isPro = true),
         VisualEffect("watercolor", "Watercolor", "🩵", "boxblur=6:2,eq=saturation=1.3:brightness=0.05"),
         VisualEffect("emboss", "Emboss", "🪨", "convolution=-1 -1 0 -1 4 0 0 0 0"),
         VisualEffect("edge", "Edge Detect", "🔲", "edgedetect=low=0.2:high=0.5"),

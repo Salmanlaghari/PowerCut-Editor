@@ -691,7 +691,7 @@ class VideoProcessor @Inject constructor(
             val vf = "eq=contrast=1.18:saturation=1.25:brightness=0.04," +
                     "colorbalance=rs=0.06:rm=0.04:gs=0.02," +
                     "unsharp=5:5:1.0:5:5:0," +
-                    "curves=preset=increase," +
+                    "curves=preset=increase_contrast," +
                     "format=yuv420p"
             val args = mutableListOf<String>()
             args.addAll(listOf("-err_detect", "ignore_err", "-ignore_unknown"))
@@ -890,10 +890,14 @@ class VideoProcessor @Inject constructor(
         if (isBeatSyncEnabled) {
             val bpm = 120.0 // Default BPM — can be made configurable
             val beatFreq = bpm / 60.0
-            // Pulsing brightness overlay on beat
-            vfFilters.add("eq=brightness='0.03*sin(t*${beatFreq}*2*PI)':enable='between(t,0,${durationSec / speedFactor})'")
-            // Subtle color shift on beat
-            vfFilters.add("colorbalance=rs='0.02*sin(t*${beatFreq}*2*PI)':bs='0.02*cos(t*${beatFreq}*2*PI)':enable='between(t,0,${durationSec / speedFactor})'")
+            // Pulsing brightness overlay on beat.
+            // `eq` evaluates its expressions once at init by default, so eval=frame
+            // is required for the sin(t) pulse to actually animate.
+            vfFilters.add("eq=brightness='0.03*sin(t*${beatFreq}*2*PI)':eval=frame:enable='between(t,0,${durationSec / speedFactor})'")
+            // Subtle color shift on beat.
+            // colorbalance has no expression/eval support (its options are plain
+            // scalars), so a fixed warm shift is used instead of sin(t)/cos(t).
+            vfFilters.add("colorbalance=rs=0.02:bs=0.02:enable='between(t,0,${durationSec / speedFactor})'")
         }
 
         // Silence remover (v6.3.0 — removes silent gaps from audio)
@@ -922,20 +926,20 @@ class VideoProcessor @Inject constructor(
         }
 
         if (horizontalLetterbox) {
-            vfFilters.add("pad=iw:iw*9/16:(ow-iw)/2:(oh-ih)/2:black")
+            vfFilters.add("pad=w='max(iw\\,ih*16/9)':h='max(ih\\,iw*9/16)':x='(ow-iw)/2':y='(oh-ih)/2':color=black")
         }
         if (verticalSafeZone) {
             vfFilters.add("drawbox=x=iw*0.05:y=ih*0.05:w=iw*0.9:h=ih*0.9:color=yellow@0.2:t=2")
         }
 
         when (cropPreset.lowercase()) {
-            "16:9" -> vfFilters.add("crop=w=ih*16/9:h=ih")
+            "16:9" -> vfFilters.add("crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)'")
             "9:16" -> vfFilters.add("crop=w=ih*9/16:h=ih")
             "1:1" -> vfFilters.add("crop=w=ih:h=ih")
             "4:5" -> vfFilters.add("crop=w=ih*4/5:h=ih")
             "3:4" -> vfFilters.add("crop=w=ih*3/4:h=ih")
             "2:3" -> vfFilters.add("crop=w=ih*2/3:h=ih")
-            "21:9" -> vfFilters.add("crop=w=ih*21/9:h=ih")
+            "21:9" -> vfFilters.add("crop=w='min(iw\\,ih*21/9)':h='min(ih\\,iw*9/21)'")
         }
 
         val (tw, th) = getTargetDimensions(resolution, aspectPreset)
@@ -982,12 +986,12 @@ class VideoProcessor @Inject constructor(
             vfFilters.add("setpts=PTS/$speedFactor")
         }
         when (speedCurve.lowercase()) {
-            "ease-in" -> vfFilters.add("setpts='PTS/(1+0.5*min(1\\,t/2))'")
-            "ease-out" -> vfFilters.add("setpts='PTS/(1+0.5*max(0\\,1-(t-2)/2))'")
-            "ease-in-out" -> vfFilters.add("setpts='PTS/(1+0.3*sin(t/2))'")
-            "ramp" -> vfFilters.add("setpts='PTS/(1+0.1*t)'")
-            "smooth" -> vfFilters.add("setpts='PTS/(1+0.2*(1-cos(t/3)))'")
-            "hero" -> vfFilters.add("setpts='PTS/(1+0.4*min(1\\,t))'")
+            "ease-in" -> vfFilters.add("setpts='PTS/(1+0.5*min(1\\,T/2))'")
+            "ease-out" -> vfFilters.add("setpts='PTS/(1+0.5*max(0\\,1-(T-2)/2))'")
+            "ease-in-out" -> vfFilters.add("setpts='PTS/(1+0.3*sin(T/2))'")
+            "ramp" -> vfFilters.add("setpts='PTS/(1+0.1*T)'")
+            "smooth" -> vfFilters.add("setpts='PTS/(1+0.2*(1-cos(T/3)))'")
+            "hero" -> vfFilters.add("setpts='PTS/(1+0.4*min(1\\,T))'")
         }
 
         // Image Editor adjustments
@@ -1681,13 +1685,13 @@ class VideoProcessor @Inject constructor(
             if (project.isFlippedHorizontal) postFilters.add("hflip")
             if (project.isFlippedVertical) postFilters.add("vflip")
             when (project.cropPreset.lowercase()) {
-                "16:9" -> postFilters.add("crop=w=ih*16/9:h=ih")
+                "16:9" -> postFilters.add("crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)'")
                 "9:16" -> postFilters.add("crop=w=ih*9/16:h=ih")
                 "1:1" -> postFilters.add("crop=w=ih:h=ih")
                 "4:5" -> postFilters.add("crop=w=ih*4/5:h=ih")
                 "3:4" -> postFilters.add("crop=w=ih*3/4:h=ih")
                 "2:3" -> postFilters.add("crop=w=ih*2/3:h=ih")
-                "21:9" -> postFilters.add("crop=w=ih*21/9:h=ih")
+                "21:9" -> postFilters.add("crop=w='min(iw\\,ih*21/9)':h='min(ih\\,iw*9/21)'")
             }
             if (project.activeTextOverlay?.isNotBlank() == true) {
                 val textFilter = buildTextOverlay(project.activeTextOverlay, project.textAnimationType, totalDurSec, project.textPositionX, project.textPositionY, project.textColorHex, project.textFontSize, project.textStyleId, project.textBold, project.textItalic, project.textShadow, project.textOutline, project.textGlow, project.textNeon, project.textBgColor, project.textBgOpacity)
@@ -1743,14 +1747,14 @@ class VideoProcessor @Inject constructor(
                 if (socialChain.isNotBlank()) postFilters.add(socialChain)
             }
             when (project.speedCurve.lowercase()) {
-                "ease-in" -> postFilters.add("setpts='PTS/(1+0.5*min(1\\,t/2))'")
-                "ease-out" -> postFilters.add("setpts='PTS/(1+0.5*max(0\\,1-(t-2)/2))'")
-                "ease-in-out" -> postFilters.add("setpts='PTS/(1+0.3*sin(t/2))'")
-                "ramp" -> postFilters.add("setpts='PTS/(1+0.1*t)'")
-                "smooth" -> postFilters.add("setpts='PTS/(1+0.2*(1-cos(t/3)))'")
-                "hero" -> postFilters.add("setpts='PTS/(1+0.4*min(1\\,t))'")
+                "ease-in" -> postFilters.add("setpts='PTS/(1+0.5*min(1\\,T/2))'")
+                "ease-out" -> postFilters.add("setpts='PTS/(1+0.5*max(0\\,1-(T-2)/2))'")
+                "ease-in-out" -> postFilters.add("setpts='PTS/(1+0.3*sin(T/2))'")
+                "ramp" -> postFilters.add("setpts='PTS/(1+0.1*T)'")
+                "smooth" -> postFilters.add("setpts='PTS/(1+0.2*(1-cos(T/3)))'")
+                "hero" -> postFilters.add("setpts='PTS/(1+0.4*min(1\\,T))'")
             }
-            if (project.horizontalLetterbox) postFilters.add("pad=iw:iw*9/16:(ow-iw)/2:(oh-ih)/2:black")
+            if (project.horizontalLetterbox) postFilters.add("pad=w='max(iw\\,ih*16/9)':h='max(ih\\,iw*9/16)':x='(ow-iw)/2':y='(oh-ih)/2':color=black")
             if (project.verticalSafeZone) postFilters.add("drawbox=x=iw*0.05:y=ih*0.05:w=iw*0.9:h=ih*0.9:color=yellow@0.2:t=2")
 
             // Apply post-filters via a second pass on vout → vfinal
@@ -1870,7 +1874,7 @@ class VideoProcessor @Inject constructor(
             "lomo" -> "vignette=angle=PI/3,eq=saturation=1.5:contrast=1.3:gamma=0.9"
             "polaroid" -> "eq=saturation=0.7:contrast=0.95:brightness=0.08,colorbalance=rs=0.05:bs=0.03,vignette=angle=PI/4"
             "holga" -> "vignette=angle=PI/2,eq=saturation=1.3:contrast=1.1,noise=alls=10:allf=t"
-            "diana" -> "eq=saturation=1.4:contrast=0.9:vignette=angle=PI/2"
+            "diana" -> "eq=saturation=1.4:contrast=0.9,vignette=angle=PI/2"
             "film" -> "eq=saturation=0.9:contrast=1.05,noise=alls=8:allf=t"
             "super8" -> "eq=saturation=1.2:brightness=0.05,noise=alls=15:allf=t,vignette=angle=PI/3"
             "vhs_tape" -> "eq=saturation=1.1:contrast=0.95,noise=alls=12:allf=t"
@@ -1959,29 +1963,29 @@ class VideoProcessor @Inject constructor(
         val e = effectName.lowercase().replace(" ", "_")
         return when {
             e.contains("magic_pulse") ->
-                listOf("eq=brightness='0.1*sin(2*PI*t/2)':contrast=1.15", "vignette=angle='PI/4+0.2*sin(2*PI*t)'")
+                listOf("eq=brightness='0.1*sin(2*PI*t/2)':contrast=1.15:eval=frame", "vignette=angle='PI/4+0.2*sin(2*PI*t)':eval=frame")
             e.contains("magic_hue_cycle") ->
                 listOf("hue=h='t*30'", "eq=saturation=1.3:contrast=1.1")
             e.contains("magic_color_flow") ->
-                listOf("colorbalance=rs='0.08*sin(t)':bs='0.08*cos(t)'", "eq=saturation=1.2")
+                listOf("colorbalance=rs=0.08:bs=0.08", "eq=saturation=1.2")
             e.contains("magic_brightness_flow") ->
-                listOf("eq=brightness='0.08*sin(2*PI*t/4)':contrast=1.1")
+                listOf("eq=brightness='0.08*sin(2*PI*t/4)':contrast=1.1:eval=frame")
             e.contains("magic_zoom_pulse") ->
-                listOf("zoompan=z='1+0.1*sin(2*PI*t/2)':d=1:s=${w}x${h}:fps=30")
+                listOf("zoompan=z='1+0.1*sin(2*PI*it/2)':d=1:s=${w}x${h}:fps=30")
             e.contains("magic_shake") ->
-                listOf("crop=iw:ih:'0+5*sin(2*PI*t*3)':'0+5*cos(2*PI*t*3)'", "scale=${w}:${h}")
+                listOf("crop=iw-16:ih-16:'8+5*sin(2*PI*t*3)':'8+5*cos(2*PI*t*3)'", "scale=${w}:${h}")
             e.contains("magic_flicker") ->
-                listOf("eq=brightness='0.15*(random(0))':contrast=1.1")
+                listOf("eq=brightness='0.15*(random(0))':contrast=1.1:eval=frame")
             e.contains("magic_rainbow_flow") ->
                 listOf("hue=h='t*60'", "eq=saturation=1.5:contrast=1.1")
             e.contains("magic_glitch_flow") ->
-                listOf("chromashift=cbh='2*sin(t)':crv='2*cos(t)'", "eq=contrast=1.15")
+                listOf("chromashift=cbh=2:crv=2", "eq=contrast=1.15")
             e.contains("magic_neon_flow") ->
-                listOf("eq=saturation=1.6:contrast=1.2", "colorbalance=rs='0.1+0.05*sin(t)':bs='0.1+0.05*cos(t)'")
+                listOf("eq=saturation=1.6:contrast=1.2", "colorbalance=rs=0.12:bs=0.12")
             e.contains("magic_wave") ->
-                listOf("crop=iw:ih:'0+8*sin(2*PI*t)':'0+8*cos(2*PI*t*0.5)'", "scale=${w}:${h}")
+                listOf("crop=iw-24:ih-24:'12+8*sin(2*PI*t)':'12+8*cos(2*PI*t*0.5)'", "scale=${w}:${h}")
             e.contains("magic_breath") ->
-                listOf("eq=brightness='0.05*sin(2*PI*t/3)':contrast='1.1+0.05*sin(2*PI*t/3)'")
+                listOf("eq=brightness='0.05*sin(2*PI*t/3)':contrast='1.1+0.05*sin(2*PI*t/3)':eval=frame")
             else -> emptyList()
         }
     }
@@ -2065,7 +2069,10 @@ class VideoProcessor @Inject constructor(
         "kaleido" to "lenscorrection=k1=0.4:k2=0.4,eq=saturation=1.3",
         "cartoon" to "eq=saturation=1.8:contrast=1.4,unsharp=3:3:1:3:3:0,noise=alls=2:allf=t",
         "sketch" to "edgedetect=low=0.1:high=0.4,hue=s=0",
-        "oilpaint" to "oilpaint=radius=8",
+        // NOTE: FFmpeg has no "oilpaint" filter. The painterly look is approximated
+        // with the median filter (flattens detail into paint-like patches) plus a
+        // slight saturation/contrast lift.
+        "oilpaint" to "median=radius=5,eq=saturation=1.2:contrast=1.05",
         "watercolor" to "boxblur=6:2,eq=saturation=1.3:brightness=0.05",
         "emboss" to "convolution=-1 -1 0 -1 4 0 0 0 0",
         "edge" to "edgedetect=low=0.2:high=0.5",
@@ -2077,7 +2084,7 @@ class VideoProcessor @Inject constructor(
         "lightleak" to "eq=brightness=0.1:saturation=1.2,tblend=all_mode=screen",
         "filmgrain" to "noise=alls=12:allf=t",
         "dust" to "noise=alls=5:allf=t+u,eq=contrast=0.95:brightness=0.03",
-        "scratch" to "noise=alls=15:allf=t+u:allc=color",
+        "scratch" to "noise=alls=15:allf=t+u",
         "grunge" to "noise=alls=20:allf=t,eq=contrast=1.15:saturation=0.85",
         "echo" to "tmix=frames=3:weights=1 0.5 0.25",
         "trail" to "tmix=frames=5:weights=1 0.7 0.5 0.3 0.15",
@@ -2129,15 +2136,15 @@ class VideoProcessor @Inject constructor(
             e == "glitch" || e.contains("chromatic") || e.contains("electric") ->
                 listOf("noise=alls=20:allf=t+u", "chromashift=cbh=-3:cbv=2:crh=3:crv=-2")
             e.contains("glitch") && e.contains("data") ->
-                listOf("noise=alls=30:allf=t+u:allc=color", "chromashift=cbh=-4:cbv=2:crh=4:crv=-2")
+                listOf("noise=alls=30:allf=t+u", "chromashift=cbh=-4:cbv=2:crh=4:crv=-2")
             e.contains("vhs") && e.contains("old") ->
                 listOf("noise=alls=15:allf=t+u", "curves=preset=vintage", "boxblur=luma_radius=3:luma_power=1")
             e.contains("vhs") ->
                 listOf("noise=alls=8:allf=t+u", "curves=preset=vintage", "boxblur=luma_radius=2:luma_power=1")
             e.contains("snow") && e.contains("heavy") ->
-                listOf("noise=alls=60:allf=t+u:allc=color")
+                listOf("noise=alls=60:allf=t+u")
             e.contains("snow") ->
-                listOf("noise=alls=40:allf=t+u:allc=color")
+                listOf("noise=alls=40:allf=t+u")
             e.contains("rain") && e.contains("heavy") ->
                 listOf("noise=alls=25:allf=t+u", "boxblur=luma_radius=2:luma_power=1")
             e.contains("rain") ->
@@ -2153,9 +2160,9 @@ class VideoProcessor @Inject constructor(
             e.contains("motion_blur") || e.contains("motionblur") ->
                 listOf("boxblur=luma_radius=8:luma_power=1:enable='1'")
             e.contains("shake") && e.contains("earthquake") ->
-                listOf("noise=alls=5:allf=t+u", "crop=iw-30:ih-30:enable='1'")
+                listOf("noise=alls=5:allf=t+u", "crop=w=iw-30:h=ih-30")
             e.contains("shake") ->
-                listOf("noise=alls=3:allf=t+u", "crop=iw-20:ih-20:enable='1'")
+                listOf("noise=alls=3:allf=t+u", "crop=w=iw-20:h=ih-20")
             e.contains("flash") || e.contains("strobe") ->
                 listOf("eq=brightness='0.3*abs(sin(t*8))'")
             e.contains("neon") && e.contains("glow") ->
@@ -2175,13 +2182,13 @@ class VideoProcessor @Inject constructor(
             e.contains("bokeh") ->
                 listOf("boxblur=luma_radius=15:luma_power=2", "eq=brightness=0.05")
             e.contains("particles") && e.contains("color") ->
-                listOf("noise=alls=12:allf=t+u:allc=color", "eq=saturation=1.3")
+                listOf("noise=alls=12:allf=t+u", "eq=saturation=1.3")
             e.contains("particles") ->
                 listOf("noise=alls=12:allf=t+u", "eq=saturation=1.2")
             e.contains("zoom_pulse") ->
                 listOf("zoompan=z='min(zoom+0.0015\\,1.5)':d=1:s=${w}x${h}")
             e.contains("wave") || e.contains("tidal") ->
-                listOf("lenscorrection=k1='-0.1*sin(t*2)':k2='0.1*cos(t*2)'")
+                listOf("lenscorrection=k1=-0.1:k2=0.1")
             e.contains("swirl") ->
                 listOf("lenscorrection=k1=0.3:k2=0.3")
             e.contains("explosion") ->
@@ -2264,7 +2271,7 @@ class VideoProcessor @Inject constructor(
             e.contains("pan_left") ->
                 listOf("zoompan=z=1.3:x='iw-iw*on/100':y='ih/2-(ih/zoom/2)':d=1:s=${w}x${h}")
             e.contains("dolly_zoom") ->
-                listOf("zoompan=z='1+0.3*sin(t/2)':d=1:s=${w}x${h}")
+                listOf("zoompan=z='1+0.3*sin(it/2)':d=1:s=${w}x${h}:fps=30")
             e.contains("rgb_split") ->
                 listOf("chromashift=cbh=-6:cbv=0:crh=6:crv=0")
             e.contains("scanline") ->
@@ -2288,13 +2295,13 @@ class VideoProcessor @Inject constructor(
             e.contains("stage_light") ->
                 listOf("vignette=angle=PI/2", "colorbalance=rs=0.1:rm=0.08", "eq=brightness=0.05:contrast=1.15")
             e.contains("concert") ->
-                listOf("eq=saturation=1.4:contrast=1.2", "vignette=angle=PI/4", "noise=alls=8:allf=t+u:allc=color")
+                listOf("eq=saturation=1.4:contrast=1.2", "vignette=angle=PI/4", "noise=alls=8:allf=t+u")
             e.contains("party") ->
-                listOf("hue=h='t*80'", "eq=saturation=1.6", "noise=alls=10:allf=t+u:allc=color")
+                listOf("hue=h='t*80'", "eq=saturation=1.6", "noise=alls=10:allf=t+u")
             e.contains("disco") ->
-                listOf("hue=h='t*120'", "eq=saturation=1.8:contrast=1.2", "noise=alls=12:allf=t+u:allc=color")
+                listOf("hue=h='t*120'", "eq=saturation=1.8:contrast=1.2", "noise=alls=12:allf=t+u")
             e.contains("festival") ->
-                listOf("eq=saturation=1.5:contrast=1.15", "colorbalance=rs=0.08:bs=0.08", "noise=alls=8:allf=t+u:allc=color")
+                listOf("eq=saturation=1.5:contrast=1.15", "colorbalance=rs=0.08:bs=0.08", "noise=alls=8:allf=t+u")
             // ── v6.0.0 NEW EFFECTS (real FFmpeg chains, no placeholders) ──
             e.contains("fog") ->
                 listOf("boxblur=4:1", "eq=brightness=0.05:contrast=0.9", "colorbalance=bs=0.05:gs=0.03")
@@ -2432,12 +2439,14 @@ class VideoProcessor @Inject constructor(
             "chorus" -> listOf("chorus=0.5:0.9:50|0.2:40|0.3:60|0.1:75")
             "flanger" -> listOf("flanger=delay=10:regen=0:width=5:speed=1")
             "phaser" -> listOf("aphaser=in_gain=0.8:out_gain=0.9:delay=3:decay=0.4:speed=0.5")
-            "distortion" -> listOf("acompressor=threshold=-10:ratio=10", "aecho=0.3:0.5:30:0.2")
+            // acompressor threshold is a linear amplitude in [0.000976563, 1] (not dB).
+            // 0.1 == -20 dBFS.
+            "distortion" -> listOf("acompressor=threshold=0.1:ratio=10", "aecho=0.3:0.5:30:0.2")
             "karaoke" -> listOf("stereotools=mlev=1")
             "vocal_remove" -> listOf("stereotools=mlev=1")
             // ── v6.0.0 NEW AUDIO EFFECTS (real FFmpeg -af chains) ──
             "limiter" -> listOf("alimiter=limit=0.9:attack=5:release=50")
-            "vocal_isolation" -> listOf("stereotools=mlev=1:mdelay=1")
+            "vocal_isolation" -> listOf("stereotools=mlev=1:delay=1")
             "separate_audio" -> listOf("stereotools=mlev=1")
             "ai_noise_removal" -> listOf("afftdn=nr=20:nf=-25")
             "ai_sound_effects" -> listOf("aecho=0.6:0.3:100:0.3")
@@ -2464,39 +2473,39 @@ class VideoProcessor @Inject constructor(
             "zoom_out" -> listOf("zoompan=z='if(eq(on\\,0)\\,1.5\\,max(zoom-0.002\\,1.0))':d=1:s=${w}x${h}")
             "spin", "rotate_in" -> listOf("rotate=angle='2*PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'")
             "rotate_out" -> listOf("rotate=angle='2*PI*($duration-t)/$fadeDur':fillcolor=black:enable='between(t,$outStart,$duration)'")
-            "wipe" -> listOf("crop=iw*'t/$fadeDur':ih:0:0:enable='between(t,0,$fadeDur)'")
-            "wipe_left" -> listOf("crop=iw*'t/$fadeDur':ih:'iw-iw*t/$fadeDur':0:enable='between(t,0,$fadeDur)'")
-            "wipe_right" -> listOf("crop=iw*'t/$fadeDur':ih:0:0:enable='between(t,0,$fadeDur)'")
-            "wipe_up" -> listOf("crop=iw:ih*'t/$fadeDur':0:0:enable='between(t,0,$fadeDur)'")
-            "wipe_down" -> listOf("crop=iw:ih*'t/$fadeDur':0:'ih-ih*t/$fadeDur':enable='between(t,0,$fadeDur)'")
+            "wipe" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            "wipe_left" -> listOf("drawbox=x=0:y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            "wipe_right" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            "wipe_up" -> listOf("drawbox=x=0:y='ih*min(t/$fadeDur\\,1)':w=iw:h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
+            "wipe_down" -> listOf("drawbox=x=0:y=0:w=iw:h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
             "dissolve" -> listOf("boxblur=luma_radius=min(h\\,w)/10:luma_power=1:enable='between(t,0,$fadeDur)'")
             "blur" -> listOf("boxblur=luma_radius=20:luma_power=2:enable='between(t,0,$fadeDur)'")
-            "pixelate" -> listOf("scale=iw/20:ih/20,scale=iw:ih:flags=neighbor:enable='between(t,0,$fadeDur)'")
-            "mosaic" -> listOf("scale=iw/20:ih/20,scale=iw:ih:flags=neighbor:enable='between(t,0,$fadeDur)'")
-            "split" -> listOf("crop=iw/2:ih:0:0:enable='between(t,0,$fadeDur)'")
-            "film_burn" -> listOf("eq=brightness='0.5*exp(-t*3)':saturation=1.5:enable='between(t,0,$fadeDur)'", "colorbalance=rs=0.2:rm=0.15:enable='between(t,0,$fadeDur)'")
+            "pixelate" -> listOf("scale=w=iw/20:h=ih/20:flags=neighbor", "scale=w=${w}:h=${h}:flags=neighbor")
+            "mosaic" -> listOf("scale=w=iw/16:h=ih/16:flags=neighbor", "scale=w=${w}:h=${h}:flags=neighbor")
+            "split" -> listOf("crop=w=iw/2:h=ih:x=0:y=0")
+            "film_burn" -> listOf("eq=brightness='0.5*exp(-t*3)':saturation=1.5:eval=frame:enable='between(t,0,$fadeDur)'", "colorbalance=rs=0.2:rm=0.15:enable='between(t,0,$fadeDur)'")
             "light_leak" -> listOf("vignette=angle=PI/4:enable='between(t,0,$fadeDur)'", "colorbalance=rs=0.1:rm=0.08:enable='between(t,0,$fadeDur)'")
             "smoke" -> listOf("noise=alls=20:allf=t+u:enable='between(t,0,$fadeDur)'", "boxblur=luma_radius=5:luma_power=1:enable='between(t,0,$fadeDur)'")
-            "circle" -> listOf("vignette=angle='PI/2*exp(-t*2)':enable='between(t,0,$fadeDur)'")
-            "diamond" -> listOf("vignette=angle='PI/3*exp(-t*2)':enable='between(t,0,$fadeDur)'")
+            "circle" -> listOf("vignette=angle='PI/2*exp(-t*2)':eval=frame:enable='between(t,0,$fadeDur)'")
+            "diamond" -> listOf("vignette=angle='PI/3*exp(-t*2)':eval=frame:enable='between(t,0,$fadeDur)'")
             "heart" -> listOf("lenscorrection=k1=0.3:k2=0.3:enable='between(t,0,$fadeDur)'")
-            "flash" -> listOf("eq=brightness='2*exp(-t*5)':enable='between(t,0,0.3)'")
+            "flash" -> listOf("eq=brightness='2*exp(-t*5)':eval=frame:enable='between(t,0,0.3)'")
             "l_cut", "j_cut" -> listOf("fade=t=in:st=0:d=$fadeDur")
-            "slide_left" -> listOf("crop=iw*'t/$fadeDur':ih:'iw-iw*t/$fadeDur':0:enable='between(t,0,$fadeDur)'")
-            "slide_right" -> listOf("crop=iw*'t/$fadeDur':ih:0:0:enable='between(t,0,$fadeDur)'")
-            "slide_up" -> listOf("crop=iw:ih*'t/$fadeDur':0:0:enable='between(t,0,$fadeDur)'")
-            "slide_down" -> listOf("crop=iw:ih*'t/$fadeDur':0:'ih-ih*t/$fadeDur':enable='between(t,0,$fadeDur)'")
-            "bounce" -> listOf("fade=t=in:st=0:d=$fadeDur", "vflip:enable='between(t,0,0.3)'")
+            "slide_left" -> listOf("crop=w=iw:h=ih:x='-iw*(1-min(t/$fadeDur\\,1))':y=0")
+            "slide_right" -> listOf("crop=w=iw:h=ih:x='iw*(1-min(t/$fadeDur\\,1))':y=0")
+            "slide_up" -> listOf("crop=w=iw:h=ih:x=0:y='-ih*(1-min(t/$fadeDur\\,1))'")
+            "slide_down" -> listOf("crop=w=iw:h=ih:x=0:y='ih*(1-min(t/$fadeDur\\,1))'")
+            "bounce" -> listOf("fade=t=in:st=0:d=$fadeDur", "vflip=enable='between(t,0,0.3)'")
             "elastic" -> listOf("fade=t=in:st=0:d=$fadeDur")
             "spring" -> listOf("fade=t=in:st=0:d=$fadeDur")
-            "iris_in" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':enable='between(t,0,$fadeDur)'")
-            "iris_out" -> listOf("vignette=angle='PI/2*(t/$fadeDur)':enable='between(t,$outStart,$duration)'")
+            "iris_in" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':eval=frame:enable='between(t,0,$fadeDur)'")
+            "iris_out" -> listOf("vignette=angle='PI/2*(t/$fadeDur)':eval=frame:enable='between(t,$outStart,$duration)'")
             "star_wipe" -> listOf("vignette=angle='PI/3*(1-t/$fadeDur)':enable='between(t,0,$fadeDur)'")
             "clock_wipe" -> listOf("rotate=angle='PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'")
             "spiral" -> listOf("rotate=angle='4*PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'")
-            "shake_in" -> listOf("crop=iw-10:ih-10:'5*sin(t*20)':'5*cos(t*20)':enable='between(t,0,$fadeDur)'")
+            "shake_in" -> listOf("crop=w=iw-10:h=ih-10:x='5+5*sin(t*20)':y='5+5*cos(t*20)'")
             "glitch_in" -> listOf("noise=alls=25:allf=t+u:enable='between(t,0,$fadeDur)'", "chromashift=cbh=-4:cbv=2:crh=4:crv=-2:enable='between(t,0,$fadeDur)'")
-            "tv_static" -> listOf("noise=alls=50:allf=t+u:allc=color:enable='between(t,0,$fadeDur)'")
+            "tv_static" -> listOf("noise=alls=50:allf=t+u:enable='between(t,0,$fadeDur)'")
             "channel_change" -> listOf("noise=alls=40:allf=t+u:enable='between(t,0,0.2)'", "eq=brightness='0.5*exp(-t*10)':enable='between(t,0,0.2)'")
             "vhs_transition" -> listOf("noise=alls=20:allf=t+u:enable='between(t,0,$fadeDur)'", "curves=preset=vintage:enable='between(t,0,$fadeDur)'")
             "rgb_glitch" -> listOf("chromashift=cbh=-5:cbv=3:crh=5:crv=-3:enable='between(t,0,$fadeDur)'")
@@ -2504,39 +2513,39 @@ class VideoProcessor @Inject constructor(
             "white_flash" -> listOf("eq=brightness='3*exp(-t*8)':enable='between(t,0,0.4)'")
             "black_fade" -> listOf("fade=t=in:st=0:d=$fadeDur:color=black")
             "white_fade" -> listOf("fade=t=in:st=0:d=$fadeDur:color=white")
-            "zoom_burst" -> listOf("zoompan=z='1+5*exp(-t*5)':d=1:s=${w}x${h}:enable='between(t,0,$fadeDur)'")
-            "shake_burst" -> listOf("crop=iw-20:ih-20:'10*sin(t*30)':'10*cos(t*30)':enable='between(t,0,$fadeDur)'")
-            "blur_in" -> listOf("boxblur=luma_radius='50*(1-t/$fadeDur)':luma_power=2:enable='between(t,0,$fadeDur)'")
-            "blur_out" -> listOf("boxblur=luma_radius='50*(t-$outStart)/$fadeDur':luma_power=2:enable='between(t,$outStart,$duration)'")
-            "pixel_in" -> listOf("scale='iw/max(1\\,20*(1-t/$fadeDur))':'ih/max(1\\,20*(1-t/$fadeDur))':flags=area,scale=iw:ih:flags=neighbor:enable='between(t,0,$fadeDur)'")
-            "shake_transition" -> listOf("crop=iw-15:ih-15:'7*sin(t*25)':'7*cos(t*25)':enable='between(t,0,$fadeDur)'")
-            "flip_horizontal" -> listOf("hflip:enable='between(t,0,$fadeDur)'")
-            "flip_vertical" -> listOf("vflip:enable='between(t,0,$fadeDur)'")
+            "zoom_burst" -> listOf("zoompan=z='1+5*exp(-it*5)':d=1:s=${w}x${h}:fps=30")
+            "shake_burst" -> listOf("crop=w=iw-20:h=ih-20:x='10+10*sin(t*30)':y='10+10*cos(t*30)'")
+            "blur_in" -> listOf("boxblur=luma_radius=25:luma_power=2:enable='between(t,0,$fadeDur)'")
+            "blur_out" -> listOf("boxblur=luma_radius=25:luma_power=2:enable='between(t,$outStart,$duration)'")
+            "pixel_in" -> listOf("scale=w=iw/12:h=ih/12:flags=neighbor", "scale=w=${w}:h=${h}:flags=neighbor")
+            "shake_transition" -> listOf("crop=w=iw-15:h=ih-15:x='7+7*sin(t*25)':y='7+7*cos(t*25)'")
+            "flip_horizontal" -> listOf("hflip=enable='between(t,0,$fadeDur)'")
+            "flip_vertical" -> listOf("vflip=enable='between(t,0,$fadeDur)'")
             "rotate_3d" -> listOf("rotate=angle='PI*sin(t/$fadeDur*PI)':fillcolor=black:enable='between(t,0,$fadeDur)'")
             "swing" -> listOf("rotate=angle='0.3*sin(t*10)':fillcolor=black@0:enable='between(t,0,$fadeDur)'")
-            "push_left" -> listOf("crop=iw:ih:'iw*t/$fadeDur':0:enable='between(t,0,$fadeDur)'")
-            "push_right" -> listOf("crop=iw:ih:'iw-iw*t/$fadeDur':0:enable='between(t,0,$fadeDur)'")
-            "push_up" -> listOf("crop=iw:ih:0:'ih*t/$fadeDur':enable='between(t,0,$fadeDur)'")
-            "push_down" -> listOf("crop=iw:ih:0:'ih-ih*t/$fadeDur':enable='between(t,0,$fadeDur)'")
-            "curtain" -> listOf("crop=iw*'t/$fadeDur':ih:0:0:enable='between(t,0,$fadeDur)'")
-            "blinds" -> listOf("drawgrid=w=iw:h=ih/10:t='ih/10*(1-t/$fadeDur)':color=black@1:enable='between(t,0,$fadeDur)'")
-            "checkerboard" -> listOf("drawgrid=w=iw/8:h=ih/8:t='iw/8*(1-t/$fadeDur)':color=black@1:enable='between(t,0,$fadeDur)'")
-            "diagonal" -> listOf("crop=iw*'t/$fadeDur':ih*'t/$fadeDur':0:0:enable='between(t,0,$fadeDur)'")
-            "triangle" -> listOf("crop=iw*'t/$fadeDur':ih:0:'ih/2*(1-t/$fadeDur)':enable='between(t,0,$fadeDur)'")
-            "hexagon" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':enable='between(t,0,$fadeDur)'")
-            "star" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':enable='between(t,0,$fadeDur)'")
-            "cross" -> listOf("crop=iw*'t/$fadeDur':ih:0:0:enable='between(t,0,$fadeDur)'", "crop=iw:ih*'t/$fadeDur':0:0:enable='between(t,0,$fadeDur)'")
-            "ripple" -> listOf("lenscorrection=k1='0.2*sin(t*10)':k2='0.2*cos(t*10)':enable='between(t,0,$fadeDur)'")
-            "wave" -> listOf("lenscorrection=k1='0.1*sin(t*8)':k2='0.1*cos(t*8)':enable='between(t,0,$fadeDur)'")
-            "shatter" -> listOf("noise=alls=30:allf=t+u:enable='between(t,0,$fadeDur)'", "crop=iw-10:ih-10:enable='between(t,0,$fadeDur)'")
+            "push_left" -> listOf("crop=w=iw:h=ih:x='iw*min(t/$fadeDur\\,1)':y=0")
+            "push_right" -> listOf("crop=w=iw:h=ih:x='iw-iw*min(t/$fadeDur\\,1)':y=0")
+            "push_up" -> listOf("crop=w=iw:h=ih:x=0:y='ih*min(t/$fadeDur\\,1)'")
+            "push_down" -> listOf("crop=w=iw:h=ih:x=0:y='ih-ih*min(t/$fadeDur\\,1)'")
+            "curtain" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            "blinds" -> listOf("drawgrid=w=iw:h=ih/10:t='ih/20':color=black@1:enable='between(t,0,$fadeDur)'")
+            "checkerboard" -> listOf("drawgrid=w=iw/8:h=ih/8:t='iw/16':color=black@1:enable='between(t,0,$fadeDur)'")
+            "diagonal" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y='ih*min(t/$fadeDur\\,1)':w='iw-iw*min(t/$fadeDur\\,1)':h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
+            "triangle" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill")
+            "hexagon" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':eval=frame:enable='between(t,0,$fadeDur)'")
+            "star" -> listOf("vignette=angle='PI/2*(1-t/$fadeDur)':eval=frame:enable='between(t,0,$fadeDur)'")
+            "cross" -> listOf("drawbox=x='iw*min(t/$fadeDur\\,1)':y=0:w='iw-iw*min(t/$fadeDur\\,1)':h=ih:color=black@1:t=fill", "drawbox=x=0:y='ih*min(t/$fadeDur\\,1)':w=iw:h='ih-ih*min(t/$fadeDur\\,1)':color=black@1:t=fill")
+            "ripple" -> listOf("lenscorrection=k1=0.2:k2=0.2:enable='between(t,0,$fadeDur)'")
+            "wave" -> listOf("lenscorrection=k1=0.1:k2=0.1:enable='between(t,0,$fadeDur)'")
+            "shatter" -> listOf("noise=alls=30:allf=t+u:enable='between(t,0,$fadeDur)'", "crop=w=iw-10:h=ih-10")
             // ── v6.0.0 NEW TRANSITIONS (real FFmpeg chains) ──
-            "pull" -> listOf("crop=iw:ih:'-iw*(1-t/$fadeDur)':0:enable='between(t,0,$fadeDur)'")
-            "warp" -> listOf("scale='1+2*t/$fadeDur':'1+2*t/$fadeDur':enable='between(t,0,$fadeDur)'")
-            "stretch" -> listOf("scale='1+0.5*sin(t*PI/$fadeDur)':'1':enable='between(t,0,$fadeDur)'")
-            "page_turn" -> listOf("hflip:enable='between(t,0,$fadeDur)'", "fade=t=in:st=0:d=$fadeDur")
-            "camera_move" -> listOf("zoompan=z='1+0.2*t/$fadeDur':x='iw*t/$fadeDur':y='ih*t/$fadeDur':d=1:s=${w}x${h}:fps=30")
-            "whip_pan" -> listOf("crop=iw:ih:'iw*3*t/$fadeDur-2*iw':0:enable='between(t,0,$fadeDur)'")
-            "cube" -> listOf("rotate=angle='PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'", "scale='1-abs(t/$fadeDur-0.5)*0.5':'1':enable='between(t,0,$fadeDur)'")
+            "pull" -> listOf("crop=w=iw:h=ih:x='-iw*(1-min(t/$fadeDur\\,1))':y=0")
+            "warp" -> listOf("zoompan=z='if(lte(it\\,$fadeDur)\\,1+2*it/$fadeDur\\,1)':d=1:s=${w}x${h}:fps=30")
+            "stretch" -> listOf("scale=w='trunc(iw*(1+0.5*sin(min(t\\,$fadeDur)*PI/$fadeDur))/16)*16':h=ih:eval=frame", "crop=w=${w}:h=${h}")
+            "page_turn" -> listOf("hflip=enable='between(t,0,$fadeDur)'", "fade=t=in:st=0:d=$fadeDur")
+            "camera_move" -> listOf("zoompan=z='1+0.2*it/$fadeDur':x='iw*it/$fadeDur':y='ih*it/$fadeDur':d=1:s=${w}x${h}:fps=30")
+            "whip_pan" -> listOf("crop=w=iw:h=ih:x='iw*3*min(t/$fadeDur\\,1)-2*iw':y=0")
+            "cube" -> listOf("rotate=angle='PI*t/$fadeDur':fillcolor=black:enable='between(t,0,$fadeDur)'", "scale=w='trunc(iw*(1-abs(min(t\\,$fadeDur)/$fadeDur-0.5)*0.5)/16)*16':h=ih:eval=frame", "pad=w=${w}:h=${h}:x='trunc((ow-iw)/4)*2':y=0:color=black")
             "smooth_cut" -> listOf("fade=t=in:st=0:d=0.3")
             else -> listOf()
         }
@@ -2666,7 +2675,7 @@ class VideoProcessor @Inject constructor(
             // Vlog — bright clean neutral
             "vlog" -> listOf(
                 "eq=brightness=0.06:contrast=1.08:saturation=1.1",
-                "curves=preset=increase"
+                "curves=preset=increase_contrast"
             )
             // Poetry — muted dreamy low-contrast
             "poetry" -> listOf(
@@ -2771,7 +2780,7 @@ class VideoProcessor @Inject constructor(
             "smoke" -> listOf("noise=alls=15:allf=t+u", "boxblur=luma_radius=3:luma_power=1")
             "water" -> listOf("boxblur=luma_radius=2:luma_power=1")
             "fire" -> listOf("colorbalance=rs=0.2:rm=0.15", "eq=brightness=0.08:saturation=1.3")
-            "particles" -> listOf("noise=alls=12:allf=t+u:allc=color")
+            "particles" -> listOf("noise=alls=12:allf=t+u")
             "bokeh" -> listOf("boxblur=luma_radius=15:luma_power=2", "eq=brightness=0.05")
             "glitch_3d", "chromatic" -> listOf("noise=alls=15:allf=t+u", "chromashift=cbh=-2:cbv=1:crh=2:crv=-1")
             "anamorphic" -> listOf("crop=iw:ih*0.42:0:ih*0.29", "scale=$w:${(h * 0.42).toInt()}")
@@ -3107,7 +3116,7 @@ class VideoProcessor @Inject constructor(
             }
             "panlr" -> {
                 // Horizontal pan left-to-right
-                "crop=x='if(eq(on,1),0,in_w*0.1*sin(t*0.5)+in_w*0.1)':y=0:w=iw*0.8:h=ih"
+                "crop=x='if(eq(n\\,1)\\,0\\,in_w*0.1*sin(t*0.5)+in_w*0.1)':y=0:w=iw*0.8:h=ih"
             }
             "spin360" -> {
                 // Continuous 360° rotation
@@ -3121,7 +3130,9 @@ class VideoProcessor @Inject constructor(
             }
             "pulse" -> {
                 // Breathing scale pulse
-                "scale='1.0+0.1*sin(t*3)'"
+                // A scale *factor* is not a size: zoompan applies a zoom factor and
+                // keeps the output frame size constant (required by the encoder).
+                "zoompan=z='1.0+0.1*sin(it*3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080:fps=30"
             }
             "shake" -> {
                 // Camera shake / earthquake effect
