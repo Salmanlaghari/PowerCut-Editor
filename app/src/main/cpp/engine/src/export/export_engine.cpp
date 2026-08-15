@@ -391,13 +391,13 @@ void ExportEngine::render_test_frame(std::vector<uint8_t>& buf, int w, int h,
 }
 
 int64_t ExportEngine::av_rescale_q_portable(int64_t v, AVRational bq,
-                                            AVRational cq) const {
+                                             AVRational cq) const {
     // av_rescale_q(v, bq, cq) = av_rescale(v * bq / cq, 1, 1)
     //   = round(v * bq.num * cq.den / (bq.den * cq.num))
-    const __int128 num = (__int128)v * bq.num * cq.den;
-    const __int128 den = (__int128)bq.den * cq.num;
-    if (den == 0) return v;
-    return (int64_t)((num + den / 2) / den);
+    // Use double for the intermediate to keep it portable (no __int128 on 32-bit).
+    double r = (double)v * (double)bq.num / ((double)bq.den * (double)cq.num)
+             * (double)cq.den;
+    return (int64_t)(r + (r >= 0 ? 0.5 : -0.5));
 }
 
 } // namespace powercut::export_
