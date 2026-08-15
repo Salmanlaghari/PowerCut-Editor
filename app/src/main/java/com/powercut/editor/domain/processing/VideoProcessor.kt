@@ -1127,21 +1127,41 @@ class VideoProcessor @Inject constructor(
         }
 
         // ── v7.1 KEYFRAME ANIMATION ──────────────────────────────────────
-        // Inject user-defined keyframe expressions into the video filter chain
-        // so that position, scale, rotation, and opacity animate over time.
+        // Inject user-defined keyframe expressions so that position, scale,
+        // rotation and opacity animate over time.
+        //
+        // IMPORTANT (real FFmpeg constraints, verified with ffmpeg 7.0.2):
+        //  - `scale` rejects per-frame `t` at init; it needs `eval=frame` AND
+        //    must be padded back to the constant target size (a bare
+        //    `scale=iw*f` changes the frame size every frame and breaks the
+        //    constant-size H.264 encoder).
+        //  - `opacity` can NOT be done with `colorchannelmixer=aa=` — that
+        //    option does not accept expressions (and yuv420p has no alpha
+        //    channel anyway). The correct, real implementation is to blend the
+        //    clip over a black background in a filter_complex, driven by the
+        //    per-frame index `N` (blend's `all_expr` cannot use `t`).
+        //    opacityExprN is therefore returned separately and applied as a
+        //    blend step below.
         val filteredKeyframeTracks = if (keyframeClipId.isNotBlank()) {
             keyframeTracks.filter { it.clipId == keyframeClipId }
         } else {
             keyframeTracks
         }
+        var hasOpacityKeyframe = false
+        var opacityExprN: String? = null
         if (filteredKeyframeTracks.isNotEmpty()) {
-            val kfFilters = buildKeyframeExpressions(
+            val kfResult = buildKeyframeExpressions(
                 keyframeTracks = filteredKeyframeTracks,
                 clipStartTimeMs = startMs,
                 clipDurationMs = (endMs - startMs),
-                clipSpeedFactor = speedFactor
+                clipSpeedFactor = speedFactor,
+                targetWidth = tw,
+                targetHeight = th,
+                targetFps = targetFps
             )
-            vfFilters.addAll(kfFilters)
+            vfFilters.addAll(kfResult.vfFilters)
+            opacityExprN = kfResult.opacityExprN
+            hasOpacityKeyframe = opacityExprN != null
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -1191,7 +1211,7 @@ class VideoProcessor @Inject constructor(
         //   [0:a] or [0:a]+[bgm:a] → audio filters → [aout]
         // Then we add a single `-filter_complex` arg and map [vfinalout] + [aout].
         //
-        val needVideoFilterComplex = hasImageOverlay || (greenScreenEnabled && hasGreenScreenBg) || hasWatermark
+        val needVideoFilterComplex = hasImageOverlay || (greenScreenEnabled && hasGreenScreenBg) || hasWatermark || hasOpacityKeyframe
         val needAudioFilterComplex = hasBgm && !(isMuted || (videoVolume == 0f && !hasBgm))
         val needFilterComplex = needVideoFilterComplex || needAudioFilterComplex
 
@@ -1289,6 +1309,15 @@ class VideoProcessor @Inject constructor(
                 fcParts.add("[1:a]volume=$backgroundMusicVolume,atrim=duration=${finalDuration}[bgm]")
                 fcParts.add("[a1][bgm]amix=inputs=2:duration=first[aout]")
                 audioOutLabel = "[aout]"
+            }
+
+            // Opacity keyframe: blend the (already keyframed) video clip over a
+            // black background. `blend=all_expr` cannot use `t`, so the opacity
+            // ramp is expressed as a function of the frame index `N`.
+            if (hasOpacityKeyframe && opacityExprN != null) {
+                fcParts.add("color=c=black:s=${tw}x${th}:d=${finalDuration}[bg]")
+                fcParts.add("[$videoOutLabel][bg]blend=all_expr='A*($opacityExprN)+B*(1-($opacityExprN))':shortest=1[vop]")
+                videoOutLabel = "[vop]"
             }
 
             // Add the SINGLE unified -filter_complex
@@ -2501,7 +2530,7 @@ class VideoProcessor @Inject constructor(
             "thick_white" -> "pad=$w+20:$h+20:-1:-1:white"
             "thick_black" -> "pad=$w+20:$h+20:-1:-1:black"
             "polaroid" -> "pad=$w+20:$h+80:-1:-1:white"
-            "film" -> "pad=$w+30:$h+30:-1:-1:black,drawbox=x=5:y=5:w=20:h=$h:t=2:white,drawbox=x=$w+5:y=5:w=20:h=$h:t=2:white"
+            "film" -> "pad=$w+30:$h+30:-1:-1:black,drawbox=x=5:y=5:w=20:h=$h:t=2:color=white,drawbox=x=$w+5:y=5:w=20:h=$h:t=2:color=white"
             "shadow" -> "pad=$w+30:$h+30:0:0:black@0.5"
             "rounded" -> "pad=$w+10:$h+10:-1:-1:black"
             "vintage_frame" -> "pad=$w+15:$h+15:-1:-1:0x2a1a0a"
@@ -2510,10 +2539,10 @@ class VideoProcessor @Inject constructor(
             "neon" -> "pad=$w+8:$h+8:-1:-1:0x00ffff"
             "gold_frame" -> "pad=$w+12:$h+12:-1:-1:0xffd700"
             "gold" -> "pad=$w+12:$h+12:-1:-1:0xffd700"
-            "gradient" -> "pad=$w+12:$h+12:-1:-1:0x1a1a2e,drawbox=x=0:y=0:w=$w+12:h=6:t=6:0x00bcd4,drawbox=x=0:y=$h+6:w=$w+12:h=6:t=6:0xff6b35"
+            "gradient" -> "pad=$w+12:$h+12:-1:-1:0x1a1a2e,drawbox=x=0:y=0:w=$w+12:h=6:t=6:color=0x00bcd4,drawbox=x=0:y=$h+6:w=$w+12:h=6:t=6:color=0xff6b35"
             "modern" -> "pad=$w+6:$h+6:-1:-1:0xf5f5f5"
             "minimal" -> "pad=$w+2:$h+2:-1:-1:0xcccccc"
-            "glow" -> "pad=$w+16:$h+16:-1:-1:0x000000,drawbox=x=0:y=0:w=$w+16:h=$h+16:t=8:0x00ffff@0.4"
+            "glow" -> "pad=$w+16:$h+16:-1:-1:0x000000,drawbox=x=0:y=0:w=$w+16:h=$h+16:t=8:color=0x00ffff@0.4"
             else -> ""
         }
     }
@@ -3302,99 +3331,126 @@ class VideoProcessor @Inject constructor(
     // Converts per-clip KeyframeTrack data into real FFmpeg time-based
     // expressions so that user-defined keyframes animate correctly in export.
     // Supports: position_x, position_y, scale, rotation, opacity.
-    fun buildKeyframeExpressions(
+    //
+    // Real FFmpeg constraints (verified against ffmpeg 7.0.2):
+    //  • position  -> `crop` with per-frame x/y (crop supports `t`). Output size
+    //                 stays constant (iw*0.9 x ih*0.9) so the encoder is happy.
+    //  • rotation  -> `rotate=a=` (a timeline filter that re-evaluates `t`).
+    //  • scale     -> `scale=...:eval=frame` followed by `pad` back to the
+    //                 constant target size. A bare `scale=iw*f` changes the frame
+    //                 size every frame and breaks constant-size encoding.
+    //  • opacity   -> returned separately (`opacityExprN`) as a function of the
+    //                 frame index `N`, applied by the caller as a `blend` over a
+    //                 black background inside a filter_complex. `colorchannelmixer`
+    //                 does NOT accept expressions and yuv420p has no alpha channel,
+    //                 so a multiplicative blend over black is the correct way to
+    //                 fade a single clip's opacity.
+    private data class KeyframeFilterResult(
+        val vfFilters: List<String> = emptyList(),
+        val opacityExprN: String? = null
+    )
+
+    private fun buildKeyframeExpressions(
         keyframeTracks: List<KeyframeTrack>,
         clipStartTimeMs: Long,
         clipDurationMs: Long,
-        clipSpeedFactor: Float = 1.0f
-    ): List<String> {
-        if (keyframeTracks.isEmpty()) return emptyList()
+        clipSpeedFactor: Float = 1.0f,
+        targetWidth: Int,
+        targetHeight: Int,
+        targetFps: Int = 30
+    ): KeyframeFilterResult {
+        if (keyframeTracks.isEmpty()) return KeyframeFilterResult()
         val filters = mutableListOf<String>()
         val startSec = clipStartTimeMs / 1000.0
         val durSec = (clipDurationMs / 1000.0).coerceAtLeast(0.1)
         val speed = clipSpeedFactor.coerceAtLeast(0.1f).coerceAtMost(10.0f).toDouble()
+        val fps = targetFps.coerceAtLeast(1).toDouble()
 
         val kfsByProperty = keyframeTracks.flatMap { it.keyframes }.groupBy { it.property }
 
-        fun piecewise(property: String, default: String, filterName: String, formatExpr: (String) -> String) {
-            val sorted = kfsByProperty[property]?.sortedBy { it.timeMs } ?: return
-            if (sorted.size < 2) return
-            val points = sorted.map { kf ->
+        // Builds a piecewise-linear expression in `t` (seconds) for one property.
+        // Returns null when there are fewer than 2 usable keyframes.
+        fun buildPiecewiseT(sorted: List<Keyframe>?): String? {
+            val pts = sorted?.sortedBy { it.timeMs }?.map { kf ->
                 val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
                 localTime.coerceIn(0.0, durSec) to kf.value.toDouble()
-            }.distinctBy { it.first }
-
-            if (points.size < 2) return
-            val parts = mutableListOf<String>()
-            for (i in 0 until points.size - 1) {
-                val (t0, v0) = points[i]
-                val (t1, v1) = points[i + 1]
+            }?.distinctBy { it.first } ?: return null
+            if (pts.size < 2) return null
+            var result = "${pts.last().second}"
+            for (i in pts.size - 2 downTo 0) {
+                val (t0, v0) = pts[i]
+                val (t1, v1) = pts[i + 1]
                 val span = (t1 - t0).coerceAtLeast(0.001)
                 val slope = (v1 - v0) / span
-                val expr = "($v0+($slope)*(t-$t0))"
-                val cond = if (i == 0) "between(t,$t0,$t1)" else "gte(t,$t0)"
-                parts.add("if($cond,$expr,")
+                val seg = "($v0+($slope)*(t-$t0))"
+                result = "if(between(t,$t0,$t1),$seg,$result)"
             }
-            val lastVal = points.last().second
-            val closing = ")".repeat(points.size - 1)
-            filters.add("${filterName}=${formatExpr(parts.joinToString("") + lastVal + closing)}")
+            val (firstT, firstV) = pts.first()
+            result = "if(lte(t,$firstT),$firstV,$result)"
+            return result
         }
 
-        val posXExpr = buildString {
-            val sorted = kfsByProperty["position_x"]?.sortedBy { it.timeMs } ?: emptyList()
-            if (sorted.size >= 2) {
-                val points = sorted.map { kf ->
-                    val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
-                    localTime.coerceIn(0.0, durSec) to kf.value.toDouble()
-                }.distinctBy { it.first }
-                if (points.size >= 2) {
-                    for (i in 0 until points.size - 1) {
-                        val (t0, v0) = points[i]
-                        val (t1, v1) = points[i + 1]
-                        val span = (t1 - t0).coerceAtLeast(0.001)
-                        val slope = (v1 - v0) / span
-                        val expr = "($v0+($slope)*(t-$t0))"
-                        val cond = if (i == 0) "between(t,$t0,$t1)" else "gte(t,$t0)"
-                        append("if($cond,$expr,")
-                    }
-                    append(points.last().second)
-                    append(")".repeat(points.size - 1))
-                }
-            }
-        }
-        val posYExpr = buildString {
-            val sorted = kfsByProperty["position_y"]?.sortedBy { it.timeMs } ?: emptyList()
-            if (sorted.size >= 2) {
-                val points = sorted.map { kf ->
-                    val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
-                    localTime.coerceIn(0.0, durSec) to kf.value.toDouble()
-                }.distinctBy { it.first }
-                if (points.size >= 2) {
-                    for (i in 0 until points.size - 1) {
-                        val (t0, v0) = points[i]
-                        val (t1, v1) = points[i + 1]
-                        val span = (t1 - t0).coerceAtLeast(0.001)
-                        val slope = (v1 - v0) / span
-                        val expr = "($v0+($slope)*(t-$t0))"
-                        val cond = if (i == 0) "between(t,$t0,$t1)" else "gte(t,$t0)"
-                        append("if($cond,$expr,")
-                    }
-                    append(points.last().second)
-                    append(")".repeat(points.size - 1))
-                }
-            }
-        }
-        if (posXExpr.isNotBlank() || posYExpr.isNotBlank()) {
-            val xExpr = if (posXExpr.isNotBlank()) "'(iw*0.1)*($posXExpr)'" else "'0'"
-            val yExpr = if (posYExpr.isNotBlank()) "'(ih*0.1)*($posYExpr)'" else "'0'"
+        // ---- position x / y : crop with per-frame x/y ----
+        val posXExpr = buildPiecewiseT(kfsByProperty["position_x"])
+        val posYExpr = buildPiecewiseT(kfsByProperty["position_y"])
+        if (posXExpr != null || posYExpr != null) {
+            val xExpr = posXExpr?.let { "'(iw*0.1)*($it)'" } ?: "'0'"
+            val yExpr = posYExpr?.let { "'(ih*0.1)*($it)'" } ?: "'0'"
             filters.add("crop=w=iw*0.9:h=ih*0.9:x=$xExpr:y=$yExpr")
         }
 
-        piecewise("scale", "1.0", "scale") { "'iw*$it:ih*$it'" }
-        piecewise("rotation", "0.0", "rotate") { "a='$it'" }
-        piecewise("opacity", "1.0", "colorchannelmixer") { "aa='$it'" }
+        // ---- rotation : per-frame angle (timeline filter) ----
+        val rotExpr = buildPiecewiseT(kfsByProperty["rotation"])
+        if (rotExpr != null) {
+            filters.add("rotate=a='$rotExpr'")
+        }
 
-        return filters
+        // ---- scale : scale (eval=frame) then pad back to constant size ----
+        val scaleExpr = buildPiecewiseT(kfsByProperty["scale"])
+        if (scaleExpr != null) {
+            filters.add("scale=w='trunc(iw*($scaleExpr)/2)*2':h='trunc(ih*($scaleExpr)/2)*2':eval=frame")
+            filters.add("pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black")
+        }
+
+        // ---- opacity : N-based expression for blend-over-black ----
+        val opacityExprN = buildOpacityExprN(kfsByProperty["opacity"], startSec, durSec, speed, fps)
+
+        return KeyframeFilterResult(filters, opacityExprN)
+    }
+
+    /**
+     * Builds an opacity expression as a function of the frame index `N`
+     * (0-based, after the fps filter). `blend=all_expr` cannot use `t`, so the
+     * keyframe times are converted to frame indices (time * fps). The result is a
+     * nested-if piecewise that is v0 before the first keyframe, linearly
+     * interpolated between keyframes, and v_last after the last keyframe.
+     * Returns null when there are fewer than 2 usable opacity keyframes.
+     */
+    private fun buildOpacityExprN(
+        sorted: List<Keyframe>?,
+        startSec: Double,
+        durSec: Double,
+        speed: Double,
+        fps: Double
+    ): String? {
+        val pts = sorted?.sortedBy { it.timeMs }?.map { kf ->
+            val localTime = ((kf.timeMs / 1000.0) - startSec) / speed
+            val n = (localTime.coerceIn(0.0, durSec) * fps)
+            n to kf.value.toDouble().coerceIn(0.0, 1.0)
+        }?.distinctBy { it.first } ?: return null
+        if (pts.size < 2) return null
+        var result = "${pts.last().second}"
+        for (i in pts.size - 2 downTo 0) {
+            val (n0, v0) = pts[i]
+            val (n1, v1) = pts[i + 1]
+            val span = (n1 - n0).coerceAtLeast(0.001)
+            val slope = (v1 - v0) / span
+            val seg = "($v0+($slope)*(N-$n0))"
+            result = "if(between(N,$n0,$n1),$seg,$result)"
+        }
+        val (firstN, firstV) = pts.first()
+        result = "if(lte(N,$firstN),$firstV,$result)"
+        return result
     }
 
     // ════════════════════════════════════════════════════════════════════════════
