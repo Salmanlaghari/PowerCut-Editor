@@ -1,6 +1,7 @@
 package com.powercut.editor.ui
 
 import android.content.Context
+import com.powercut.editor.data.ProjectPersistence
 import com.powercut.editor.data.ProjectRepository
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.export.ExportManager
@@ -35,9 +36,10 @@ class EditorViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        projectRepository = ProjectRepository()
-        exportManager = mock(ExportManager::class.java)
         context = mock(Context::class.java)
+        val persistence = ProjectPersistence.Repository(context)
+        projectRepository = ProjectRepository(persistence)
+        exportManager = mock(ExportManager::class.java)
         videoProcessor = mock(VideoProcessor::class.java)
         royaltyFreeMusicGenerator = mock(RoyaltyFreeMusicGenerator::class.java)
         viewModel = EditorViewModel(context, projectRepository, exportManager, videoProcessor, royaltyFreeMusicGenerator)

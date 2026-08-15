@@ -7,7 +7,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ProjectRepository @Inject constructor() {
+class ProjectRepository @Inject constructor(
+    private val persistence: ProjectPersistence.Repository
+) {
     private val _currentProject = MutableStateFlow<VideoProject?>(null)
     val currentProject: StateFlow<VideoProject?> = _currentProject.asStateFlow()
 
@@ -23,5 +25,39 @@ class ProjectRepository @Inject constructor() {
 
     fun clear() {
         _currentProject.value = null
+    }
+
+    suspend fun saveProject(file: java.io.File): Result<Unit> {
+        val project = _currentProject.value ?: return Result.failure(
+            IllegalStateException("No active project to save")
+        )
+        return persistence.saveProject(project, file)
+    }
+
+    suspend fun saveProject(): Result<String> {
+        val project = _currentProject.value ?: return Result.failure(
+            IllegalStateException("No active project to save")
+        )
+        return persistence.saveProject(project)
+    }
+
+    suspend fun loadProject(file: java.io.File): Result<VideoProject> {
+        return persistence.loadProject(file).onSuccess { project ->
+            _currentProject.value = project
+        }
+    }
+
+    suspend fun loadProject(projectId: String): Result<VideoProject> {
+        return persistence.loadProject(projectId).onSuccess { project ->
+            _currentProject.value = project
+        }
+    }
+
+    suspend fun deleteProject(file: java.io.File): Result<Unit> {
+        val current = _currentProject.value
+        if (current != null && current.videoPath.isNotBlank() && current.videoPath == file.absolutePath) {
+            _currentProject.value = null
+        }
+        return persistence.deleteProject(file)
     }
 }
