@@ -54,6 +54,10 @@ class ProjectRepository @Inject constructor(
     }
 
     suspend fun deleteProject(file: java.io.File): Result<Unit> {
+        val current = _currentProject.value
+        if (current != null && current.videoPath.isNotBlank() && current.videoPath == file.absolutePath) {
+            _currentProject.value = null
+        }
         return persistence.deleteProject(file)
     }
 }

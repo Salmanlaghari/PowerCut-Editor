@@ -1,6 +1,7 @@
 package com.powercut.editor.data
 
 import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -36,7 +37,7 @@ object ProjectPersistence {
 
     @Singleton
     class Repository @Inject constructor(
-        private val context: Context
+        @ApplicationContext private val context: Context
     ) {
         suspend fun saveProject(project: VideoProject): Result<String> =
             withContext(Dispatchers.IO) {
@@ -45,11 +46,7 @@ object ProjectPersistence {
                     val fileName = "${project.name.replace("[^a-zA-Z0-9_\\-]".toRegex(), "_")}_$projectId$FILE_EXTENSION"
                     val file = File(getProjectsDir(context), fileName)
 
-                    val enrichedProject = project.copy(
-                        videoPath = project.videoPath.ifBlank { projectId }
-                    )
-
-                    val json = VideoProject.toJson(enrichedProject)
+                    val json = VideoProject.toJson(project)
                     FileOutputStream(file).use { fos ->
                         fos.write(json.toString(2).toByteArray(Charsets.UTF_8))
                         fos.flush()
@@ -93,8 +90,9 @@ object ProjectPersistence {
                 try {
                     val projectsDir = getProjectsDir(context)
                     val matchingFiles = projectsDir.listFiles { file ->
-                        file.name.contains(projectId, ignoreCase = true) &&
-                            file.extension.equals("powercut", ignoreCase = true)
+                        file.isFile &&
+                            file.extension.equals("powercut", ignoreCase = true) &&
+                            file.nameWithoutExtension.endsWith("_$projectId")
                     } ?: emptyArray()
 
                     if (matchingFiles.isEmpty()) {

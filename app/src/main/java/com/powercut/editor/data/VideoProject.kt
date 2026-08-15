@@ -289,6 +289,7 @@ data class VideoProject(
         private const val KEY_EFFECTS = "effects"
         private const val KEY_TEXT_OVERLAYS = "text_overlays"
         private const val KEY_AUDIO_TRACKS = "audio_tracks"
+        private const val KEY_KEYFRAME_TRACKS = "keyframe_tracks"
 
         fun toJson(project: VideoProject): JSONObject {
             val root = JSONObject()
@@ -393,6 +394,12 @@ data class VideoProject(
             }
             root.put(KEY_AUDIO_TRACKS, audioTracksArray)
 
+            val keyframeTracksArray = JSONArray()
+            for (kfTrack in project.keyframeTracks) {
+                keyframeTracksArray.put(keyframeTrackToJson(kfTrack))
+            }
+            root.put(KEY_KEYFRAME_TRACKS, keyframeTracksArray)
+
             return root
         }
 
@@ -442,6 +449,14 @@ data class VideoProject(
             val audioTracksArray = json.getJSONArray(KEY_AUDIO_TRACKS)
             for (i in 0 until audioTracksArray.length()) {
                 audioTracksList.add(audioTrackFromJson(audioTracksArray.getJSONObject(i)))
+            }
+
+            val keyframeTracksList = mutableListOf<KeyframeTrack>()
+            val keyframeTracksArray = json.optJSONArray(KEY_KEYFRAME_TRACKS)
+            if (keyframeTracksArray != null) {
+                for (i in 0 until keyframeTracksArray.length()) {
+                    keyframeTracksList.add(keyframeTrackFromJson(keyframeTracksArray.getJSONObject(i)))
+                }
             }
 
             return VideoProject(
@@ -499,7 +514,7 @@ data class VideoProject(
                 socialPreset = projectJson.optString("social_preset", "none"),
                 isProTier = projectJson.optBoolean("is_pro_tier", false),
                 timeline = timeline,
-                keyframeTracks = emptyList(),
+                keyframeTracks = keyframeTracksList,
                 activeKeyframePreset = projectJson.optString("active_keyframe_preset", "none"),
                 activeEffects = effectsList,
                 textOverlays = overlaysList,
@@ -678,6 +693,49 @@ data class VideoProject(
                 fadeOutMs = json.optInt("fade_out_ms", 0),
                 startTimeMs = json.optLong("start_time_ms", 0L),
                 endTimeMs = json.optLong("end_time_ms", 0L)
+            )
+        }
+
+        private fun keyframeTrackToJson(track: KeyframeTrack): JSONObject {
+            val keyframesArray = JSONArray()
+            for (kf in track.keyframes) {
+                keyframesArray.put(keyframeToJson(kf))
+            }
+            return JSONObject().apply {
+                put("clip_id", track.clipId)
+                put("keyframes", keyframesArray)
+            }
+        }
+
+        private fun keyframeTrackFromJson(json: JSONObject): KeyframeTrack {
+            val keyframesList = mutableListOf<Keyframe>()
+            val keyframesArray = json.optJSONArray("keyframes")
+            if (keyframesArray != null) {
+                for (i in 0 until keyframesArray.length()) {
+                    keyframesList.add(keyframeFromJson(keyframesArray.getJSONObject(i)))
+                }
+            }
+            return KeyframeTrack(
+                clipId = json.optString("clip_id"),
+                keyframes = keyframesList
+            )
+        }
+
+        private fun keyframeToJson(keyframe: Keyframe): JSONObject {
+            return JSONObject().apply {
+                put("time_ms", keyframe.timeMs)
+                put("property", keyframe.property)
+                put("value", keyframe.value)
+                put("easing", keyframe.easing.name)
+            }
+        }
+
+        private fun keyframeFromJson(json: JSONObject): Keyframe {
+            return Keyframe(
+                timeMs = json.optLong("time_ms", 0L),
+                property = json.optString("property", ""),
+                value = json.optFloat("value", 0f),
+                easing = runCatching { KeyframeEasing.valueOf(json.optString("easing", "LINEAR")) }.getOrDefault(KeyframeEasing.LINEAR)
             )
         }
     }
