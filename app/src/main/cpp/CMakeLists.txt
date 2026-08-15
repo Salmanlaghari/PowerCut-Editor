@@ -1,90 +1,59 @@
-# =============================================================================
-# PowerCut Editor — App-level CMake (app/src/main/cpp/CMakeLists.txt)
-#
-# Wired into the Gradle build via:
-#   android { defaultConfig { externalNativeBuild { cmake { ... } } } }
-#   android { externalNativeBuild { cmake { path = ... } } }
-#
-# Builds the "powercut" shared library loaded by
-#   ExportEngine.kt -> System.loadLibrary("powercut")
-#
-# Design: The cpp/ directory is self-contained — it includes local copies of
-#   the stub headers (powercut/core/*.h, powercut/export/*.h) and
-#   core_globals.cpp so the JNI stub always builds even if the repo-root
-#   include/ tree is not reachable from the CMake working directory.
-#
-# Full export engine (FFmpeg + LevelDB) is compiled when those libraries are
-# detected in third_party/. On CI without them, the JNI stub still builds
-# so the Kotlin layer can load the library and call guarded external methods.
-# =============================================================================
 cmake_minimum_required(VERSION 3.22.1)
-project(powercut LANGUAGES CXX)
+project(powercut_native LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ---- Include paths -------------------------------------------------------
-# Local copies of the PowerCut headers live in cpp/powercut/.
-# The repo-root include/ tree is added as a secondary path (if reachable)
-# so the full-engine sources can find the same headers.
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+set(ENGINE_SRC_DIR ${CMAKE_SOURCE_DIR}/engine)
 
-# Try to locate the repo root for the full-engine sources.
-get_filename_component(_THIS_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
-get_filename_component(_UP1 "${_THIS_DIR}/.." ABSOLUTE)
-get_filename_component(_UP2 "${_UP1}/.." ABSOLUTE)
-get_filename_component(_UP3 "${_UP2}/.." ABSOLUTE)
-
-set(POWERCUT_ROOT "")
-foreach(_candidate "${_UP3}" "${CMAKE_SOURCE_DIR}" "${_UP2}")
-    if(EXISTS "${_candidate}/include/powercut/export/export_engine.h"
-       AND EXISTS "${_candidate}/src/core/core_globals.cpp")
-        set(POWERCUT_ROOT "${_candidate}")
-        message(STATUS "PowerCut: repo root detected at ${POWERCUT_ROOT}")
-        break()
-    endif()
-endforeach()
-
-if(NOT POWERCUT_ROOT STREQUAL "")
-    include_directories(${POWERCUT_ROOT}/include)
-endif()
-
-# ---- Always-compiled sources (no external deps) --------------------------
-# These are LOCAL copies — always available, always build.
-set(POWERCUT_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/native_export.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core_globals.cpp
+add_library(powercut_native SHARED
+    ${ENGINE_SRC_DIR}/src/export/export_engine.cpp
+    ${ENGINE_SRC_DIR}/src/core/dag_resolver.cpp
+    ${ENGINE_SRC_DIR}/src/core/watermark.cpp
+    ${ENGINE_SRC_DIR}/src/core/audio_mixer.cpp
+    ${ENGINE_SRC_DIR}/src/core/hw_encoder.cpp
+    ${ENGINE_SRC_DIR}/src/core/leveldb_cache.cpp
 )
 
-# ---- Full export engine (only when FFmpeg + LevelDB headers are found) ----
-if(NOT POWERCUT_ROOT STREQUAL ""
-   AND EXISTS "${POWERCUT_ROOT}/third_party/ffmpeg/libavformat/avformat.h"
-   AND EXISTS "${POWERCUT_ROOT}/third_party/leveldb/include/leveldb/db.h")
-    message(STATUS "PowerCut: Full FFmpeg + LevelDB export engine detected")
-    list(APPEND POWERCUT_SOURCES
-        ${POWERCUT_ROOT}/src/export/export_engine.cpp
-        ${POWERCUT_ROOT}/src/export/export_presets.cpp
-    )
-    if(ANDROID)
-        list(APPEND POWERCUT_SOURCES
-            ${POWERCUT_ROOT}/src/export/android/hw_encoder_android.cpp
-        )
-    endif()
-    include_directories(${POWERCUT_ROOT}/third_party/ffmpeg)
-    include_directories(${POWERCUT_ROOT}/third_party/leveldb/include)
-endif()
+target_include_directories(powercut_native PRIVATE
+    ${ENGINE_SRC_DIR}/include
+    ${CMAKE_SOURCE_DIR}
+)
 
-add_library(powercut SHARED ${POWERCUT_SOURCES})
+target_compile_options(powercut_native PRIVATE
+    -fexceptions
+    -frtti
+)
 
-# Tell native_export.cpp whether the real ExportEngine is linked.
-# POWERCUT_FULL_EXPORT_ENGINE => use real engine; otherwise use inline stubs.
-if(POWERCUT_SOURCES MATCHES "export_engine\\.cpp")
-    target_compile_definitions(powercut PRIVATE POWERCUT_FULL_EXPORT_ENGINE)
-    message(STATUS "PowerCut: Full export engine enabled")
-else()
-    message(STATUS "PowerCut: Building JNI stub only (export engine deferred)")
-endif()
-
-# Find log library for Android
 find_library(log-lib log)
-target_link_libraries(powercut ${log-lib})
+find_library(media-lib mediandk)
+find_library(egl-lib EGL)
+find_library(gles-lib GLESv3)
+find_library(android-lib android)
+
+target_link_libraries(powercut_native
+    ${log-lib}
+    ${media-lib}
+    ${egl-lib}
+    ${gles-lib}
+    ${android-lib}
+)
+
+set(FF_DIR ${CMAKE_SOURCE_DIR}/ffmpeg/${ANDROID_ABI})
+if(EXISTS ${FF_DIR}/include)
+    target_include_directories(powercut_native PRIVATE ${FF_DIR}/include)
+    foreach(lib avcodec avformat avutil swscale swresample avfilter)
+        if(EXISTS ${FF_DIR}/lib${lib}.so)
+            add_library(pc_${lib} SHARED IMPORTED)
+            set_target_properties(pc_${lib} PROPERTIES IMPORTED_LOCATION ${FF_DIR}/lib${lib}.so)
+            target_link_libraries(powercut_native pc_${lib})
+        endif()
+    endforeach()
+    target_compile_definitions(powercut_native PRIVATE POWERCUT_FFMPEG_ENABLED=1)
+else()
+    target_compile_definitions(powercut_native PRIVATE POWERCUT_FFMPEG_ENABLED=0)
+endif()
+
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    target_compile_options(powercut_native PRIVATE -mcpu=cortex-a76 -fvisibility=hidden)
+endif()
