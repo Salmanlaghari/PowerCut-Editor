@@ -667,7 +667,6 @@ fun NextGenEditorScreen(
                             scaleY = if (project.isFlippedVertical) -1f else 1f
                             rotationZ = project.rotationDegrees
                         }
-                        }
                 )
 
                 // 3D Shape Mask overlay
