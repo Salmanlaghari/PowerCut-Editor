@@ -21,6 +21,10 @@ endif()
 # ==============================================================================
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+set(PW_CORE_SRC
+  src/core/core_globals.cpp
+)
+
 # ==============================================================================
 # ============= POWERCUT EXPORT ENGINE (WITH WATERMARK SYSTEM) =============
 # ==============================================================================
@@ -32,8 +36,8 @@ set(PW_EXPORT_SRC
   $<$<PLATFORM_ID:Windows>:src/export/windows/hw_encoder_windows.cpp>
 )
 
-# REPLACE "powercut" BELOW WITH YOUR ACTUAL TARGET NAME
-target_sources(powercut PRIVATE ${PW_EXPORT_SRC})
+add_library(powercut STATIC ${PW_CORE_SRC} ${PW_EXPORT_SRC})
+
 find_package(FFmpeg REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
 find_package(LevelDB REQUIRED)
 target_link_libraries(powercut PRIVATE FFmpeg::avcodec FFmpeg::avformat FFmpeg::avutil FFmpeg::swscale FFmpeg::swresample LevelDB::LevelDB)
