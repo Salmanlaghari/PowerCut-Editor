@@ -109,6 +109,9 @@ import androidx.media3.ui.PlayerView
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.processing.Media3EffectPipeline
+import com.powercut.editor.domain.processing.TransitionCatalog
+import com.powercut.editor.domain.processing.TransitionPreviewRenderer
+import java.io.File
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.CyberCyan
 import com.powercut.editor.ui.theme.NeonOrange
@@ -319,9 +322,51 @@ fun NextGenEditorScreen(
             .setLoadControl(loadControl)
             .build().apply { repeatMode = Player.REPEAT_MODE_ONE }
     }
-    DisposableEffect(project.videoPath) {
-        val uri = if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
-            Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
+
+    // ─── TRANSITION LIVE PREVIEW (Phase 2) ────────────────────────────────
+    // Media3 1.4.1 has no built-in inter-clip transition, so the live preview
+    // renders a short MP4 of the EXACT xfade chain the export builds
+    // (TransitionPreviewRenderer -> TransitionCatalog.cutSpecs, the same math
+    // VideoProcessor.processMultiClipTimeline uses) and plays it back on the
+    // preview player. Tapping a transition re-renders instantly; tapping
+    // "None" restores the original video.
+    val transitionPreviewRenderer = remember { TransitionPreviewRenderer(context) }
+    var transitionPreviewFile by remember { mutableStateOf<File?>(null) }
+    var transitionPreviewBusy by remember { mutableStateOf(false) }
+    var transitionPreviewError by remember { mutableStateOf(false) }
+    var transitionPreviewToken by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(project.transitionType, project.videoPath, project.transitionDurationSec) {
+        val tid = TransitionCatalog.normalize(project.transitionType)
+        if (TransitionCatalog.isNone(tid) || project.videoPath.isBlank()) {
+            transitionPreviewFile = null
+            transitionPreviewBusy = false
+            transitionPreviewError = false
+            return@LaunchedEffect
+        }
+        val token = ++transitionPreviewToken
+        transitionPreviewBusy = true
+        transitionPreviewError = false
+        val preview = transitionPreviewRenderer.renderPreview(
+            sourcePath = project.videoPath,
+            transitionId = tid,
+            requestedSec = project.transitionDurationSec.toDouble()
+        )
+        transitionPreviewBusy = false
+        // A newer tap superseded this render while FFmpeg was working.
+        if (token != transitionPreviewToken) return@LaunchedEffect
+        if (preview == null) {
+            transitionPreviewError = true
+            transitionPreviewFile = null
+        } else {
+            transitionPreviewFile = preview
+        }
+    }
+
+    DisposableEffect(project.videoPath, transitionPreviewFile) {
+        val uri = transitionPreviewFile?.let { Uri.fromFile(it) }
+            ?: if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
+                Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
         exoPlayer.prepare()
         val listener = object : Player.Listener {
@@ -484,6 +529,25 @@ fun NextGenEditorScreen(
                             rotationZ = project.rotationDegrees
                         }
                 )
+
+                // ── Transition live preview status (Phase 2) ──
+                if (transitionPreviewBusy) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Rendering transition preview…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                } else if (transitionPreviewError) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Transition preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                    }
+                }
 
                 // 3D Shape Mask overlay
                 if (project.active3DShapeMask != "none") {
