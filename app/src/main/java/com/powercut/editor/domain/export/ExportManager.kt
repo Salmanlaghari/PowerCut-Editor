@@ -10,12 +10,18 @@ import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.data.TrackType
 import com.powercut.editor.domain.processing.VideoProcessor
+import com.powercut.editor.export.ExportEngine
+import com.powercut.editor.export.ExportConfig
+import com.powercut.editor.export.ExportPreset
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -317,6 +323,67 @@ class ExportManager @Inject constructor(
         }
     }
 
+    // ── Native C++ pipeline dispatch ────────────────────────────────────────
+    /**
+     * Attempt to export via the native C++ pipeline.
+     * Returns the output path on success, null on failure (caller falls back to FFmpeg-Kit).
+     */
+    private suspend fun tryNativeExport(project: VideoProject, outputDir: File): String? {
+        val ext = when (project.targetResolution) {
+            "4k", "2160p" -> "mp4"
+            else -> "mp4"
+        }
+        val safeName = project.name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .replace(Regex("\\.\\."), "_").trim().ifEmpty { "Untitled" }.take(60)
+        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val outputFile = File(outputDir, "native_${safeName}_$ts.$ext")
+        val outputPath = outputFile.absolutePath
+
+        val preset = when {
+            project.targetResolution == "4k" || project.targetResolution == "2160p" -> ExportPreset("YT4K", 3840, 2160, project.fps.toDouble(), 45000000, 70000000, "h264", "aac", "mp4")
+            project.targetResolution == "720p" -> ExportPreset("HD", 1280, 720, project.fps.toDouble(), 8000000, 12000000, "h264", "aac", "mp4")
+            else -> ExportPreset("FHD", 1920, 1080, project.fps.toDouble(), 12000000, 18000000, "h264", "aac", "mp4")
+        }
+
+        val config = ExportConfig(
+            preset = preset,
+            out = outputPath,
+            hw = true,
+            removeWatermark = !project.isProTier && project.watermarkPath == null
+        )
+
+        return withContext(kotlinx.coroutines.Dispatchers.Main) {
+            var nativePath: String? = null
+            val job = ExportEngine.export(
+                project = project,
+                config = config,
+                callback = object : ExportEngine.ProgressCallback {
+                    override fun onProgress(percent: Int, fellBackSw: Boolean) {
+                        val nativePct = 5 + percent * 85 / 100
+                        updateProgress(nativePct.coerceIn(5, 90))
+                        if (fellBackSw) {
+                            Log.w(tag, "Native pipeline fell back to software encoder")
+                        }
+                    }
+                    override fun onComplete(ok: Boolean, sizeBytes: Long, error: String?, elapsedMs: Long) {
+                        if (ok && outputFile.exists() && outputFile.length() > 0) {
+                            nativePath = outputPath
+                            _progress.value = 90
+                            Log.i(tag, "Native export complete: $outputPath (${sizeBytes / 1024}KB, ${elapsedMs}ms)")
+                        } else {
+                            Log.w(tag, "Native export failed: $error")
+                            outputFile.delete()
+                        }
+                    }
+                }
+            )
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                job.join()
+            }
+            nativePath
+        }
+    }
+
     // ── Helpers shared by the v4.5.0 quick tools ──────────────────────────
 
     /** Streams a content:// URI to a temp file (2 MB buffer). */
@@ -431,6 +498,22 @@ class ExportManager @Inject constructor(
                 return
             }
             _progress.value = 2 // space OK
+
+            // ═══════════════════════════════════════════════════════════════
+            //  NATIVE C++ PIPELINE (additive — try first, fallback to FFmpeg-Kit)
+            //  Dispatches to the native ExportEngine when available. Falls back
+            //  to the proven FFmpeg-Kit VideoProcessor if the native path is
+            //  unavailable or returns an error. No existing FFmpeg-Kit paths
+            //  are removed.
+            // ═══════════════════════════════════════════════════════════════
+            if (ExportEngine.isAvailable()) {
+                Log.d(tag, "Native C++ export pipeline available — dispatching")
+                val nativeOk = tryNativeExport(project, secureDir)
+                if (nativeOk != null) {
+                    return
+                }
+                Log.w(tag, "Native export failed or unavailable — falling back to FFmpeg-Kit")
+            }
 
             val tempFileName = "powercut_process_${System.currentTimeMillis()}.mp4"
             val tempOutputFile = File(secureDir, tempFileName)
