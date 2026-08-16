@@ -93,6 +93,10 @@ class EditorViewModel @Inject constructor(
     private val _isProTier = MutableStateFlow(false)
     val isProTier: StateFlow<Boolean> = _isProTier.asStateFlow()
 
+    // ── v6.1.0 Cinematic Color Filter ──
+    private val _colorFilterType = MutableStateFlow("none")
+    val colorFilterType: StateFlow<String> = _colorFilterType.asStateFlow()
+
     private val _selectedStoragePath = MutableStateFlow("Movies/PowerCut")
     val selectedStoragePath: StateFlow<String> = _selectedStoragePath.asStateFlow()
 
@@ -837,6 +841,13 @@ class EditorViewModel @Inject constructor(
         pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(selectedFilter = filterId)
+        }
+    }
+
+    fun updateColorFilterType(filterId: String) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            project.copy(colorFilterType = filterId)
         }
     }
 

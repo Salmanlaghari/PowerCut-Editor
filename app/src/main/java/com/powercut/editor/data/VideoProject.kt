@@ -62,6 +62,7 @@ data class VideoProject(
     val trimEndMs: Long = 0L,
     val targetResolution: String = "1080p",
     val selectedFilter: String = "none",
+    val colorFilterType: String = "none",
     val isMuted: Boolean = false,
 
     // High-priority features
@@ -280,6 +281,10 @@ data class VideoProject(
     val isPremiumLookActive: Boolean
         get() = activePremiumLook != "none" && activePremiumLook.isNotBlank()
 
+    /** Whether cinematic color filter is active. */
+    val isColorFilterActive: Boolean
+        get() = colorFilterType != "none" && colorFilterType.isNotBlank()
+
     companion object {
 
         private const val KEY_FORMAT_VERSION = "format_version"
@@ -350,6 +355,7 @@ data class VideoProject(
                 put("social_preset", project.socialPreset)
                 put("is_pro_tier", project.isProTier)
                 put("active_keyframe_preset", project.activeKeyframePreset)
+                put("color_filter_type", project.colorFilterType)
             }
             root.put(KEY_PROJECT, projectJson)
 
@@ -518,7 +524,8 @@ data class VideoProject(
                 activeKeyframePreset = projectJson.optString("active_keyframe_preset", "none"),
                 activeEffects = effectsList,
                 textOverlays = overlaysList,
-                audioTracks = audioTracksList
+                audioTracks = audioTracksList,
+                colorFilterType = projectJson.optString("color_filter_type", "none")
             )
         }
 

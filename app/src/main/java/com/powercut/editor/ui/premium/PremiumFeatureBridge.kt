@@ -127,6 +127,14 @@ object PremiumFeatureBridge {
         viewModel.updateFilter(filterId)
     }
 
+    /**
+     * Apply a cinematic color filter preset (Premium feature).
+     * The filterId must match one of the Cinematic Filter ids from PremiumFeatureCatalog.
+     */
+    fun applyCinematicFilter(viewModel: EditorViewModel, filterId: String) {
+        viewModel.updateColorFilterType(filterId)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     //  AUDIO EFFECTS
     //  Uses the audioEffect field which maps to PremiumFeatureCatalog audioChain.

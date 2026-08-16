@@ -78,6 +78,9 @@ fun FiltersScreen(onClose: () -> Unit, vm: EditorViewModel) {
                     onTap = {
                         selectedId = f.id
                         vm.addDagNode(DAGNode.Kind.Filter, """{"filter":"${f.id}"}""")
+                        if (f.pro) {
+                            vm.addDagNode(DAGNode.Kind.ColorFilter, """{"filter":"${f.id}"}""")
+                        }
                     }
                 )
             }
