@@ -1,0 +1,49 @@
+#include "frame_render_utils.h"
+#include <cstring>
+#include <cstdlib>
+#include "powercut/core/compositor.h"
+#include "powercut/core/decoder_farm.h"
+
+QImage FrameRenderUtils::renderFrame(PowerCut::PowerCutDAG *dag, int64_t timeMicros, int width, int height) {
+    if (!dag || !PowerCut::global_compositor) {
+        return QImage();
+    }
+
+    auto segs = dag->evaluate(timeMicros);
+    std::vector<PowerCut::RGBAFrame*> sourceFrames;
+    sourceFrames.reserve(segs.size());
+    for (const auto &s : segs) {
+        if (s.track_type <= 3) {
+            PowerCut::RGBAFrame *fr = nullptr;
+            if (PowerCut::global_decoder_farm) {
+                fr = PowerCut::global_decoder_farm->get_original_frame(s.mat_id, s.src_time(timeMicros));
+            }
+            sourceFrames.push_back(fr);
+        } else {
+            sourceFrames.push_back(nullptr);
+        }
+    }
+
+    PowerCut::RGBAFrame *out = PowerCut::global_compositor->render_full(segs, sourceFrames, timeMicros, width, height);
+    if (!out) {
+        out = new PowerCut::RGBAFrame();
+        out->width = width;
+        out->height = height;
+        out->stride = width * 4;
+        out->data = (uint8_t*)calloc((size_t)out->stride * out->height, 1);
+    }
+
+    QImage img(out->data, width, height, out->stride, QImage::Format_RGBA8888);
+    QImage copy = img.copy();
+
+    if (out->data) free(out->data);
+    delete out;
+    for (auto fr : sourceFrames) {
+        if (fr) {
+            if (fr->data) free(fr->data);
+            delete fr;
+        }
+    }
+
+    return copy;
+}

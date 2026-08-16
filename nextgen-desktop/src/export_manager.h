@@ -1,8 +1,10 @@
 #pragma once
 #include <QObject>
+#include <QProcess>
 #include <string>
 #include <atomic>
 #include <vector>
+#include <memory>
 #include "powercut/export/export_engine.h"
 
 struct ExportProgress {
@@ -30,4 +32,5 @@ private:
 
     std::atomic<bool> running;
     std::thread worker;
+    std::unique_ptr<QProcess> ffmpegProcess;
 };
