@@ -280,6 +280,13 @@ data class VideoProject(
     val isPremiumLookActive: Boolean
         get() = activePremiumLook != "none" && activePremiumLook.isNotBlank()
 
+    // ── JNI helpers for the native C++ export pipeline ──────────────────────
+    /** Returns the project as a JSONObject for the native DAG bridge. */
+    fun toJson(): org.json.JSONObject = VideoProject.toJson(this)
+
+    /** Duration in milliseconds (JNI bridge reads this directly). */
+    fun getDurationMs(): Long = durationMs
+
     companion object {
 
         private const val KEY_FORMAT_VERSION = "format_version"
