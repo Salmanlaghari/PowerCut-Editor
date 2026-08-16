@@ -2,7 +2,7 @@ package com.powercut.editor.domain.processing
 
 import android.content.Context
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.effect.RgbMatrix
@@ -17,6 +17,7 @@ import com.powercut.editor.data.VideoProject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -33,10 +34,13 @@ import kotlin.coroutines.resume
  * This class is intentionally scoped to the colour-grade concern: it applies
  * the pipeline's `RgbMatrix` effects plus optional start/end trim clipping. It
  * does NOT reimplement the FFmpeg pipeline's structural edits (speed, transitions,
- * music, text, captions, stickers, green-screen, …). [ExportManager] routes a
- * project here only when it has colour adjustments and no FFmpeg-only structural
- * edits (see [shouldUseForProject]); everything else keeps using FFmpeg so no
- * existing feature regresses.
+ * music, text, captions, stickers, green-screen, blur/sharpen, silence
+ * removal, watermark, volume, custom resolution/FPS, …). [ExportManager] routes
+ * a project here only via [shouldUseForProject], which is deliberately
+ * **conservative**: when in doubt it returns `false` so the proven FFmpeg path
+ * handles the export. The Transformer path is reserved for the narrowest,
+ * safest case — a single-clip, colour-only export with every other setting at
+ * its default.
  */
 @Singleton
 class Media3TransformerExporter @Inject constructor(
@@ -53,45 +57,81 @@ class Media3TransformerExporter @Inject constructor(
      * Returns `true` when [project] should be exported through the Media3
      * Transformer parity path rather than the FFmpeg pipeline.
      *
-     * Conditions:
-     *  - there is at least one colour effect to apply (filter / look / editor /
-     *    curves), AND
-     *  - the project has no FFmpeg-only structural edits that Transformer does
-     *    not reproduce here (speed change, transitions, music, text, captions,
-     *    stickers, image overlay, green-screen, crop, rotation/flip, reverse,
-     *    templates, mute). Start/end trim IS allowed (handled via clipping).
+     * CONSERVATIVE GATE — the Transformer path only applies the `RgbMatrix`
+     * colour grade (+ start/end trim clipping). It silently drops every other
+     * feature FFmpeg honours, so it may only be used when the project carries
+     * NONE of those features. When in doubt, return `false` and let FFmpeg run.
      *
-     * This keeps preview ⇄ export colour parity for the common "colour grade
-     * only" case while leaving complex edits on the proven FFmpeg path.
+     * Required conditions (ALL must hold):
+     *
+     *  1. At least one colour adjustment is present (filter / look / editor /
+     *     curves), AND exactly one video clip — Transformer handles a single clip.
+     *  2. No FFmpeg-only structural edits: speed factor, transitions, music,
+     *     mute, captions, rotation, flip, crop, text overlay, sticker, template,
+     *     image overlay, green-screen, reverse.
+     *  3. No editor effects Transformer doesn't reproduce: `imageEditorBlur`,
+     *     `imageEditorSharpen`, `isSilenceRemoverEnabled`, `speedCurve`,
+     *     `selectedEffect`, `freezeFrameMs` — all at their default/inactive values.
+     *  4. No custom export geometry: `targetResolution == "1080p"` and
+     *     `targetFps == 30` (Transformer keeps source res/FPS; only safe when
+     *     the user hasn't requested a custom output resolution/frame rate).
+     *  5. No watermark: `watermarkPath == null` (no custom watermark) AND
+     *     `isProTier` (the bundled PowerCut watermark is disabled for Pro —
+     *     free-tier exports carry it, which Transformer cannot reproduce).
+     *  6. Audio volume unchanged: `videoVolume == 1.0f` (Transformer applies no
+     *     volume change; FFmpeg honours a non-default `videoVolume`).
      */
     fun shouldUseForProject(project: VideoProject): Boolean {
+        // (1) Colour adjustments present, single clip.
         if (!hasColorAdjustments(project)) return false
-
-        val singleClip = project.timeline.tracks
+        val videoClips = project.timeline.tracks
             .filter { it.type == com.powercut.editor.data.TrackType.VIDEO }
             .flatMap { it.clips }
-            .size <= 1
+        if (videoClips.size != 1) return false
 
-        if (!singleClip) return false
-
+        // (2) No FFmpeg-only structural edits the Transformer skips.
         val noStructuralEdits =
             project.speedFactor == 1.0f &&
-            project.transitionType == "none" &&
-            project.backgroundMusicPath.isNullOrEmpty() &&
-            !project.isMuted &&
-            project.autoCaptionsLanguage == "off" &&
-            project.rotationDegrees == 0f &&
-            !project.isFlippedHorizontal &&
-            !project.isFlippedVertical &&
-            project.cropPreset == "free" &&
-            project.activeTextOverlay.isNullOrEmpty() &&
-            project.stickerType == "none" &&
-            project.activeTemplateId == "none" &&
-            project.imageOverlayPath.isNullOrEmpty() &&
-            !project.greenScreenEnabled &&
-            !project.isReverseEnabled
+                project.transitionType == "none" &&
+                project.backgroundMusicPath.isNullOrEmpty() &&
+                !project.isMuted &&
+                project.autoCaptionsLanguage == "off" &&
+                project.rotationDegrees == 0f &&
+                !project.isFlippedHorizontal &&
+                !project.isFlippedVertical &&
+                project.cropPreset == "free" &&
+                project.activeTextOverlay.isNullOrEmpty() &&
+                project.stickerType == "none" &&
+                project.activeTemplateId == "none" &&
+                project.imageOverlayPath.isNullOrEmpty() &&
+                !project.greenScreenEnabled &&
+                !project.isReverseEnabled
+        if (!noStructuralEdits) return false
 
-        return noStructuralEdits
+        // (3) No editor effects the Transformer doesn't reproduce.
+        val noEditorEffects =
+            project.imageEditorBlur == 0f &&
+                project.imageEditorSharpen == 0f &&
+                !project.isSilenceRemoverEnabled &&
+                project.speedCurve == "constant" &&
+                project.selectedEffect == "none" &&
+                project.freezeFrameMs == 0L
+        if (!noEditorEffects) return false
+
+        // (4) No custom export resolution / frame rate.
+        val defaultExportGeometry =
+            project.targetResolution == "1080p" &&
+                project.targetFps == 30
+        if (!defaultExportGeometry) return false
+
+        // (5) No watermark (custom or bundled).
+        val noWatermark = project.watermarkPath == null && project.isProTier
+        if (!noWatermark) return false
+
+        // (6) Audio volume at default.
+        if (project.videoVolume != 1.0f) return false
+
+        return true
     }
 
     /** True when the project carries any colour-grade state the pipeline maps. */
@@ -141,74 +181,121 @@ class Media3TransformerExporter @Inject constructor(
 
         onProgress(0)
 
-        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
-
+        // EditedMediaItem construction holds no thread affinity — build it here.
         val mediaItem = buildMediaItem(inputPath, project)
         val editedMediaItem = EditedMediaItem.Builder(mediaItem)
             .setEffects(Effects(emptyList(), effects))
             .build()
 
-        val mainHandler = Handler(Looper.getMainLooper())
+        val finished = AtomicBoolean(false)
+
+        // ════════════════════════════════════════════════════════════════════════
+        //  Thread confinement (Qodo fix): Media3's Transformer requires that
+        //  build(), start(), getProgress(), cancel(), and all Listener callbacks
+        //  run on ONE Looper. The previous implementation built/started the
+        //  Transformer on a Dispatchers.Default worker thread (no Looper) while
+        //  polling progress on the main Looper — crossing loopers and violating
+        //  that requirement.
+        //
+        //  FIX: own a dedicated HandlerThread, explicitly bind the Transformer
+        //  to its Looper via Transformer.Builder.setLooper(...), and route
+        //  build / start / progress-poll / cancel through a Handler on that
+        //  same Looper. Listener callbacks fire on that Looper; resume() is
+        //  thread-safe so resuming the coroutine from there is fine. The
+        //  HandlerThread is quit once the export finishes or is cancelled.
+        // ════════════════════════════════════════════════════════════════════════
+        val handlerThread = HandlerThread("Media3TransformerExport").also { it.start() }
+        val exportLooper = handlerThread.looper
+        val exportHandler = Handler(exportLooper)
         val progressHolder = ProgressHolder()
 
         return suspendCancellableCoroutine { cont ->
-            val transformer = Transformer.Builder(context)
-                .addListener(object : Transformer.Listener {
-                    override fun onCompleted(
-                        composition: Composition,
-                        exportResult: ExportResult
-                    ) {
-                        Log.d(TAG, "Transformer export completed")
-                        finished.set(true)
-                        cont.resume(true)
-                    }
+            // Holders so the cancellation handler (registered outside the Looper)
+            // can reach the Transformer to cancel it ON the export Looper.
+            var transformer: Transformer? = null
+            var progressRunnable: Runnable? = null
 
-                    override fun onError(
-                        composition: Composition,
-                        exportResult: ExportResult,
-                        exportException: ExportException
-                    ) {
-                        Log.e(TAG, "Transformer export failed", exportException)
-                        finished.set(true)
-                        cont.resume(false)
-                    }
-                })
-                .build()
+            // Stops progress polling and quits the HandlerThread. Called only from
+            // the export Looper (Listener callbacks / start-catch), so it is safe
+            // to touch transformer/progressRunnable there.
+            fun shutdownFromExportLooper() {
+                progressRunnable?.let { exportHandler.removeCallbacks(it) }
+                handlerThread.quit()
+            }
 
-            // Poll progress on the main looper (Media3 posts listener callbacks there).
-            val progressRunnable = object : Runnable {
-                override fun run() {
-                    if (finished.get() || cont.isCancelled) return
-                    try {
-                        val state = transformer.getProgress(progressHolder)
-                        if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
-                            onProgress(progressHolder.progress.coerceIn(0, 100))
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Progress poll failed: ${e.message}")
-                    }
-                    if (!finished.get() && !cont.isCancelled) {
-                        mainHandler.postDelayed(this, PROGRESS_POLL_INTERVAL_MS)
-                    }
+            // Resumes the coroutine exactly once: the first of onCompleted /
+            // onError / start-catch to win the CAS proceeds; everyone else (incl.
+            // cancellation, which sets `finished` first) is a no-op.
+            fun completeOnce(value: Boolean) {
+                if (finished.compareAndSet(false, true)) {
+                    shutdownFromExportLooper()
+                    if (cont.isActive) cont.resume(value)
                 }
             }
-            mainHandler.post(progressRunnable)
+
+            exportHandler.post {
+                val t = Transformer.Builder(context)
+                    .setLooper(exportLooper)
+                    .addListener(object : Transformer.Listener {
+                        override fun onCompleted(
+                            composition: Composition,
+                            exportResult: ExportResult
+                        ) {
+                            Log.d(TAG, "Transformer export completed")
+                            completeOnce(true)
+                        }
+
+                        override fun onError(
+                            composition: Composition,
+                            exportResult: ExportResult,
+                            exportException: ExportException
+                        ) {
+                            Log.e(TAG, "Transformer export failed", exportException)
+                            completeOnce(false)
+                        }
+                    })
+                    .build()
+                transformer = t
+
+                val pr = object : Runnable {
+                    override fun run() {
+                        if (finished.get() || cont.isCancelled) return
+                        try {
+                            val state = t.getProgress(progressHolder)
+                            if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                                onProgress(progressHolder.progress.coerceIn(0, 100))
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Progress poll failed: ${e.message}")
+                        }
+                        if (!finished.get() && !cont.isCancelled) {
+                            exportHandler.postDelayed(this, PROGRESS_POLL_INTERVAL_MS)
+                        }
+                    }
+                }
+                progressRunnable = pr
+
+                try {
+                    t.start(editedMediaItem, outputPath)
+                    // Poll progress on the same Looper the Transformer is bound to.
+                    exportHandler.post(pr)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Transformer.start threw", e)
+                    completeOnce(false)
+                }
+            }
 
             cont.invokeOnCancellation {
+                // Mark finished so polling + Listener callbacks stop, then cancel
+                // the Transformer ON its own Looper (never off-Looper).
                 finished.set(true)
-                mainHandler.removeCallbacks(progressRunnable)
-                try { transformer.cancel() } catch (e: Exception) {
-                    Log.w(TAG, "cancel failed: ${e.message}")
+                exportHandler.post {
+                    try { transformer?.cancel() } catch (e: Exception) {
+                        Log.w(TAG, "cancel failed: ${e.message}")
+                    }
+                    progressRunnable?.let { exportHandler.removeCallbacks(it) }
+                    handlerThread.quit()
                 }
-            }
-
-            try {
-                transformer.start(editedMediaItem, outputPath)
-            } catch (e: Exception) {
-                Log.e(TAG, "Transformer.start threw", e)
-                finished.set(true)
-                mainHandler.removeCallbacks(progressRunnable)
-                if (cont.isActive) cont.resume(false)
             }
         }.also { ok ->
             // Best-effort final progress + ensure the output is real before trusting it.
