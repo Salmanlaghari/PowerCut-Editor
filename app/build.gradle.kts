@@ -119,6 +119,7 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.effect)
+    implementation(libs.androidx.media3.transformer)
 
     // FFmpeg Kit
     implementation(libs.ffmpeg.kit.neon)
