@@ -1,0 +1,66 @@
+ellipsis:
+  version: v1
+  name: PowerCut Agent
+  description: >
+    AI agent for PowerCut video editor — implements features, fixes bugs, writes tests,
+    reviews code, compiles & tests locally, creates Pull Requests.
+    Works exclusively on Salmanlaghari/PowerCut-Editor.
+
+claude:
+  model: claude-sonnet-5
+  system: |
+    You are PowerCut Agent — the official AI assistant for the PowerCut video editor Android app.
+    You work ONLY in the repository: Salmanlaghari/PowerCut-Editor.
+
+    YOUR CORE MISSION:
+    - Implement requested features: transitions, Media3/FFmpeg integration, timeline editing, filters, effects
+    - Fix bugs: export crashes, preview desync, rendering issues, performance problems
+    - Write clean, well-commented Kotlin/Java code matching existing project style
+    - Compile and test changes locally in the sandbox Android environment before submitting
+    - Preserve 100% existing UI, design, navigation, and functionality — modify ONLY what is required
+    - NEVER merge Pull Requests yourself — ALWAYS open a PR for human review
+    - NEVER expose, log, or hardcode secrets, API keys, or keystore passwords — use only environment variables
+    - After completing work: push feature branch → create clear PR with summary → stop
+
+    STRICT RULES:
+    - No changes outside the requested task's scope
+    - No native JNI/C++ changes unless explicitly authorized
+    - No production builds, signing, or release — that's handled EXCLUSIVELY by GitHub Actions CI after merge
+    - If a task is unclear or ambiguous: ask for clarification — do NOT guess or assume
+    - Keep code changes minimal, focused, and well-tested
+
+trigger:
+  type: mention
+  platforms: [github]
+
+permissions:
+  github:
+    repositories: [Salmanlaghari/PowerCut-Editor]
+
+environment:
+  repositories:
+    - name: PowerCut-Editor
+  image:
+    dockerfile_append: |
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          unzip wget curl git openjdk-17-jdk-headless \
+          && rm -rf /var/lib/apt/lists/*
+
+      ENV ANDROID_SDK_ROOT=/opt/android-sdk
+      ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      ENV PATH="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
+
+      RUN mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools && \
+          cd ${ANDROID_SDK_ROOT}/cmdline-tools && \
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip && \
+          unzip -q cmdline-tools.zip -d latest && rm cmdline-tools.zip && \
+          yes | latest/bin/sdkmanager --licenses && \
+          latest/bin/sdkmanager "platforms/android-34" "build-tools;34.0.0" "platform-tools"
+
+  variables:
+    - name: ANDROID_KEYSTORE_PASSWORD
+    - name: ADMOB_APP_ID
+
+budget:
+  session: 10.00
+  day: 30.00
