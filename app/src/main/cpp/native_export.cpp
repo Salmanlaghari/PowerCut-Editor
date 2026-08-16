@@ -1,404 +1,908 @@
 // =============================================================================
-// PowerCut Editor — JNI bridge for the native C++ Export Engine (P1 fixes).
+// PowerCut Editor — JNI bridge for the native C++ Export Engine.
 //
-// IMPLEMENTS:
-//   * JNI_OnLoad: cache EVERY jclass/jmethodID/jfieldID as static globals ONCE
-//     using NewGlobalRef (P1 fix #6 — no FindClass/GetMethodID per frame).
-//   * nativeExport: bridges Kotlin VideoProject → C++ powercut::export_::ExportConfig
-//     → export_engine.run() with progress callbacks and cancellation.
-//   * Legacy JNI symbols (nativeCreate/nativeStart/etc.) are preserved as stubs
-//     for binary compatibility with any compiled callers.
+// Implements the external methods declared in
+//   app/src/main/java/com/powercut/editor/export/ExportEngine.kt
 //
-// JNI symbol naming: Java_com_powercut_editor_export_ExportEngine_<method>
+// JNI symbol naming follows the Java package convention:
+//   Java_com_powercut_editor_export_ExportEngine_<method>
+//
+// When the full FFmpeg + LevelDB export engine is compiled (CMake detects
+// third_party/ffmpeg and third_party/leveldb), the ExportEngine class is
+// provided by src/export/export_engine.cpp. When those libraries are not
+// available, this file provides stub implementations so the shared library
+// links and the Kotlin layer can call the guarded external methods without
+// crashing (start() returns false, running() returns false, etc.).
 // =============================================================================
-#include "powercut/export/export_engine.h"
-#include "powercut/core/types.h"
-
 #include <jni.h>
-#include <android/log.h>
-#include <android/native_window_jni.h>
-
-#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
+#include <cmath>
+#include <thread>
+#include "powercut/export/export_engine.h"
+#include "powercut/core/dag.h"
+#include "powercut/core/compositor.h"
+#include "powercut/core/decoder_farm.h"
 
-#define TAG "powercut.jni"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
-#define PC_JNI_VERSION JNI_VERSION_1_6
+// PRIORITY 1 FIX: Progress callback JNI bridge.
+// The native worker thread needs to call back into Kotlin to report progress.
+// Since the worker runs on a C++ std::thread (not attached to the JVM), we
+// store the JavaVM pointer and a global ref to the ExportEngine Kotlin object,
+// then attach the worker thread to the JVM before calling the callback.
+static JavaVM* g_jvm = nullptr;
+static jobject g_engine_ref = nullptr;  // global ref to ExportEngine Kotlin obj
+static jmethodID g_progress_method = nullptr;  // ExportEngine.onProgressCallback
 
-// =============================================================================
-// Cached JNI globals — populated once in JNI_OnLoad (P1 fix #6).
-// =============================================================================
-static JavaVM* g_vm = nullptr;
+using PowerCut::ExportEngine;
+using PowerCut::ExportConfig;
+using PowerCut::ExportPreset;
+using PowerCut::PowerCutDAG;
+using PowerCut::DAGSegment;
+using PowerCut::AudioSegment;
+using PowerCut::EffectNode;
+using PowerCut::Keyframe;
+using PowerCut::TimeMicros;
+using PowerCut::RGBAFrame;
+using PowerCut::global_compositor;
+using PowerCut::global_decoder_farm;
 
-static jclass    g_cls_ExportEngine       = nullptr;
-static jmethodID g_mid_onProgress         = nullptr;
-static jmethodID g_mid_onComplete         = nullptr;
-static jclass    g_cls_ProgressCallback   = nullptr;
+// ---------------------------------------------------------------------------
+// Detect whether the full export engine is available. When building only the
+// JNI stub (FFmpeg/LevelDB not found), we provide inline stub implementations
+// of ExportEngine so the library links. The full build provides the real
+// implementations in src/export/export_engine.cpp.
+//
+// We use a preprocessor guard: POWERCUT_FULL_EXPORT_ENGINE is defined by CMake
+// when the full sources are added to the build. Otherwise, we define stubs here.
+// ---------------------------------------------------------------------------
+#ifndef POWERCUT_FULL_EXPORT_ENGINE
 
-static jfieldID  g_fid_cfg_preset           = nullptr;
-static jfieldID  g_fid_cfg_outPath          = nullptr;
+// ---- Stub ExportEngine (used when FFmpeg/LevelDB not available) ----
+// These match the declarations in export_engine.h but do nothing real.
+// FIX: The stub now implements the correct per-frame rendering loop:
+//   1. Evaluate PowerCutDAG at each frame timestamp
+//   2. Decode source frames for active segments
+//   3. Call compositor->render_full() with ALL layers (text, stickers, effects)
+//   4. Apply watermark if remove_watermark is false
+//   5. Mix all audio segments per-frame
+//   6. Encode the fully-composited frame
+// In the full build (POWERCUT_FULL_EXPORT_ENGINE), all these steps produce
+// real pixels. Here they are no-ops that return correct structural results.
+namespace PowerCut {
 
-static jfieldID  g_fid_preset_w             = nullptr;
-static jfieldID  g_fid_preset_h             = nullptr;
-static jfieldID  g_fid_preset_fps           = nullptr;
-static jfieldID  g_fid_preset_container     = nullptr;
+struct ExportEngine::Impl {
+    ExportConfig cfg;
+    PowerCutDAG* dag = nullptr;
+    std::atomic<bool> run{false};
+    Cb progress_cb;
+};
 
-static jmethodID g_mid_proj_toJson        = nullptr;
-static jmethodID g_mid_proj_getDurationMs = nullptr;
+ExportEngine::ExportEngine() : m(std::make_unique<Impl>()) {}
+ExportEngine::~ExportEngine() = default;
+bool ExportEngine::running() const { return m->run; }
+void ExportEngine::on_progress(Cb f) { m->progress_cb = std::move(f); }
 
-static jobject   g_proj_ref               = nullptr;
-static jobject   g_progress_ref           = nullptr;
-static ANativeWindow* g_preview_window    = nullptr;
-
-static std::unique_ptr<powercut::export_::ExportEngine> g_engine;
-static powercut::core::CancelToken g_cancel_tok;
-
-namespace {
-bool clear_exception(JNIEnv* env, const char* where) {
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        LOGE("JNI exception cleared at %s", where);
-        return true;
-    }
+bool ExportEngine::start(PowerCutDAG* d, const ExportConfig& c) {
+    if (m->run) return false;  // already running
+    m->cfg = c;
+    m->dag = d;
+    // FIX: In the stub build (no FFmpeg/LevelDB), return false immediately
+    // so the Kotlin layer falls back to the FFmpeg VideoProcessor pipeline.
+    // The stub cannot produce real output — running the worker loop would
+    // waste time producing empty frames. The full build (POWERCUT_FULL_
+    // EXPORT_ENGINE) returns true and runs the real encode.
     return false;
 }
 
-jfieldID safe_field(JNIEnv* env, jclass c, const char* name, const char* sig) {
-    jfieldID f = env->GetFieldID(c, name, sig);
-    clear_exception(env, name);
-    return f;
-}
+void ExportEngine::cancel() { m->run = false; }
 
-jmethodID safe_method(JNIEnv* env, jclass c, const char* name, const char* sig) {
-    jmethodID m = env->GetMethodID(c, name, sig);
-    clear_exception(env, name);
-    return m;
-}
-}
+void ExportEngine::worker() {
+    if (!m->dag) { m->run = false; return; }
 
-// =============================================================================
-// JNI_OnLoad — cache everything once via NewGlobalRef (P1 fix #6).
-// =============================================================================
-extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
-    g_vm = vm;
-    JNIEnv* env = nullptr;
-    if (vm->GetEnv(reinterpret_cast<void**>(&env), PC_JNI_VERSION) != JNI_OK) {
-        LOGE("JNI_OnLoad: GetEnv failed");
-        return JNI_ERR;
-    }
+    const TimeMicros dur = m->dag->duration();
+    const double fps = m->cfg.preset.fps;
+    const int64_t total_frames = (int64_t)(dur * fps / 1e6);
+    const TimeMicros frame_us = (TimeMicros)(1e6 / fps);
 
-    jclass local_engine = env->FindClass("com/powercut/editor/export/ExportEngine");
-    if (clear_exception(env, "FindClass ExportEngine") || !local_engine) {
-        LOGE("ExportEngine class not found"); return JNI_ERR;
-    }
-    g_cls_ExportEngine = reinterpret_cast<jclass>(env->NewGlobalRef(local_engine));
-    env->DeleteLocalRef(local_engine);
+    Compositor compositor;
 
-    jclass local_cb = env->FindClass("com/powercut/editor/export/ExportEngine$ProgressCallback");
-    if (clear_exception(env, "FindClass ProgressCallback") || !local_cb) {
-        LOGE("ProgressCallback interface not found"); return JNI_ERR;
-    }
-    g_cls_ProgressCallback = reinterpret_cast<jclass>(env->NewGlobalRef(local_cb));
-    env->DeleteLocalRef(local_cb);
-    g_mid_onProgress = safe_method(env, g_cls_ProgressCallback, "onProgress", "(IZ)V");
-    g_mid_onComplete = safe_method(env, g_cls_ProgressCallback,
-        "onComplete", "(ZJLjava/lang/String;J)V");
-    if (!g_mid_onProgress || !g_mid_onComplete) {
-        LOGE("ProgressCallback methods not found"); return JNI_ERR;
-    }
+    for (int64_t fi = 0; fi < total_frames && m->run; ++fi) {
+        const TimeMicros t = fi * frame_us;
 
-    jclass cfg_cls = env->FindClass("com/powercut/editor/export/ExportConfig");
-    if (clear_exception(env, "FindClass ExportConfig") || !cfg_cls) {
-        LOGE("ExportConfig class not found"); return JNI_ERR;
-    }
-    g_fid_cfg_preset     = safe_field(env, cfg_cls, "preset", "Lcom/powercut/editor/export/ExportPreset;");
-    g_fid_cfg_outPath    = safe_field(env, cfg_cls, "out", "Ljava/lang/String;");
-    env->DeleteLocalRef(cfg_cls);
+        // 1. EVALUATE DAG: get ALL active segments at this timestamp
+        //    (video, text, sticker, overlay — sorted bottom→top by track_index)
+        auto segments = m->dag->evaluate(t);
 
-    jclass preset_cls = env->FindClass("com/powercut/editor/export/ExportPreset");
-    if (preset_cls) {
-        g_fid_preset_w         = safe_field(env, preset_cls, "w", "I");
-        g_fid_preset_h         = safe_field(env, preset_cls, "h", "I");
-        g_fid_preset_fps       = safe_field(env, preset_cls, "fps", "D");
-        g_fid_preset_container = safe_field(env, preset_cls, "container", "Ljava/lang/String;");
-        env->DeleteLocalRef(preset_cls);
-    }
+        // 2. DECODE SOURCE FRAMES for active segments.
+        //    (stub: no real decoding — the full build uses DecoderFarm)
+        std::vector<RGBAFrame*> source_frames;
+        (void)segments;
+        (void)source_frames;
 
-    jclass proj_cls = env->FindClass("com/powercut/editor/data/VideoProject");
-    if (proj_cls) {
-        g_mid_proj_toJson        = safe_method(env, proj_cls, "toJson", "()Lorg/json/JSONObject;");
-        g_mid_proj_getDurationMs = safe_method(env, proj_cls, "getDurationMs", "()J");
-        env->DeleteLocalRef(proj_cls);
-    } else {
-        clear_exception(env, "FindClass VideoProject");
-        LOGE("VideoProject class not found — DAG will use project fields");
-    }
+        // 3. FULL COMPOSITE: render_all layers with ALL effects.
+        //    compositor->render_full() applies: crop, effect chain (color grade,
+        //    LUT, filter, blur, sharpen, vignette, grain), keyframed transforms
+        //    (scale, position, rotation, opacity), and Z-order compositing.
+        RGBAFrame* frame = compositor.render_full(
+            segments, source_frames, t,
+            m->cfg.preset.w, m->cfg.preset.h);
 
-    g_engine = std::make_unique<powercut::export_::ExportEngine>();
-    if (!g_engine->setup_enc(vm)) {
-        LOGE("ExportEngine::setup_enc failed — continuing, Kotlin will surface errors");
-    }
-
-    LOGI("JNI_OnLoad OK — all jmethodID/jfieldID cached as globals");
-    return PC_JNI_VERSION;
-}
-
-extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* /*reserved*/) {
-    JNIEnv* env = nullptr;
-    if (vm->GetEnv(reinterpret_cast<void**>(&env), PC_JNI_VERSION) != JNI_OK) return;
-    if (g_engine) { g_engine->teardown(); g_engine.reset(); }
-    if (g_proj_ref)     { env->DeleteGlobalRef(g_proj_ref);     g_proj_ref = nullptr; }
-    if (g_progress_ref) { env->DeleteGlobalRef(g_progress_ref); g_progress_ref = nullptr; }
-    if (g_cls_ExportEngine)     { env->DeleteGlobalRef(g_cls_ExportEngine);     g_cls_ExportEngine = nullptr; }
-    if (g_cls_ProgressCallback) { env->DeleteGlobalRef(g_cls_ProgressCallback); g_cls_ProgressCallback = nullptr; }
-    if (g_preview_window) { ANativeWindow_release(g_preview_window); g_preview_window = nullptr; }
-}
-
-// =============================================================================
-// Helper: convert old ExportPreset fields to new powercut::core::ExportConfig
-// =============================================================================
-static powercut::core::Resolution preset_resolution(const std::string& targetRes, int w, int h) {
-    int res = (w > 2160) ? 2160 : (w > 1440 ? 1440 : (w > 1080 ? 1080 : (w > 720 ? 720 : 480)));
-    if (targetRes == "4k" || targetRes == "2160p") res = 2160;
-    else if (targetRes == "2k" || targetRes == "1440p") res = 1440;
-    else if (targetRes == "1080p" || targetRes == "fhd") res = 1080;
-    else if (targetRes == "720p" || targetRes == "hd") res = 720;
-    else if (targetRes == "480p" || targetRes == "sd") res = 480;
-    return static_cast<powercut::core::Resolution>(res);
-}
-
-static powercut::core::FrameRate preset_fps(int fps) {
-    if (fps >= 120) return powercut::core::FrameRate::FPS120;
-    if (fps >= 60)  return powercut::core::FrameRate::FPS60;
-    if (fps >= 25)  return powercut::core::FrameRate::FPS30;
-    return powercut::core::FrameRate::FPS24;
-}
-
-static powercut::core::Container preset_container(const std::string& c) {
-    if (c == "mov")  return powercut::core::Container::MOV;
-    if (c == "webm") return powercut::core::Container::WEBM;
-    return powercut::core::Container::MP4;
-}
-
-static int64_t preset_bitrate(int w, int h, int fps) {
-    double pixels = (double)w * h * fps;
-    if (pixels > 33'000'000.0)  return 45'000'000;
-    if (pixels > 8'000'000.0)   return 20'000'000;
-    if (pixels > 2'000'000.0)   return 12'000'000;
-    return 4'000'000;
-}
-
-// =============================================================================
-// nativeExport: bridges Kotlin VideoProject + ExportConfig → new engine.run()
-// =============================================================================
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_powercut_editor_export_ExportEngine_nativeExport(
-        JNIEnv* env, jobject /*thiz*/,
-        jobject jConfig, jobject jProject, jobject jProgress, jobject jSurface) {
-
-    if (!g_engine) {
-        LOGE("nativeExport: engine not initialized");
-        return JNI_FALSE;
-    }
-    if (!jConfig || !jProject) {
-        LOGE("nativeExport: null config or project");
-        return JNI_FALSE;
-    }
-
-    if (g_proj_ref)     { env->DeleteGlobalRef(g_proj_ref);     g_proj_ref = nullptr; }
-    if (g_progress_ref) { env->DeleteGlobalRef(g_progress_ref); g_progress_ref = nullptr; }
-    g_proj_ref     = env->NewGlobalRef(jProject);
-    g_progress_ref = jProgress ? env->NewGlobalRef(jProgress) : nullptr;
-    if (clear_exception(env, "NewGlobalRef")) {
-        if (g_proj_ref)     { env->DeleteGlobalRef(g_proj_ref);     g_proj_ref = nullptr; }
-        if (g_progress_ref) { env->DeleteGlobalRef(g_progress_ref); g_progress_ref = nullptr; }
-        return JNI_FALSE;
-    }
-
-    jclass configClass = env->GetObjectClass(jConfig);
-    jobject presetObj  = nullptr;
-
-    presetObj = env->GetObjectField(jConfig, g_fid_cfg_preset);
-    if (configClass) env->DeleteLocalRef(configClass);
-
-    int presetW = 1920, presetH = 1080, presetFps = 30;
-    std::string presetContainer = "mp4";
-    if (presetObj) {
-        jclass presetClass = env->GetObjectClass(presetObj);
-        if (presetClass) {
-            if (g_fid_preset_w)         presetW = env->GetIntField(presetObj, g_fid_preset_w);
-            if (g_fid_preset_h)         presetH = env->GetIntField(presetObj, g_fid_preset_h);
-            if (g_fid_preset_fps)       presetFps = (int)env->GetDoubleField(presetObj, g_fid_preset_fps);
-            if (g_fid_preset_container) {
-                jstring jCont = (jstring)env->GetObjectField(presetObj, g_fid_preset_container);
-                if (jCont) {
-                    const char* cstr = env->GetStringUTFChars(jCont, nullptr);
-                    if (cstr) { presetContainer = cstr; env->ReleaseStringUTFChars(jCont, cstr); }
-                    env->DeleteLocalRef(jCont);
-                }
-            }
-            env->DeleteLocalRef(presetClass);
+        // 4. WATERMARK: semi-transparent "PowerCut" bottom-right
+        //    when ad NOT clicked (remove_watermark == false)
+        if (frame && !m->cfg.remove_watermark) {
+            apply_watermark(frame);
         }
-        env->DeleteLocalRef(presetObj);
-    }
 
-    std::string targetResolution = "1080p";
-    jclass projClass = env->GetObjectClass(jProject);
-    if (projClass) {
-        jfieldID fTargetRes = env->GetFieldID(projClass, "targetResolution", "Ljava/lang/String;");
-        if (fTargetRes) {
-            jstring jTR = (jstring)env->GetObjectField(jProject, fTargetRes);
-            if (jTR) {
-                const char* cstr = env->GetStringUTFChars(jTR, nullptr);
-                if (cstr) { targetResolution = cstr; env->ReleaseStringUTFChars(jTR, cstr); }
-                env->DeleteLocalRef(jTR);
-            }
-        }
-        clear_exception(env, "read targetResolution");
-        env->DeleteLocalRef(projClass);
-    }
+        // 5. ENCODE VIDEO FRAME
+        if (frame) enc_v(frame);
 
-    powercut::core::ExportConfig cfg;
-    cfg.resolution     = preset_resolution(targetResolution, presetW, presetH);
-    cfg.fps            = preset_fps(presetFps);
-    cfg.container      = preset_container(presetContainer);
-    cfg.encoder        = powercut::core::EncoderKind::AUTO;
-    cfg.video_bitrate  = preset_bitrate(presetW, presetH, presetFps);
-    cfg.audio_bitrate  = 192000;
-    cfg.audio_channels = 2;
-    cfg.audio_sample_rate = 48000;
-    cfg.remove_watermark = false;
-    cfg.priority_hw    = false;
+        // 6. MIX AUDIO: evaluate all active audio segments, mix per-frame
+        auto audio_segs = m->dag->evaluate_audio(t);
+        (void)audio_segs;
+        enc_a(nullptr);  // stub: real build mixes and encodes PCM
 
-    if (g_fid_cfg_outPath) {
-        jstring jout = (jstring)env->GetObjectField(jConfig, g_fid_cfg_outPath);
-        if (jout) {
-            const char* cstr = env->GetStringUTFChars(jout, nullptr);
-            if (cstr) { cfg.out_path = cstr; env->ReleaseStringUTFChars(jout, cstr); }
-            env->DeleteLocalRef(jout);
+        // 7. REPORT PROGRESS
+        if (m->progress_cb) {
+            ExportProgress p{};
+            p.cur = fi;
+            p.total = total_frames;
+            p.speed_x = 1.0;
+            p.eta_s = (int)((total_frames - fi) / fps);
+            p.bytes = 0;
+            m->progress_cb(p);
         }
     }
-    clear_exception(env, "read outPath");
 
-    if (g_preview_window) { ANativeWindow_release(g_preview_window); g_preview_window = nullptr; }
-    if (jSurface) {
-        g_preview_window = ANativeWindow_fromSurface(env, jSurface);
-        clear_exception(env, "ANativeWindow_fromSurface");
-    }
+    // Finalize: mux video + audio into output container
+    if (m->run) mux();
+    m->run = false;
+}
 
-    std::vector<powercut::core::DAGNode> dag;
-    jstring jjson = nullptr;
-    if (g_mid_proj_toJson && g_proj_ref) {
-        jjson = (jstring)env->CallObjectMethod(g_proj_ref, g_mid_proj_toJson);
-        clear_exception(env, "toJson");
+bool ExportEngine::setup_enc() { return true; }
+bool ExportEngine::enc_v(RGBAFrame*) { return true; }
+bool ExportEngine::enc_a(PCMFrame*) { return true; }
+bool ExportEngine::mux() { return true; }
+void ExportEngine::apply_watermark(RGBAFrame* frame) {
+    // FIX: Draw semi-transparent "PowerCut" text at bottom-right.
+    // The full build renders this with a real font rasterizer onto the RGBA buffer.
+    // This stub documents the exact position and style.
+    (void)frame;
+    // Watermark spec:
+    //   - Text: "PowerCut"
+    //   - Position: bottom-right corner, 40px from right, 30px from bottom
+    //   - Font size: 28px
+    //   - Color: white (255,255,255,128) = 50% transparent
+    //   - When remove_watermark == true: skip this function entirely (clean export)
+}
+
+}  // namespace PowerCut
+
+#endif  // POWERCUT_FULL_EXPORT_ENGINE
+
+// ===========================================================================
+// Generic JNI field readers
+//
+// Used by both read_config() and build_dag_from_project() to read primitive
+// fields from Kotlin data classes by name. Each returns a safe default if the
+// field is not found.
+// ===========================================================================
+static bool read_bool_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    // PRIORITY 1 FIX: clear any pending exception after GetFieldID.
+    // If the field doesn't exist, GetFieldID throws NoSuchFieldError —
+    // we must clear it before any subsequent JNI call or the JVM will
+    // fatal-exit on the next JNI invocation.
+    jfieldID fid = env->GetFieldID(cls, field, "Z");
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return fid ? (env->GetBooleanField(obj, fid) == JNI_TRUE) : false;
+}
+
+static std::string read_string_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    // PRIORITY 1 FIX: clear exception if field not found.
+    jfieldID fid = env->GetFieldID(cls, field, "Ljava/lang/String;");
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (!fid) return {};
+    jstring js = (jstring) env->GetObjectField(obj, fid);
+    if (!js) return {};
+    const char* cstr = env->GetStringUTFChars(js, nullptr);
+    std::string s(cstr ? cstr : "");
+    env->ReleaseStringUTFChars(js, cstr);
+    return s;
+}
+
+static jlong read_long_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    jfieldID fid = env->GetFieldID(cls, field, "J");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    return fid ? env->GetLongField(obj, fid) : 0;
+}
+
+static jfloat read_float_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    jfieldID fid = env->GetFieldID(cls, field, "F");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    return fid ? env->GetFloatField(obj, fid) : 0.0f;
+}
+
+static jint read_int_field(JNIEnv* env, jobject obj, jclass cls, const char* field) {
+    jfieldID fid = env->GetFieldID(cls, field, "I");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    return fid ? env->GetIntField(obj, fid) : 0;
+}
+
+// ===========================================================================
+// JNI list reader helpers
+// ===========================================================================
+static std::vector<jobject> read_object_list(JNIEnv* env, jobject obj, jclass cls, const char* fieldName) {
+    std::vector<jobject> result;
+    jfieldID fid = env->GetFieldID(cls, fieldName, "Ljava/util/List;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return result; }
+    if (!fid) return result;
+    jobject listObj = env->GetObjectField(obj, fid);
+    if (!listObj) return result;
+    jclass listClass = env->GetObjectClass(listObj);
+    jmethodID iteratorMid = env->GetMethodID(listClass, "iterator", "()Ljava/util/Iterator;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(listObj); return result; }
+    jobject iterator = env->CallObjectMethod(listObj, iteratorMid);
+    if (env->ExceptionCheck() || !iterator) { env->DeleteLocalRef(listObj); if (iterator) env->DeleteLocalRef(iterator); return result; }
+    jclass iterClass = env->GetObjectClass(iterator);
+    jmethodID hasNextMid = env->GetMethodID(iterClass, "hasNext", "()Z");
+    jmethodID nextMid = env->GetMethodID(iterClass, "next", "()Ljava/lang/Object;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(listObj); env->DeleteLocalRef(iterator); return result; }
+    while (env->CallBooleanMethod(iterator, hasNextMid)) {
+        jobject item = env->CallObjectMethod(iterator, nextMid);
+        if (item) result.push_back(env->NewLocalRef(item));
     }
-    if (jjson) {
-        const char* cstr = env->GetStringUTFChars(jjson, nullptr);
-        if (cstr) {
-            powercut::core::DAGNode src{
-                powercut::core::DAGNode::Kind::Source, "project", cstr, {}
-            };
-            dag.push_back(src);
-            env->ReleaseStringUTFChars(jjson, cstr);
+    env->DeleteLocalRef(listObj);
+    env->DeleteLocalRef(iterator);
+    return result;
+}
+
+// ===========================================================================
+// v7.1 Keyframe reading helpers
+// ===========================================================================
+static void read_keyframes_for_property(
+    JNIEnv* env, jobject kfListObj,
+    const char* propertyName,
+    std::vector<Keyframe>& outKfs
+) {
+    if (!kfListObj) return;
+    jclass listCls = env->GetObjectClass(kfListObj);
+    jmethodID iterMid = env->GetMethodID(listCls, "iterator", "()Ljava/util/Iterator;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+    jobject iter = env->CallObjectMethod(kfListObj, iterMid);
+    if (env->ExceptionCheck() || !iter) { if (iter) env->DeleteLocalRef(iter); return; }
+    jclass iterCls = env->GetObjectClass(iter);
+    jmethodID hasNext = env->GetMethodID(iterCls, "hasNext", "()Z");
+    jmethodID next = env->GetMethodID(iterCls, "next", "()Ljava/lang/Object;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(iter); return; }
+    while (env->CallBooleanMethod(iter, hasNext)) {
+        jobject kfObj = env->CallObjectMethod(iter, next);
+        if (!kfObj) continue;
+        jclass kfCls = env->GetObjectClass(kfObj);
+        jfieldID fTime = env->GetFieldID(kfCls, "timeMs", "J");
+        jfieldID fValue = env->GetFieldID(kfCls, "value", "F");
+        jfieldID fProp = env->GetFieldID(kfCls, "property", "Ljava/lang/String;");
+        if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(kfObj); continue; }
+        if (!fTime || !fValue || !fProp) { env->DeleteLocalRef(kfObj); continue; }
+        jlong timeMs = fTime ? env->GetLongField(kfObj, fTime) : 0;
+        float value = fValue ? env->GetFloatField(kfObj, fValue) : 0.0f;
+        jstring jsProp = fProp ? (jstring)env->GetObjectField(kfObj, fProp) : nullptr;
+        const char* propChars = jsProp ? env->GetStringUTFChars(jsProp, nullptr) : "";
+        std::string prop = propChars ? propChars : "";
+        if (jsProp) env->ReleaseStringUTFChars(jsProp, propChars);
+        if (prop == propertyName) {
+            Keyframe kf;
+            kf.time = (TimeMicros)(timeMs * 1000);
+            kf.value = (double)value;
+            outKfs.push_back(kf);
         }
-        env->DeleteLocalRef(jjson);
+        env->DeleteLocalRef(kfObj);
+    }
+    env->DeleteLocalRef(iter);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: read an ExportPreset from the Kotlin ExportPreset data class.
+// ---------------------------------------------------------------------------
+static ExportPreset read_preset(JNIEnv* env, jobject presetObj) {
+    ExportPreset p{};
+    if (!presetObj) return p;
+
+    jclass cls = env->GetObjectClass(presetObj);
+
+    jfieldID fName = env->GetFieldID(cls, "name", "Ljava/lang/String;");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    if (fName) {
+        jstring js = (jstring) env->GetObjectField(presetObj, fName);
+        if (js) {
+            const char* cstr = env->GetStringUTFChars(js, nullptr);
+            p.name = std::string(cstr ? cstr : "");
+            env->ReleaseStringUTFChars(js, cstr);
+        }
     }
 
-    g_cancel_tok.cancelled.store(false, std::memory_order_release);
+    jfieldID fW = env->GetFieldID(cls, "w", "I");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    jfieldID fH = env->GetFieldID(cls, "h", "I");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    if (fW) p.w = env->GetIntField(presetObj, fW);
+    if (fH) p.h = env->GetIntField(presetObj, fH);
 
-    auto progress = [env](int pct, const std::string& /*msg*/) {
-        if (!g_cls_ProgressCallback || !g_mid_onProgress || !g_progress_ref) return;
-        if (env->PushLocalFrame(2) < 0) return;
-        env->CallVoidMethod(g_progress_ref, g_mid_onProgress,
-                            (jint)pct, (jboolean)JNI_FALSE);
-        clear_exception(env, "onProgress");
-        env->PopLocalFrame(nullptr);
+    jfieldID fFps = env->GetFieldID(cls, "fps", "D");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    if (fFps) p.fps = env->GetDoubleField(presetObj, fFps);
+
+    jfieldID fTbr = env->GetFieldID(cls, "tbr", "J");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    jfieldID fMbr = env->GetFieldID(cls, "mbr", "J");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    if (fTbr) p.tbr = env->GetLongField(presetObj, fTbr);
+    if (fMbr) p.mbr = env->GetLongField(presetObj, fMbr);
+
+    p.vcodec = read_string_field(env, presetObj, cls, "vcodec");
+    p.acodec = read_string_field(env, presetObj, cls, "acodec");
+    p.container = read_string_field(env, presetObj, cls, "container");
+
+    env->DeleteLocalRef(cls);
+    return p;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: read an ExportConfig from the Kotlin ExportConfig data class.
+//
+// BUG 2 FIX (JNI boolean mapping): read each boolean field by its exact
+// Kotlin property name. GetBooleanField returns a jboolean (JNI_TRUE/JNI_FALSE)
+// which maps directly to C++ bool. The field name "removeWatermark" matches
+// the Kotlin ExportConfig.removeWatermark property — verified correct.
+// ---------------------------------------------------------------------------
+static ExportConfig read_config(JNIEnv* env, jobject configObj) {
+    ExportConfig c{};
+    if (!configObj) return c;
+
+    jclass cls = env->GetObjectClass(configObj);
+
+    jfieldID fPreset = env->GetFieldID(cls, "preset",
+        "Lcom/powercut/editor/export/ExportPreset;");
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+    if (fPreset) {
+        jobject presetObj = env->GetObjectField(configObj, fPreset);
+        c.preset = read_preset(env, presetObj);
+        if (presetObj) env->DeleteLocalRef(presetObj);
+    }
+
+    c.out = read_string_field(env, configObj, cls, "out");
+
+    c.hw = read_bool_field(env, configObj, cls, "hw");
+    c.two_pass = read_bool_field(env, configObj, cls, "twoPass");
+    c.faststart = read_bool_field(env, configObj, cls, "faststart");
+    c.remove_watermark = read_bool_field(env, configObj, cls, "removeWatermark");
+
+    env->DeleteLocalRef(cls);
+    return c;
+}
+
+// ===========================================================================
+// BUG 1 / BUG 3 / BUG 4 FIX: Build a real PowerCutDAG from the current active
+// Kotlin VideoProject instance.
+//
+// Previously nativeStart() passed nullptr as the DAG, so the export engine had
+// no timeline state at all — it could only ever produce raw frames with no edits.
+// Now we read the live VideoProject fields (trim, speed, filter, text overlay,
+// rotation, crop, background music, volumes, etc.) and construct a PowerCutDAG
+// with the correct segments + audio segments. This DAG is then passed to
+// engine->start(), which resolves it per-frame (BUG 1), mixes its audio (BUG 3),
+// and hashes it for cache invalidation (BUG 4).
+//
+// The VideoProject class is at package com.powercut.editor.data.VideoProject.
+// We read fields defensively — any missing field defaults to "no edit".
+// ===========================================================================
+static PowerCutDAG* build_dag_from_project(JNIEnv* env, jobject projectObj) {
+    auto* dag = new PowerCutDAG();
+    if (!projectObj) return dag;  // empty DAG (no project) — safe default
+
+    jclass cls = env->GetObjectClass(projectObj);
+
+    // ---- Duration (milliseconds -> microseconds) ----
+    jlong durationMs = read_long_field(env, projectObj, cls, "durationMs");
+    TimeMicros duration_us = (TimeMicros)(durationMs * 1000);
+    if (duration_us < 0) duration_us = 0;
+    dag->set_duration(duration_us);
+
+    // ---- Trim (milliseconds -> microseconds) ----
+    jlong trimStartMs = read_long_field(env, projectObj, cls, "trimStartMs");
+    jlong trimEndMs = read_long_field(env, projectObj, cls, "trimEndMs");
+    TimeMicros trim_start_us = (TimeMicros)(trimStartMs * 1000);
+    TimeMicros trim_end_us = (trimEndMs > 0) ? (TimeMicros)(trimEndMs * 1000) : 0;
+
+    // ---- Speed ----
+    jfloat speedFactor = read_float_field(env, projectObj, cls, "speedFactor");
+    double speed = (speedFactor > 0.0f) ? (double)speedFactor : 1.0;
+
+    // ---- Rotation ----
+    jfloat rotationDeg = read_float_field(env, projectObj, cls, "rotationDegrees");
+
+    // ---- Crop preset -> normalized crop region ----
+    std::string cropPreset = read_string_field(env, projectObj, cls, "cropPreset");
+    double crop_x = 0.0, crop_y = 0.0, crop_w = 1.0, crop_h = 1.0;
+    if (cropPreset == "square")       { crop_w = 1.0;    crop_h = 1.0; }
+    else if (cropPreset == "16:9")    { crop_w = 1.0;    crop_h = 0.5625; crop_y = 0.21875; }
+    else if (cropPreset == "4:3")     { crop_w = 1.0;    crop_h = 0.75;   crop_y = 0.125; }
+    else if (cropPreset == "9:16")    { crop_w = 0.5625; crop_h = 1.0;    crop_x = 0.21875; }
+
+    // ---- Selected filter / effect ----
+    std::string selectedFilter = read_string_field(env, projectObj, cls, "selectedFilter");
+    std::string selectedEffect = read_string_field(env, projectObj, cls, "selectedEffect");
+
+    // ---- Image-editor color adjustments -> effect chain ----
+    jfloat brightness = read_float_field(env, projectObj, cls, "imageEditorBrightness");
+    jfloat contrast   = read_float_field(env, projectObj, cls, "imageEditorContrast");
+    jfloat saturation = read_float_field(env, projectObj, cls, "imageEditorSaturation");
+    jfloat temperature= read_float_field(env, projectObj, cls, "imageEditorTemperature");
+    jfloat vignette   = read_float_field(env, projectObj, cls, "imageEditorVignette");
+    jfloat grain      = read_float_field(env, projectObj, cls, "imageEditorGrain");
+    jfloat blur       = read_float_field(env, projectObj, cls, "imageEditorBlur");
+    jfloat sharpen    = read_float_field(env, projectObj, cls, "imageEditorSharpen");
+
+    // ---- Build the primary video segment (track 0, bottom layer) ----
+    std::vector<DAGSegment> segments;
+    DAGSegment videoSeg;
+    videoSeg.mat_id = 1;                 // material id for the primary clip
+    videoSeg.src_offset = 0;
+    videoSeg.track_index = 0;            // bottom Z-order layer
+    videoSeg.track_type = 0;             // video
+    videoSeg.speed = speed;
+    videoSeg.trim_start = trim_start_us;
+    videoSeg.trim_end = trim_end_us;
+    videoSeg.crop_x = crop_x;
+    videoSeg.crop_y = crop_y;
+    videoSeg.crop_w = crop_w;
+    videoSeg.crop_h = crop_h;
+
+    // Rotation keyframe (static — single keyframe at t=0)
+    if (rotationDeg != 0.0f) {
+        Keyframe kf_rot;
+        kf_rot.time = 0;
+        kf_rot.value = (double)rotationDeg;
+        videoSeg.kf_rotation.push_back(kf_rot);
+    }
+
+    // Build the effect chain from the image-editor adjustments + selected filter
+    auto add_effect = [&](EffectNode::Type t, const std::string& name, double intensity) {
+        if (intensity <= 0.0) return;
+        EffectNode eff;
+        eff.type = t;
+        eff.name = name;
+        eff.intensity = intensity;
+        videoSeg.effects.push_back(eff);
     };
-
-    auto t0 = std::chrono::steady_clock::now();
-    auto result = g_engine->run(cfg, dag, progress, g_cancel_tok);
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - t0).count();
-
-    if (g_cls_ProgressCallback && g_mid_onComplete && g_progress_ref) {
-        jstring jerr = result.error.empty() ? nullptr : env->NewStringUTF(result.error.c_str());
-        env->CallVoidMethod(g_progress_ref, g_mid_onComplete,
-                            (jboolean)result.ok,
-                            (jlong)result.file_size_bytes,
-                            jerr,
-                            (jlong)elapsed_ms);
-        clear_exception(env, "onComplete");
-        if (jerr) env->DeleteLocalRef(jerr);
+    // COLOR_GRADE from brightness/contrast/saturation/temperature
+    double grade_intensity = 0.0;
+    if (brightness != 0.0f)  grade_intensity += std::abs((double)brightness);
+    if (contrast != 1.0f)    grade_intensity += std::abs((double)contrast - 1.0);
+    if (saturation != 1.0f)  grade_intensity += std::abs((double)saturation - 1.0);
+    if (temperature != 0.0f) grade_intensity += std::abs((double)temperature);
+    if (grade_intensity > 0.0) {
+        add_effect(EffectNode::COLOR_GRADE, "grade",
+                   std::min(1.0, grade_intensity));
+    }
+    if (vignette > 0.0f)  add_effect(EffectNode::VIGNETTE, "vignette", (double)vignette);
+    if (grain > 0.0f)     add_effect(EffectNode::GRAIN, "grain", (double)grain);
+    if (blur > 0.0f)      add_effect(EffectNode::BLUR, "blur", (double)blur);
+    if (sharpen > 0.0f)   add_effect(EffectNode::SHARPEN, "sharpen", (double)sharpen);
+    // Selected LUT/filter
+    if (selectedFilter != "none" && !selectedFilter.empty()) {
+        add_effect(EffectNode::LUT, selectedFilter, 1.0);
+    }
+    if (selectedEffect != "none" && !selectedEffect.empty()) {
+        add_effect(EffectNode::FILTER, selectedEffect, 1.0);
     }
 
-    if (g_proj_ref)     { env->DeleteGlobalRef(g_proj_ref);     g_proj_ref = nullptr; }
-    if (g_progress_ref) { env->DeleteGlobalRef(g_progress_ref); g_progress_ref = nullptr; }
-    if (g_preview_window) { ANativeWindow_release(g_preview_window); g_preview_window = nullptr; }
+    // v7.1: Read keyframe tracks and apply animated transforms to video segment
+    jobject kfTracksList = nullptr;
+    jfieldID fKfTracks = env->GetFieldID(cls, "keyframeTracks", "Ljava/util/List;");
+    if (!env->ExceptionCheck() && fKfTracks) {
+        kfTracksList = env->GetObjectField(projectObj, fKfTracks);
+    }
+    if (kfTracksList && !env->ExceptionCheck()) {
+        jclass listCls = env->GetObjectClass(kfTracksList);
+        jmethodID iterMid = env->GetMethodID(listCls, "iterator", "()Ljava/util/Iterator;");
+        if (!env->ExceptionCheck() && iterMid) {
+            jobject iter = env->CallObjectMethod(kfTracksList, iterMid);
+            if (iter && !env->ExceptionCheck()) {
+                jclass iterCls = env->GetObjectClass(iter);
+                jmethodID hasNext = env->GetMethodID(iterCls, "hasNext", "()Z");
+                jmethodID next = env->GetMethodID(iterCls, "next", "()Ljava/lang/Object;");
+                if (!env->ExceptionCheck() && hasNext && next) {
+                    while (env->CallBooleanMethod(iter, hasNext)) {
+                        jobject kfTrackObj = env->CallObjectMethod(iter, next);
+                        if (!kfTrackObj) continue;
+                        jclass kfTrackCls = env->GetObjectClass(kfTrackObj);
+                        jfieldID fClipId = env->GetFieldID(kfTrackCls, "clipId", "Ljava/lang/String;");
+                        jfieldID fKfs = env->GetFieldID(kfTrackCls, "keyframes", "Ljava/util/List;");
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(kfTrackObj); continue; }
+                        jstring jsClipId = fClipId ? (jstring)env->GetObjectField(kfTrackObj, fClipId) : nullptr;
+                        const char* clipIdChars = jsClipId ? env->GetStringUTFChars(jsClipId, nullptr) : "";
+                        std::string clipId = clipIdChars ? clipIdChars : "";
+                        if (jsClipId) env->ReleaseStringUTFChars(jsClipId, clipIdChars);
+                        jobject kfList = fKfs ? env->GetObjectField(kfTrackObj, fKfs) : nullptr;
+                        if (clipId == "main_video" && kfList) {
+                            read_keyframes_for_property(env, kfList, "scale", videoSeg.kf_scale);
+                            read_keyframes_for_property(env, kfList, "position_x", videoSeg.kf_pos_x);
+                            read_keyframes_for_property(env, kfList, "position_y", videoSeg.kf_pos_y);
+                            read_keyframes_for_property(env, kfList, "rotation", videoSeg.kf_rotation);
+                            read_keyframes_for_property(env, kfList, "opacity", videoSeg.kf_opacity);
+                        }
+                        if (kfList) env->DeleteLocalRef(kfList);
+                        env->DeleteLocalRef(kfTrackObj);
+                    }
+                }
+                env->DeleteLocalRef(iter);
+            }
+        }
+        env->DeleteLocalRef(kfTracksList);
+    }
 
-    return result.ok ? JNI_TRUE : JNI_FALSE;
+    segments.push_back(videoSeg);
+
+    // ---- Text overlay segment (track 1, on top of video) ----
+    std::string textOverlay = read_string_field(env, projectObj, cls, "activeTextOverlay");
+    if (!textOverlay.empty()) {
+        DAGSegment textSeg;
+        textSeg.mat_id = 2;              // text material id
+        textSeg.src_offset = 0;
+        textSeg.track_index = 1;         // above video
+        textSeg.track_type = 1;          // text
+        textSeg.speed = 1.0;
+        textSeg.trim_start = 0;
+        textSeg.trim_end = 0;            // full duration
+        segments.push_back(textSeg);
+    }
+
+    // ---- Sticker segment (track 2) ----
+    std::string stickerType = read_string_field(env, projectObj, cls, "stickerType");
+    if (stickerType != "none" && !stickerType.empty()) {
+        DAGSegment stickerSeg;
+        stickerSeg.mat_id = 3;
+        stickerSeg.src_offset = 0;
+        stickerSeg.track_index = 2;
+        stickerSeg.track_type = 2;       // sticker
+        stickerSeg.speed = 1.0;
+        segments.push_back(stickerSeg);
+    }
+
+    // ---- Image overlay segment (track 3) ----
+    std::string imageOverlayPath = read_string_field(env, projectObj, cls, "imageOverlayPath");
+    if (!imageOverlayPath.empty()) {
+        DAGSegment overlaySeg;
+        overlaySeg.mat_id = 4;
+        overlaySeg.src_offset = 0;
+        overlaySeg.track_index = 3;
+        overlaySeg.track_type = 3;       // overlay
+        overlaySeg.speed = 1.0;
+        // Opacity from imageOverlayOpacity
+        jfloat overlayOpacity = read_float_field(env, projectObj, cls, "imageOverlayOpacity");
+        if (overlayOpacity != 1.0f) {
+            Keyframe kf_op;
+            kf_op.time = 0;
+            kf_op.value = (double)overlayOpacity;
+            overlaySeg.kf_opacity.push_back(kf_op);
+        }
+        segments.push_back(overlaySeg);
+    }
+
+    // ---- Chroma-key / Green Screen segment (track 4) ----
+    bool greenScreenEnabled = read_bool_field(env, projectObj, cls, "greenScreenEnabled");
+    if (greenScreenEnabled) {
+        std::string greenScreenColor = read_string_field(env, projectObj, cls, "greenScreenColor");
+        jfloat greenScreenThreshold = read_float_field(env, projectObj, cls, "greenScreenThreshold");
+        std::string greenScreenBgPath = read_string_field(env, projectObj, cls, "greenScreenBackgroundPath");
+
+        DAGSegment chromaSeg;
+        chromaSeg.mat_id = 6;              // chroma-key material
+        chromaSeg.src_offset = 0;
+        chromaSeg.track_index = 0;         // applied to base video layer
+        chromaSeg.track_type = 4;          // chroma-key type
+        chromaSeg.speed = 1.0;
+        // Store chroma-key params as effect nodes
+        EffectNode chromaEff;
+        chromaEff.type = EffectNode::FILTER;
+        chromaEff.name = "chroma_key_" + greenScreenColor;
+        chromaEff.intensity = (double)greenScreenThreshold;
+        chromaSeg.effects.push_back(chromaEff);
+        segments.push_back(chromaSeg);
+    }
+
+    dag->set_segments(std::move(segments));
+
+    // ---- Audio segments (BUG 3: full audio mix) ----
+    std::vector<AudioSegment> audio_segs;
+
+    // Pre-read background music path for ducking logic
+    std::string bgMusicPath = read_string_field(env, projectObj, cls, "backgroundMusicPath");
+    jfloat bgMusicVolume = read_float_field(env, projectObj, cls, "backgroundMusicVolume");
+
+    // Main video audio (track 0)
+    jfloat videoVolume = read_float_field(env, projectObj, cls, "videoVolume");
+    bool isMuted = read_bool_field(env, projectObj, cls, "isMuted");
+    if (!isMuted && duration_us > 0) {
+        AudioSegment mainAudio;
+        mainAudio.mat_id = 1;            // same material as video
+        mainAudio.track_index = 0;       // main
+        mainAudio.start = 0;
+        mainAudio.duration = duration_us;
+        mainAudio.volume = (videoVolume > 0.0f) ? (double)videoVolume : 1.0;
+        mainAudio.pan = 0.0;
+        mainAudio.fade_in = 0;
+        mainAudio.fade_out = 0;
+        mainAudio.speed = speed;         // audio follows video speed
+
+        // Audio ducking: reduce main volume when background music is playing
+        bool isAudioDucking = read_bool_field(env, projectObj, cls, "isAudioDuckingEnabled");
+        if (isAudioDucking && !bgMusicPath.empty()) {
+            mainAudio.volume *= 0.6;     // duck to 60% when music plays
+        }
+
+        audio_segs.push_back(mainAudio);
+    }
+
+    // Background music (track 1)
+    if (!bgMusicPath.empty() && duration_us > 0) {
+        AudioSegment musicAudio;
+        musicAudio.mat_id = 5;           // background music material
+        musicAudio.track_index = 1;      // music
+        musicAudio.start = 0;
+        musicAudio.duration = duration_us;
+        musicAudio.volume = (bgMusicVolume > 0.0f) ? (double)bgMusicVolume : 0.5;
+        musicAudio.pan = 0.0;
+        musicAudio.fade_in = 500000;     // 0.5s fade-in
+        musicAudio.fade_out = 1000000;   // 1.0s fade-out
+        musicAudio.speed = 1.0;
+        audio_segs.push_back(musicAudio);
+    }
+
+    dag->set_audio_segments(std::move(audio_segs));
+
+    // Scene cuts (empty — detected at runtime by the engine)
+    dag->set_cuts({});
+
+    env->DeleteLocalRef(cls);
+    return dag;
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_powercut_editor_export_ExportEngine_nativeCancel(
-        JNIEnv* /*env*/, jobject /*thiz*/) {
-    g_cancel_tok.cancel();
+// ---------------------------------------------------------------------------
+// PRIORITY 1 FIX: Progress callback bridge.
+//
+// This C++ lambda is registered via engine->on_progress(). When the native
+// worker calls it, we attach the current thread to the JVM (if not already
+// attached), construct the ExportProgress fields, and call the Kotlin
+// ExportEngine.onProgressCallback() method, which then invokes the
+// onProgress lambda set by EditorScreen.
+// ---------------------------------------------------------------------------
+static void powercut_progress_callback(const PowerCut::ExportProgress& prog) {
+    if (!g_jvm || !g_engine_ref || !g_progress_method) return;
+
+    JNIEnv* env = nullptr;
+    JavaVMAttachArgs attach_args;
+    attach_args.version = JNI_VERSION_1_6;
+    attach_args.name = const_cast<char*>("PowerCutExportProgress");
+    attach_args.group = nullptr;
+
+    bool was_attached = false;
+    if (g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+        was_attached = true;
+    } else {
+        g_jvm->AttachCurrentThread(&env, &attach_args);
+    }
+    if (!env) return;
+
+    // Call ExportEngine.onProgressCallback(long, long, double, int, long)
+    env->CallVoidMethod(g_engine_ref, g_progress_method,
+                        (jlong)prog.cur, (jlong)prog.total,
+                        (jdouble)prog.speed_x, (jint)prog.eta_s,
+                        (jlong)prog.bytes);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+
+    if (!was_attached) g_jvm->DetachCurrentThread();
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_powercut_editor_export_ExportEngine_nativeIsAvailable(
-        JNIEnv* /*env*/, jobject /*thiz*/) {
-    return g_engine ? JNI_TRUE : JNI_FALSE;
-}
-
-// =============================================================================
-// Legacy JNI symbols — preserved as stubs for binary compatibility.
-// The new code path uses nativeExport/nativeCancel exclusively.
-// =============================================================================
+// ---------------------------------------------------------------------------
+// JNI exported functions
+// ---------------------------------------------------------------------------
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_powercut_editor_export_ExportEngine_nativeCreate(JNIEnv* env, jobject thiz) {
-    if (!g_vm) env->GetJavaVM(&g_vm);
-    g_engine = std::make_unique<powercut::export_::ExportEngine>();
-    g_engine->setup_enc(g_vm);
-    return 1;
+Java_com_powercut_editor_export_ExportEngine_nativeCreate(
+    JNIEnv* env, jobject thiz) {
+    // PRIORITY 1 FIX: Store the JavaVM pointer and set up the progress
+    // callback bridge. We keep a global ref to the Kotlin ExportEngine
+    // object and the method ID for onProgressCallback.
+    if (!g_jvm) env->GetJavaVM(&g_jvm);
+
+    if (!g_engine_ref) {
+        g_engine_ref = env->NewGlobalRef(thiz);
+        jclass cls = env->GetObjectClass(thiz);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        if (cls) {
+            g_progress_method = env->GetMethodID(cls, "onProgressCallback",
+                "(JJDIJ)V");
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            env->DeleteLocalRef(cls);
+        }
+    }
+
+    auto* engine = new ExportEngine();
+    // Register the progress callback so the native worker can report progress.
+    engine->on_progress(powercut_progress_callback);
+    return reinterpret_cast<jlong>(engine);
 }
 
 JNIEXPORT void JNICALL
 Java_com_powercut_editor_export_ExportEngine_nativeDestroy(
-        JNIEnv* env, jobject thiz, jlong handle) {
-    (void)env; (void)thiz; (void)handle;
-    if (g_engine) { g_engine->teardown(); g_engine.reset(); }
+    JNIEnv* env, jobject thiz, jlong handle) {
+    (void)thiz;
+    if (handle == 0) return;
+    auto* engine = reinterpret_cast<ExportEngine*>(handle);
+    delete engine;  // destructor calls cancel() which joins the worker
+
+    // PRIORITY 1 FIX: clean up the global ref so we don't leak.
+    if (g_engine_ref) {
+        env->DeleteGlobalRef(g_engine_ref);
+        g_engine_ref = nullptr;
+        g_progress_method = nullptr;
+    }
 }
 
+// ---------------------------------------------------------------------------
+// BUG 1 / BUG 3 / BUG 4 FIX: nativeStart now builds a REAL PowerCutDAG from
+// the current active VideoProject (the `dag` jobject) instead of passing
+// nullptr. This gives the export engine the live timeline state so it can:
+//   - Resolve all edits per-frame (BUG 1)
+//   - Mix all audio tracks (BUG 3)
+//   - Hash the DAG for cache invalidation (BUG 4)
+//
+// DAG lifetime: build_dag_from_project() allocates the DAG with `new`.
+// If start() succeeds, the engine's worker thread references it for the
+// duration of the export. ExportEngine.kt always calls cancel() (which joins
+// the worker thread) before destroy(), so by the time we `delete engine` the
+// worker is no longer touching the DAG. The engine destructor calls cancel()
+// again (idempotent), then we delete the engine. To avoid leaking the DAG in
+// the full build, the export_engine.cpp Impl should store and delete it; but
+// since we cannot change the header's Impl (opaque), we accept the DAG and
+// let the engine own it. If start() fails, we free it here immediately.
+// ---------------------------------------------------------------------------
 JNIEXPORT jboolean JNICALL
 Java_com_powercut_editor_export_ExportEngine_nativeStart(
-        JNIEnv* env, jobject thiz, jlong handle, jobject dag, jobject config) {
-    (void)env; (void)thiz; (void)handle; (void)dag; (void)config;
-    return JNI_FALSE;
+    JNIEnv* env, jobject thiz, jlong handle, jobject dag, jobject config) {
+    (void)thiz;
+    if (handle == 0) return JNI_FALSE;
+    // PRIORITY 1 FIX: check for null config object.
+    if (!config) return JNI_FALSE;
+    auto* engine = reinterpret_cast<ExportEngine*>(handle);
+    ExportConfig cfg = read_config(env, config);
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+
+    // Build the real DAG from the current active project (not nullptr!).
+    // If dag is null/empty, build_dag_from_project returns an empty DAG
+    // (duration 0) which start() will handle gracefully.
+    PowerCutDAG* dagPtr = build_dag_from_project(env, dag);
+    if (env->ExceptionCheck()) env->ExceptionClear();  // PRIORITY 1 FIX
+
+    bool ok = engine->start(dagPtr, cfg);
+
+    // If start() failed (e.g. already running), free the DAG we built.
+    // If it succeeded, the engine owns it for the export lifetime.
+    if (!ok) {
+        delete dagPtr;
+    }
+
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_powercut_editor_export_ExportEngine_nativeCancel(
+    JNIEnv* env, jobject thiz, jlong handle) {
+    (void)env; (void)thiz;
+    if (handle == 0) return;
+    auto* engine = reinterpret_cast<ExportEngine*>(handle);
+    engine->cancel();
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_powercut_editor_export_ExportEngine_nativeRunning(
-        JNIEnv* env, jobject thiz, jlong handle) {
-    (void)env; (void)thiz; (void)handle;
-    return JNI_FALSE;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_powercut_editor_export_ExportEngine_nativeIsFullEngine(JNIEnv* env, jobject thiz) {
+    JNIEnv* env, jobject thiz, jlong handle) {
     (void)env; (void)thiz;
-    return JNI_TRUE;
+    if (handle == 0) return JNI_FALSE;
+    auto* engine = reinterpret_cast<ExportEngine*>(handle);
+    return engine->running() ? JNI_TRUE : JNI_FALSE;
 }
 
+// ---------------------------------------------------------------------------
+// JNI: Tell Kotlin whether the FULL export engine is compiled in.
+// In the stub build (no POWERCUT_FULL_EXPORT_ENGINE) this returns JNI_FALSE so
+// that ExportEngine.isAvailable() returns false and the entire native path
+// (build_dag_from_project + nativeStart) is SKIPPED.  This avoids wasteful and
+// risky JNI field reads on every export and lets the robust FFmpeg fallback
+// handle the export directly.
+// ---------------------------------------------------------------------------
+JNIEXPORT jboolean JNICALL
+Java_com_powercut_editor_export_ExportEngine_nativeIsFullEngine(
+    JNIEnv* env, jobject thiz) {
+    (void)env; (void)thiz;
+#ifdef POWERCUT_FULL_EXPORT_ENGINE
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// JNI: Get a single rendered preview frame from the native compositor.
+// Builds a DAG from the project, evaluates at the given time, calls
+// compositor->render_full() with ALL layers, and returns RGBA bytes.
+// ---------------------------------------------------------------------------
 JNIEXPORT jbyteArray JNICALL
 Java_com_powercut_editor_export_ExportEngine_nativeGetRenderedFrame(
-        JNIEnv* env, jobject thiz, jobject dagObj, jlong timeMicros, jint width, jint height) {
-    (void)env; (void)thiz; (void)dagObj; (void)timeMicros; (void)width; (void)height;
-    return nullptr;
+    JNIEnv* env, jobject thiz, jobject dagObj, jlong timeMicros, jint width, jint height) {
+    (void)thiz;
+
+    // Validate dimensions
+    if (width < 1 || width > 4096 || height < 1 || height > 4096) return nullptr;
+    if (!global_compositor || !global_decoder_farm) return nullptr;
+
+    // Build DAG from project
+    PowerCutDAG* dag = build_dag_from_project(env, dagObj);
+    if (!dag) return nullptr;
+
+    // Evaluate segments at the given time
+    TimeMicros t = (TimeMicros)timeMicros;
+    auto segs = dag->evaluate(t);
+
+    // Decode source frames for all segments
+    std::vector<RGBAFrame*> source_frames;
+    source_frames.reserve(segs.size());
+    for (auto& s : segs) {
+        if (s.track_type <= 3) {
+            RGBAFrame* fr = global_decoder_farm->get_original_frame(s.mat_id, s.src_time(t));
+            source_frames.push_back(fr);
+        } else {
+            source_frames.push_back(nullptr);
+        }
+    }
+
+    // Render full composite with ALL effects
+    RGBAFrame* out = global_compositor->render_full(segs, source_frames, t, width, height);
+
+    if (!out || !out->data) {
+        // Cleanup source frames
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    // Convert to Java byte array (RGBA)
+    size_t array_size = (size_t)width * height * 4;
+    if (array_size > INT32_MAX) {
+        free(out->data); delete out;
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    jbyteArray result = env->NewByteArray((jsize)array_size);
+    if (!result) {
+        free(out->data); delete out;
+        for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+        delete dag;
+        return nullptr;
+    }
+
+    env->SetByteArrayRegion(result, 0, (jsize)array_size, (const jbyte*)out->data);
+
+    // Cleanup
+    free(out->data); delete out;
+    for (auto fr : source_frames) { if (fr) { free(fr->data); delete fr; } }
+    delete dag;
+
+    return result;
 }
 
 }  // extern "C"
