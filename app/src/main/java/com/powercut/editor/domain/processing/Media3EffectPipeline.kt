@@ -1,7 +1,8 @@
 package com.powercut.editor.domain.processing
 
+import android.opengl.Matrix
 import android.util.Log
-import androidx.media3.effect.RgbAdjustment
+import androidx.media3.common.util.GlUtil
 import androidx.media3.effect.RgbMatrix
 import com.powercut.editor.domain.filter.FilterCatalog
 import com.powercut.editor.domain.look.PremiumLooks
@@ -51,8 +52,8 @@ class Media3EffectPipeline {
         colorLift: Float = 0f,
         colorGamma: Float = 0f,
         colorGain: Float = 0f
-    ): List<RgbAdjustment> {
-        val effects = mutableListOf<RgbAdjustment>()
+    ): List<RgbMatrix> {
+        val effects = mutableListOf<RgbMatrix>()
 
         // 1. Apply filter effects from FilterCatalog
         if (filterId != "none" && filterId.isNotBlank()) {
@@ -92,7 +93,7 @@ class Media3EffectPipeline {
      * Builds a single RgbAdjustment from a FilterCatalog filter ID.
      * Parses the FFmpeg chain to extract eq/colorbalance parameters.
      */
-    private fun buildFilterEffect(filterId: String): RgbAdjustment? {
+    private fun buildFilterEffect(filterId: String): RgbMatrix? {
         val chain = FilterCatalog.ffmpeg(filterId)
         if (chain.isBlank()) return null
 
@@ -135,7 +136,7 @@ class Media3EffectPipeline {
      * Builds a single RgbAdjustment from a PremiumLooks look ID.
      * Parses the FFmpeg chain to extract eq/colorbalance parameters.
      */
-    private fun buildPremiumLookEffect(lookId: String): RgbAdjustment? {
+    private fun buildPremiumLookEffect(lookId: String): RgbMatrix? {
         val chain = PremiumLooks.chainFor(lookId)
         if (chain.isBlank()) return null
 
@@ -175,7 +176,7 @@ class Media3EffectPipeline {
         saturation: Float,
         temperature: Float,
         exposure: Float
-    ): RgbAdjustment? {
+    ): RgbMatrix? {
         // Only create if there are actual adjustments
         if (brightness == 0f && contrast == 1f && saturation == 1f &&
             temperature == 0f && exposure == 0f) {
@@ -212,7 +213,7 @@ class Media3EffectPipeline {
         lift: Float,
         gamma: Float,
         gain: Float
-    ): RgbAdjustment? {
+    ): RgbMatrix? {
         if (lift == 0f && gamma == 0f && gain == 0f) return null
 
         // Approximate lift/gamma/gain:
@@ -234,8 +235,13 @@ class Media3EffectPipeline {
     }
 
     /**
-     * Creates an RgbAdjustment from individual parameters.
-     * Uses RgbAdjustment.Builder if available, otherwise falls back to RgbMatrix.
+     * Creates an RgbMatrix encoding the given color adjustments as a full 4x4 matrix.
+     *
+     * Media3 1.4.1's RgbAdjustment exposes only a private FloatArray constructor and a
+     * Builder limited to R/G/B channel scaling — neither can represent brightness, contrast,
+     * saturation, temperature, or tint. Instead we implement RgbMatrix directly with a
+     * 4x4 column-major matrix (the 4th column holds additive RGB offsets for opaque A=1
+     * pixels), composing: brightness → contrast → saturation → temperature → tint.
      */
     private fun createRgbAdjustment(
         brightness: Float,
@@ -243,29 +249,83 @@ class Media3EffectPipeline {
         saturation: Float,
         temperature: Float,
         tint: Float
-    ): RgbAdjustment {
-        // Try to use RgbAdjustment.Builder if available (Media3 1.4.1+)
-        return try {
-            // Use reflection to check if Builder exists and use it
-            val builderClass = Class.forName("androidx.media3.effect.RgbAdjustment\$Builder")
-            val builder = builderClass.getDeclaredConstructor().newInstance()
-            
-            // Set properties via reflection
-            builderClass.getMethod("setBrightness", Float::class.javaPrimitiveType).invoke(builder, brightness)
-            builderClass.getMethod("setContrast", Float::class.javaPrimitiveType).invoke(builder, contrast)
-            builderClass.getMethod("setSaturation", Float::class.javaPrimitiveType).invoke(builder, saturation)
-            builderClass.getMethod("setTemperature", Float::class.javaPrimitiveType).invoke(builder, temperature)
-            builderClass.getMethod("setTint", Float::class.javaPrimitiveType).invoke(builder, tint)
-            
-            val buildMethod = builderClass.getMethod("build")
-            buildMethod.invoke(builder) as RgbAdjustment
-        } catch (e: Exception) {
-            // Fallback: use RgbMatrix with equivalent matrix
-            // RgbAdjustment constructor is private, so we can't instantiate it directly
-            // But RgbMatrix is public and does the same thing at the GPU level
-            // We create a RgbMatrix that implements the same adjustment
-            throw RuntimeException("RgbAdjustment not publicly constructible, using RgbMatrix fallback", e)
+    ): RgbMatrix {
+        // Brightness: additive offset on RGB (out = in + b).
+        val brightnessM = GlUtil.create4x4IdentityMatrix()
+        if (brightness != 0f) {
+            Matrix.translateM(brightnessM, 0, brightness, brightness, brightness)
         }
+
+        // Contrast: scale around 0.5 mid-gray (out = c·in + (0.5 − 0.5c)).
+        val contrastM = GlUtil.create4x4IdentityMatrix()
+        if (contrast != 1f) {
+            Matrix.scaleM(contrastM, 0, contrast, contrast, contrast)
+            val mid = 0.5f - 0.5f * contrast
+            contrastM[12] = mid
+            contrastM[13] = mid
+            contrastM[14] = mid
+        }
+
+        // Saturation: luminance-weighted channel mixing (Rec.709 weights).
+        val saturationM = GlUtil.create4x4IdentityMatrix()
+        if (saturation != 1f) {
+            val r = 0.2126f
+            val g = 0.7152f
+            val b = 0.0722f
+            val inv = 1f - saturation
+            saturationM[0] = saturation + inv * r
+            saturationM[4] = inv * g
+            saturationM[8] = inv * b
+            saturationM[1] = inv * r
+            saturationM[5] = saturation + inv * g
+            saturationM[9] = inv * b
+            saturationM[2] = inv * r
+            saturationM[6] = inv * g
+            saturationM[10] = saturation + inv * b
+        }
+
+        // Temperature: warm/cool → +R/−B diagonal scaling.
+        val temperatureM = GlUtil.create4x4IdentityMatrix()
+        if (temperature != 0f) {
+            val t = (temperature / 100f).coerceIn(-1f, 1f)
+            Matrix.scaleM(
+                temperatureM, 0,
+                (1f + t).coerceAtLeast(0f),
+                1f,
+                (1f - t).coerceAtLeast(0f)
+            )
+        }
+
+        // Tint: green/magenta → −G, +R/+B.
+        val tintM = GlUtil.create4x4IdentityMatrix()
+        if (tint != 0f) {
+            val ti = (tint / 100f).coerceIn(-1f, 1f)
+            Matrix.scaleM(
+                tintM, 0,
+                (1f + ti * 0.5f).coerceAtLeast(0f),
+                (1f - ti).coerceAtLeast(0f),
+                (1f + ti * 0.5f).coerceAtLeast(0f)
+            )
+        }
+
+        // Compose: M = tintM · tempM · satM · contrastM · brightnessM
+        // (brightness applied first, tint last).
+        var combined = multiplyMatrices(contrastM, brightnessM)
+        combined = multiplyMatrices(saturationM, combined)
+        combined = multiplyMatrices(temperatureM, combined)
+        combined = multiplyMatrices(tintM, combined)
+
+        val matrix = combined
+        return object : RgbMatrix {
+            override fun getMatrix(presentationTimeUs: Long, useHdr: Boolean): FloatArray = matrix
+        }
+    }
+
+    /** Multiplies two 4x4 column-major matrices: result = lhs · rhs. */
+    private fun multiplyMatrices(lhs: FloatArray, rhs: FloatArray): FloatArray {
+        val result = FloatArray(16)
+        Matrix.multiplyMM(result, 0, lhs, 0, rhs, 0)
+        return result
     }
 
     /**
@@ -309,7 +369,7 @@ class Media3EffectPipeline {
     /**
      * Convenience method to build effects from a VideoProject.
      */
-    fun buildEffectsFromProject(project: com.powercut.editor.data.VideoProject): List<RgbAdjustment> {
+    fun buildEffectsFromProject(project: com.powercut.editor.data.VideoProject): List<RgbMatrix> {
         return buildEffects(
             filterId = project.selectedFilter,
             premiumLookId = project.activePremiumLook,
