@@ -170,20 +170,24 @@ object ExportEngine {
     private class ProgressRelay(private val cb: ProgressCallback) : ProgressCallback {
         override fun onProgress(percent: Int, fellBackSw: Boolean) {
             lastProgressAt.set(SystemClock.elapsedRealtime())
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
                 cb.onProgress(percent, fellBackSw)
             }
         }
     }
 
-    companion object {
-        @JvmStatic fun presetTikTok() = ExportPreset("TikTok", 1080, 1920, 30.0, 10000000, 15000000, "h264", "aac", "mp4")
-        @JvmStatic fun presetReels() = ExportPreset("Reels", 1080, 1920, 30.0, 10000000, 15000000, "h264", "aac", "mp4")
-        @JvmStatic fun presetShorts() = ExportPreset("Shorts", 1080, 1920, 30.0, 10000000, 15000000, "h264", "aac", "mp4")
-        @JvmStatic fun presetYt1080() = ExportPreset("YT1080", 1920, 1080, 30.0, 12000000, 18000000, "h264", "aac", "mp4")
-        @JvmStatic fun presetYt4k() = ExportPreset("YT4K", 3840, 2160, 30.0, 45000000, 70000000, "h264", "aac", "mp4")
-        @JvmStatic fun presetWhatsApp() = ExportPreset("WhatsApp", 720, 1280, 30.0, 4000000, 6000000, "h264", "aac", "mp4")
-    }
+    @JvmStatic
+    fun presetTikTok() = ExportPreset("TikTok", 1080, 1920, 30.0, 10000000, 15000000, "h264", "aac", "mp4")
+    @JvmStatic
+    fun presetReels() = ExportPreset("Reels", 1080, 1920, 30.0, 10000000, 15000000, "h264", "aac", "mp4")
+    @JvmStatic
+    fun presetShorts() = ExportPreset("Shorts", 1080, 1920, 30.0, 10000000, 15000000, "h264", "aac", "mp4")
+    @JvmStatic
+    fun presetYt1080() = ExportPreset("YT1080", 1920, 1080, 30.0, 12000000, 18000000, "h264", "aac", "mp4")
+    @JvmStatic
+    fun presetYt4k() = ExportPreset("YT4K", 3840, 2160, 30.0, 45000000, 70000000, "h264", "aac", "mp4")
+    @JvmStatic
+    fun presetWhatsApp() = ExportPreset("WhatsApp", 720, 1280, 30.0, 4000000, 6000000, "h264", "aac", "mp4")
 
     @JvmStatic
     private external fun nativeIsAvailable(): Boolean
