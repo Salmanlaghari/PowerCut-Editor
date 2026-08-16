@@ -85,8 +85,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
@@ -103,13 +101,14 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.effect.RgbMatrix
+import androidx.media3.effect.RgbAdjustment
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
+import com.powercut.editor.domain.processing.Media3EffectPipeline
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.CyberCyan
 import com.powercut.editor.ui.theme.NeonOrange
@@ -141,123 +140,6 @@ private fun formatTime(ms: Long): String {
     val seconds = totalSecs % 60
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
-
-// ═══════════════════════════════════════════════════════════════
-//  FILTER MATRIX BUILDER — returns a ColorMatrix for live preview
-//  of cinematic filters. Used by the combined preview filter so that
-//  BOTH the filter and image-editor adjustments show in real-time.
-// ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-//  FILTER MATRIX BUILDER — returns a ColorMatrix for live preview
-//  of cinematic filters.
-//
-//  CRITICAL: the preview MUST reflect the SAME real FFmpeg filter
-//  string that the export pipeline uses. We therefore read the chain
-//  from [FilterCatalog.ffmpeg] (the single source of truth) and parse
-//  it into an approximate Compose ColorMatrix. This guarantees the
-//  previewed grade and the exported grade never diverge, and that
-//  EVERY filter in the list produces a visible change (previously a
-//  hand-coded subset returned null and left the preview untouched).
-// ═══════════════════════════════════════════════════════════════
-private fun buildFilterMatrix(filter: String): ColorMatrix? {
-    val f = filter.lowercase().replace("-", "_").replace(" ", "_")
-    return com.powercut.editor.domain.filter.filterPreviewMatrixForId(f)
-}
-
-// ============================================================================
-//  v4.6.0 PREMIUM LOOK PREVIEW MATRIX
-//  Parses a PremiumLook's real FFmpeg chain (eq / colorbalance / saturation)
-//  into an approximate Compose ColorMatrix so the look is VISIBLE in the
-//  real-time editor preview - not only at export. This makes every HDR /
-//  iPhone / Bright / Cinema / Magic look "select for real" in the preview.
-//  (unsharp / boxblur / curves are sharpen/blurring ops with no direct
-//   ColorMatrix equivalent, so we approximate their *tone* contribution via
-//   the eq/contrast/saturation/colorbalance parts that DO map cleanly.)
-// ============================================================================
-private fun premiumLookPreviewMatrix(lookId: String): ColorMatrix? {
-    val chain = com.powercut.editor.domain.look.PremiumLooks.chainFor(lookId)
-    if (chain.isBlank()) return null
-
-    // Defaults that match FFmpeg eq defaults.
-    var brightness = 0f      // eq brightness add (0..1), default 0
-    var contrast = 1f        // eq contrast multiplier, default 1
-    var saturation = 1f      // eq saturation multiplier, default 1
-    var cbRs = 0f; var cbGs = 0f; var cbBs = 0f   // colorbalance shadows r/g/b
-    var cbRm = 0f; var cbGm = 0f; var cbBm = 0f   // colorbalance midtones r/g/b
-    var grayscale = false
-
-    for (filter in chain.split(",")) {
-        val f = filter.trim()
-        when {
-            f.startsWith("eq=") -> {
-                for (kv in f.removePrefix("eq=").split(":")) {
-                    val p = kv.split("=")
-                    if (p.size != 2) continue
-                    val k = p[0].trim(); val v = p[1].trim().toFloatOrNull() ?: continue
-                    when (k) {
-                        "brightness" -> brightness = v
-                        "contrast" -> contrast = v
-                        "saturation" -> { saturation = v; if (v == 0f) grayscale = true }
-                    }
-                }
-            }
-            f.startsWith("colorbalance=") -> {
-                for (kv in f.removePrefix("colorbalance=").split(":")) {
-                    val p = kv.split("=")
-                    if (p.size != 2) continue
-                    val k = p[0].trim(); val v = p[1].trim().toFloatOrNull() ?: continue
-                    when (k) {
-                        "rs" -> cbRs = v; "gs" -> cbGs = v; "bs" -> cbBs = v
-                        "rm" -> cbRm = v; "gm" -> cbGm = v; "bm" -> cbBm = v
-                    }
-                }
-            }
-        }
-    }
-
-    // If nothing meaningful parsed, bail (let other adjustments show alone).
-    val hasEq = brightness != 0f || contrast != 1f || saturation != 1f
-    val hasCb = cbRs != 0f || cbGs != 0f || cbBs != 0f || cbRm != 0f || cbGm != 0f || cbBm != 0f
-    if (!hasEq && !hasCb) return null
-
-    // Build a 4x5 ColorMatrix approximation.
-    // FFmpeg eq contrast scales around 0.5 mid-point: out = (in - 0.5)*c + 0.5 + b
-    // In 0..255 ColorMatrix terms: scale = c, add = (0.5 - 0.5*c)*255 + b*255
-    val contrastShift = (0.5f - 0.5f * contrast) * 255f
-    val brightnessAdd = brightness * 255f
-
-    // colorbalance values are in roughly -1..1; map to a +-~40 channel add and
-    // a small channel scale so warm/cool tints show clearly in preview.
-    val rShift = (cbRs + cbRm) * 38f
-    val gShift = (cbGs + cbGm) * 38f
-    val bShift = (cbBs + cbBm) * 38f
-
-    val mat = if (grayscale) {
-        // saturation=0 -> pure grayscale, then apply contrast/brightness/tint.
-        val gray = ColorMatrix().apply { setToSaturation(0f) }
-        val tone = ColorMatrix(floatArrayOf(
-            contrast, 0f, 0f, 0f, contrastShift + brightnessAdd + rShift,
-            0f, contrast, 0f, 0f, contrastShift + brightnessAdd + gShift,
-            0f, 0f, contrast, 0f, contrastShift + brightnessAdd + bShift,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        gray *= tone
-        gray
-    } else {
-        // Saturation via setToSaturation, then contrast/brightness/tint on top.
-        val sat = ColorMatrix().apply { setToSaturation(saturation) }
-        val tone = ColorMatrix(floatArrayOf(
-            contrast, 0f, 0f, 0f, contrastShift + brightnessAdd + rShift,
-            0f, contrast, 0f, 0f, contrastShift + brightnessAdd + gShift,
-            0f, 0f, contrast, 0f, contrastShift + brightnessAdd + bShift,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        sat *= tone
-        sat
-    }
-    return mat
-}
-
 
 // ═══════════════════════════════════════════════════════════════
 //  NEXTGEN EDITOR — CapCut-Level Professional Video Editor
@@ -495,19 +377,15 @@ fun NextGenEditorScreen(
     // Release BGM player on dispose
     DisposableEffect(Unit) { onDispose { bgmPlayer.release() } }
 
-    // ═══════════════════════════════════════════════════════════
-    //  COMBINED LIVE PREVIEW FILTER — merges the selected cinematic filter
-    //  WITH the image-editor adjustments (brightness, contrast, saturation,
-    //  temperature, exposure) so ALL adjustments show in real-time on the
-    //  player, not just on export. This makes every slider "real" not "fake".
-    // ═══════════════════════════════════════════════════════════
-    // Combined live-preview matrix = selected filter + premium look +
-    // image-editor adjustments, all derived from the SAME real chains used at
-    // export. We expose the raw ColorMatrix so it can be applied live to the
-    // actual ExoPlayer video via a Media3 ColorFilter GL effect (the Compose
-    // GraphicsLayerScope.colorFilter API is unavailable on the pinned Compose
-    // version), guaranteeing the preview matches the exported frame.
-    val combinedMatrix = remember(
+    // ════════════════════════════════════════════════════════════════════════════════
+    //  MEDIA3 EFFECT PIPELINE — builds RgbAdjustment effects from filter/look state
+    //  and applies them live to ExoPlayer via setVideoEffects(). When any parameter
+    //  changes (filter tap, slider move), the effects rebuild and update instantly
+    //  on GPU — no export step, no delay. Uses the same parameter mapping as export.
+    // ═══════════════════════════════════════════════════════════════════════════════
+    val media3Pipeline = remember { Media3EffectPipeline() }
+    
+    val videoEffects = remember(
         project.selectedFilter,
         project.activePremiumLook,
         project.imageEditorBrightness,
@@ -515,100 +393,30 @@ fun NextGenEditorScreen(
         project.imageEditorSaturation,
         project.imageEditorTemperature,
         project.imageEditorExposure,
-        project.imageEditorVignette,
-        project.imageEditorGrain,
-        project.imageEditorFade,
-        project.imageEditorHighlights,
-        project.imageEditorShadows,
-        project.imageEditorBlur,
-        project.imageEditorSharpen,
-        project.selectedEffect
+        project.colorLift,
+        project.colorGamma,
+        project.colorGain
     ) {
-        val lookMatrix = premiumLookPreviewMatrix(project.activePremiumLook)
-
-        val b = project.imageEditorBrightness
-        val c = project.imageEditorContrast
-        val s = project.imageEditorSaturation
-        val t = project.imageEditorTemperature
-        val e = project.imageEditorExposure
-        val vi = project.imageEditorVignette
-        val gr = project.imageEditorGrain
-        val fa = project.imageEditorFade
-        val hi = project.imageEditorHighlights
-        val sh = project.imageEditorShadows
-        val hasAdjustments = b != 0f || c != 1f || s != 1f || t != 0f || e != 0f || vi != 0f || gr != 0f || fa != 0f || hi != 0f || sh != 0f
-
-        val matrix: ColorMatrix? = when {
-            !hasAdjustments && lookMatrix == null -> buildFilterMatrix(project.selectedFilter)
-            !hasAdjustments && lookMatrix != null -> {
-                val fm = buildFilterMatrix(project.selectedFilter)
-                if (fm != null) { fm *= lookMatrix; fm } else lookMatrix
-            }
-            else -> {
-                // Build the adjustment matrix (same math as the export pipeline).
-                val brightnessShift = b * 100f
-                val contrastScale = c
-                val contrastShift = (1f - c) * 128f
-                val tempRed = 1f + t * 0.25f
-                val tempBlue = 1f - t * 0.25f
-                // Exposure: default 0 => gain 1, matching FFmpeg eq/exposure.
-                val expScale = 1f + e / 50f
-
-                val fadeAdd = fa * 60f
-                val hlAdd = hi * 40f
-                val shAdd = sh * 30f
-
-                val adjMatrix = ColorMatrix(floatArrayOf(
-                    contrastScale * tempRed * expScale, 0f, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
-                    0f, contrastScale * expScale, 0f, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
-                    0f, 0f, contrastScale * tempBlue * expScale, 0f, brightnessShift + contrastShift + fadeAdd + hlAdd + shAdd,
-                    0f, 0f, 0f, 1f, 0f
-                ))
-                val satMatrix = ColorMatrix().apply { setToSaturation(s) }
-                adjMatrix *= satMatrix
-                if (gr > 0f) {
-                    val grainSat = ColorMatrix().apply { setToSaturation((1f - gr * 0.3f).coerceAtLeast(0.5f)) }
-                    adjMatrix *= grainSat
-                }
-                if (project.imageEditorSharpen > 0f) {
-                    val sharpenContrast = 1f + project.imageEditorSharpen * 0.15f
-                    val sharpenShift = (1f - sharpenContrast) * 128f
-                    val sharpenMatrix = ColorMatrix(floatArrayOf(
-                        sharpenContrast, 0f, 0f, 0f, sharpenShift,
-                        0f, sharpenContrast, 0f, 0f, sharpenShift,
-                        0f, 0f, sharpenContrast, 0f, sharpenShift,
-                        0f, 0f, 0f, 1f, 0f
-                    ))
-                    adjMatrix *= sharpenMatrix
-                }
-
-                if (lookMatrix != null) adjMatrix *= lookMatrix
-
-                val fm = buildFilterMatrix(project.selectedFilter)
-                if (fm != null) { fm *= adjMatrix; fm } else adjMatrix
-            }
-        }
-        matrix
+        media3Pipeline.buildEffects(
+            filterId = project.selectedFilter,
+            premiumLookId = project.activePremiumLook,
+            imageEditorBrightness = project.imageEditorBrightness,
+            imageEditorContrast = project.imageEditorContrast,
+            imageEditorSaturation = project.imageEditorSaturation,
+            imageEditorTemperature = project.imageEditorTemperature,
+            imageEditorExposure = project.imageEditorExposure,
+            colorLift = project.colorLift,
+            colorGamma = project.colorGamma,
+            colorGain = project.colorGain
+        )
     }
-    val combinedColorFilter = combinedMatrix?.let { ColorFilter.colorMatrix(it) }
 
-    // Apply the combined grade live to the actual ExoPlayer video frames via a
-    // Media3 ColorFilter GL effect. Tapping a filter (or moving a slider)
-    // recomputes combinedMatrix above, which re-runs this effect so the change
-    // is visible immediately — driven by the SAME matrix the export uses.
-    DisposableEffect(combinedMatrix, exoPlayer) {
-        if (combinedMatrix != null) {
-            // Media3 applies a 4x4 RGB matrix. Derive it from the Compose 4x5 (20)
-            // matrix used for the preview/export so they never diverge.
-            val m = combinedMatrix.values
-            val rgb = floatArrayOf(
-                m[0], m[1], m[2], m[4],
-                m[5], m[6], m[7], m[9],
-                m[10], m[11], m[12], m[14],
-                0f, 0f, 0f, 1f
-            )
-            val rgbMatrix = RgbMatrix { _: Long, _: Boolean -> rgb }
-            exoPlayer.setVideoEffects(listOf(rgbMatrix))
+    // Apply the Media3 RgbAdjustment effects live to ExoPlayer video frames.
+    // Tapping a filter or moving a slider recomputes videoEffects above,
+    // which re-runs this effect so the change is visible immediately on GPU.
+    DisposableEffect(videoEffects, exoPlayer) {
+        if (videoEffects.isNotEmpty()) {
+            exoPlayer.setVideoEffects(videoEffects)
         } else {
             exoPlayer.setVideoEffects(emptyList())
         }
