@@ -8,6 +8,27 @@ import com.powercut.editor.domain.filter.FilterCatalog
 import com.powercut.editor.domain.look.PremiumLooks
 import com.powercut.editor.domain.filter.filterPreviewMatrixForId
 import com.powercut.editor.domain.look.PremiumLook
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * A color-adjustment effect that is both a Media3 [RgbMatrix] (so it can be applied
+ * to ExoPlayer live preview via `setVideoEffects` and to a Media3 `Transformer`
+ * export via `Effects`) and a carrier of the human-readable parameters it was
+ * built from. Exposing brightness/contrast/saturation/temperature/tint lets the
+ * live preview and the export pipeline share one [Media3EffectPipeline] and lets
+ * tests assert parity without re-deriving the matrix.
+ */
+class ColorEffect(
+    val brightness: Float,
+    val contrast: Float,
+    val saturation: Float,
+    val temperature: Float,
+    val tint: Float,
+    private val matrix: FloatArray
+) : RgbMatrix {
+    override fun getMatrix(presentationTimeUs: Long, useHdr: Boolean): FloatArray = matrix
+}
 
 /**
  * Media3EffectPipeline - Builds a list of Media3 Effect objects based on
@@ -20,7 +41,8 @@ import com.powercut.editor.domain.look.PremiumLook
  * - brightness, contrast, saturation, exposure
  * - color temperature/tint
  */
-class Media3EffectPipeline {
+@Singleton
+class Media3EffectPipeline @Inject constructor() {
 
     companion object {
         private const val TAG = "Media3EffectPipeline"
@@ -39,7 +61,7 @@ class Media3EffectPipeline {
      * @param colorLift Color lift from curves (-100 to 100)
      * @param colorGamma Color gamma from curves (-100 to 100)
      * @param colorGain Color gain from curves (-100 to 100)
-     * @return List of Media3 Effect objects (RgbAdjustment instances)
+     * @return List of Media3 Effect objects (ColorEffect/RgbMatrix instances)
      */
     fun buildEffects(
         filterId: String = "none",
@@ -52,8 +74,8 @@ class Media3EffectPipeline {
         colorLift: Float = 0f,
         colorGamma: Float = 0f,
         colorGain: Float = 0f
-    ): List<RgbMatrix> {
-        val effects = mutableListOf<RgbMatrix>()
+    ): List<ColorEffect> {
+        val effects = mutableListOf<ColorEffect>()
 
         // 1. Apply filter effects from FilterCatalog
         if (filterId != "none" && filterId.isNotBlank()) {
@@ -93,7 +115,7 @@ class Media3EffectPipeline {
      * Builds a single RgbAdjustment from a FilterCatalog filter ID.
      * Parses the FFmpeg chain to extract eq/colorbalance parameters.
      */
-    private fun buildFilterEffect(filterId: String): RgbMatrix? {
+    private fun buildFilterEffect(filterId: String): ColorEffect? {
         val chain = FilterCatalog.ffmpeg(filterId)
         if (chain.isBlank()) return null
 
@@ -136,7 +158,7 @@ class Media3EffectPipeline {
      * Builds a single RgbAdjustment from a PremiumLooks look ID.
      * Parses the FFmpeg chain to extract eq/colorbalance parameters.
      */
-    private fun buildPremiumLookEffect(lookId: String): RgbMatrix? {
+    private fun buildPremiumLookEffect(lookId: String): ColorEffect? {
         val chain = PremiumLooks.chainFor(lookId)
         if (chain.isBlank()) return null
 
@@ -176,7 +198,7 @@ class Media3EffectPipeline {
         saturation: Float,
         temperature: Float,
         exposure: Float
-    ): RgbMatrix? {
+    ): ColorEffect? {
         // Only create if there are actual adjustments
         if (brightness == 0f && contrast == 1f && saturation == 1f &&
             temperature == 0f && exposure == 0f) {
@@ -213,7 +235,7 @@ class Media3EffectPipeline {
         lift: Float,
         gamma: Float,
         gain: Float
-    ): RgbMatrix? {
+    ): ColorEffect? {
         if (lift == 0f && gamma == 0f && gain == 0f) return null
 
         // Approximate lift/gamma/gain:
@@ -249,7 +271,7 @@ class Media3EffectPipeline {
         saturation: Float,
         temperature: Float,
         tint: Float
-    ): RgbMatrix {
+    ): ColorEffect {
         // Brightness: additive offset on RGB (out = in + b).
         val brightnessM = GlUtil.create4x4IdentityMatrix()
         if (brightness != 0f) {
@@ -316,9 +338,14 @@ class Media3EffectPipeline {
         combined = multiplyMatrices(tintM, combined)
 
         val matrix = combined
-        return object : RgbMatrix {
-            override fun getMatrix(presentationTimeUs: Long, useHdr: Boolean): FloatArray = matrix
-        }
+        return ColorEffect(
+            brightness = brightness,
+            contrast = contrast,
+            saturation = saturation,
+            temperature = temperature,
+            tint = tint,
+            matrix = matrix
+        )
     }
 
     /** Multiplies two 4x4 column-major matrices: result = lhs · rhs. */
@@ -369,7 +396,7 @@ class Media3EffectPipeline {
     /**
      * Convenience method to build effects from a VideoProject.
      */
-    fun buildEffectsFromProject(project: com.powercut.editor.data.VideoProject): List<RgbMatrix> {
+    fun buildEffectsFromProject(project: com.powercut.editor.data.VideoProject): List<ColorEffect> {
         return buildEffects(
             filterId = project.selectedFilter,
             premiumLookId = project.activePremiumLook,

@@ -9,6 +9,7 @@ import android.util.Log
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.data.TrackType
+import com.powercut.editor.domain.processing.Media3TransformerExporter
 import com.powercut.editor.domain.processing.VideoProcessor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +23,8 @@ import javax.inject.Singleton
 @Singleton
 class ExportManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val videoProcessor: VideoProcessor
+    private val videoProcessor: VideoProcessor,
+    private val media3TransformerExporter: Media3TransformerExporter
 ) {
     private val tag = "ExportManager"
 
@@ -457,6 +459,47 @@ class ExportManager @Inject constructor(
                 return
             }
             _progress.value = 5 // input resolved
+
+            // ════════════════════════════════════════════════════════════════════════
+            //  Phase 1, Step C — Media3 Transformer colour-grade parity path.
+            //  When the project has colour adjustments and no FFmpeg-only structural
+            //  edits (trim is allowed), export through the SAME Media3EffectPipeline
+            //  the live preview uses (Step B) via Media3 Transformer. This guarantees
+            //  the exported colour grade is identical to what the user saw on screen —
+            //  no preview ⇄ export divergence. On any Transformer failure we fall
+            //  through to the proven FFmpeg pipeline below so export never breaks.
+            // ════════════════════════════════════════════════════════════════════════
+            if (media3TransformerExporter.shouldUseForProject(project)) {
+                Log.d(tag, "Step C: colour-only export — using Media3 Transformer parity path")
+                val transformerOk = try {
+                    media3TransformerExporter.export(
+                        project = project,
+                        inputPath = videoPath,
+                        outputPath = tempOutputPath,
+                        onProgress = { pct -> updateProgress(pct) }
+                    )
+                } catch (e: Exception) {
+                    Log.e(tag, "Media3 Transformer export threw, falling back to FFmpeg", e)
+                    false
+                }
+                if (transformerOk && tempOutputFile.exists() && tempOutputFile.length() > 0) {
+                    Log.d(tag, "Media3 Transformer export succeeded: $tempOutputPath")
+                    _progress.value = 95
+                    val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                    if (galleryPath != null) {
+                        _progress.value = 100
+                        _exportState.value = Resource.Success(galleryPath)
+                    } else {
+                        _progress.value = 100
+                        _exportState.value = Resource.Success(tempOutputPath)
+                    }
+                    return
+                } else {
+                    Log.w(tag, "Media3 Transformer export did not produce output — falling back to FFmpeg pipeline")
+                    // Clean up any partial Transformer output before the FFmpeg retry.
+                    try { if (tempOutputFile.exists()) tempOutputFile.delete() } catch (_: Exception) {}
+                }
+            }
 
             // ═══════════════════════════════════════════════════════════
             // MULTI-CLIP TIMELINE EXPORT
