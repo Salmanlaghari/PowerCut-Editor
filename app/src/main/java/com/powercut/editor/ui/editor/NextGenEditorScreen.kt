@@ -671,6 +671,13 @@ fun NextGenEditorScreen(
                             if (project.imageEditorBlur > 0f) Modifier.blur((project.imageEditorBlur * 20f).dp) else Modifier
                         )
                         .graphicsLayer {
+                            // Apply the SAME combined grade (cinematic filter + premium
+                            // look + image-editor adjustments) to the Compose-rendered
+                            // preview so tapping a filter updates the visible preview
+                            // IMMEDIATELY, not just at export. combinedColorFilter is
+                            // derived from the identical FilterCatalog.ffmpeg chain the
+                            // export pipeline uses — preview and export can never diverge.
+                            colorFilter = combinedColorFilter
                             scaleX = if (project.isFlippedHorizontal) -1f else 1f
                             scaleY = if (project.isFlippedVertical) -1f else 1f
                             rotationZ = project.rotationDegrees
