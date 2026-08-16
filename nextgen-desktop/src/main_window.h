@@ -4,7 +4,6 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QProgressBar>
-#include <QStatusBar>
 #include <QAction>
 #include <QImage>
 #include "project_importer.h"
@@ -31,7 +30,6 @@ private:
     QListWidget *timelineList;
     QPushButton *exportBtn;
     QProgressBar *exportProgress;
-    QStatusBar *statusBar;
 
     ProjectImporter importer;
     TimelineRenderer renderer;

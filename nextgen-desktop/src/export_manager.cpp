@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include "frame_render_utils.h"
 
 ExportManager::ExportManager(QObject *parent) : QObject(parent), running(false) {
 }
@@ -42,7 +43,7 @@ void ExportManager::startExport(PowerCut::PowerCutDAG *dag, const PowerCut::Expo
         QString tempPath = tempDir.path();
         for (int i = 0; i < totalFrames && running; ++i) {
             int64_t t = (int64_t)((double)i / fps * 1000000.0);
-            QImage frame = renderFrame(dag, t, w, h);
+            QImage frame = FrameRenderUtils::renderFrame(dag, t, w, h);
             if (frame.isNull()) continue;
 
             QString path = tempPath + QString("/frame_%1.png").arg(i, 6, 10, QChar('0'));
@@ -78,22 +79,38 @@ void ExportManager::startExport(PowerCut::PowerCutDAG *dag, const PowerCut::Expo
              << "-preset" << "fast"
              << QString::fromStdString(cfg.out);
 
-        QProcess ffmpeg;
-        ffmpeg.setProgram(ffmpegPath);
-        ffmpeg.setArguments(args);
-        ffmpeg.setProcessChannelMode(QProcess::MergedChannels);
+        ffmpegProcess = std::make_unique<QProcess>();
+        ffmpegProcess->setProgram(ffmpegPath);
+        ffmpegProcess->setArguments(args);
+        ffmpegProcess->setProcessChannelMode(QProcess::MergedChannels);
 
-        ffmpeg.start();
-        if (!ffmpeg.waitForStarted(5000)) {
+        ffmpegProcess->start();
+        if (!ffmpegProcess->waitForStarted(5000)) {
             emit finished(false);
             running = false;
+            ffmpegProcess.reset();
             return;
         }
 
-        ffmpeg.waitForFinished(-1);
-        bool success = (ffmpeg.exitCode() == 0 && ffmpeg.exitStatus() == QProcess::NormalExit);
+        while (ffmpegProcess->state() == QProcess::Running && running) {
+            ffmpegProcess->waitForFinished(200);
+        }
+
+        if (!running) {
+            if (ffmpegProcess && ffmpegProcess->state() == QProcess::Running) {
+                ffmpegProcess->kill();
+                ffmpegProcess->waitForFinished(3000);
+            }
+            emit finished(false);
+            running = false;
+            ffmpegProcess.reset();
+            return;
+        }
+
+        bool success = (ffmpegProcess->exitCode() == 0 && ffmpegProcess->exitStatus() == QProcess::NormalExit);
         emit finished(success);
         running = false;
+        ffmpegProcess.reset();
     });
 }
 
@@ -146,50 +163,9 @@ QString ExportManager::buildFilterGraph(const std::vector<PowerCut::DAGSegment> 
     return filters.join(",");
 }
 
-QImage ExportManager::renderFrame(PowerCut::PowerCutDAG *dag, int64_t timeMicros, int width, int height) const {
-    if (!dag || !PowerCut::global_compositor) {
-        return QImage();
-    }
-
-    auto segs = dag->evaluate(timeMicros);
-    std::vector<PowerCut::RGBAFrame*> sourceFrames;
-    sourceFrames.reserve(segs.size());
-    for (const auto &s : segs) {
-        if (s.track_type <= 3) {
-            PowerCut::RGBAFrame *fr = nullptr;
-            if (PowerCut::global_decoder_farm) {
-                fr = PowerCut::global_decoder_farm->get_original_frame(s.mat_id, s.src_time(timeMicros));
-            }
-            sourceFrames.push_back(fr);
-        } else {
-            sourceFrames.push_back(nullptr);
-        }
-    }
-
-    PowerCut::RGBAFrame *out = PowerCut::global_compositor->render_full(segs, sourceFrames, timeMicros, width, height);
-    if (!out) {
-        out = new PowerCut::RGBAFrame();
-        out->width = width;
-        out->height = height;
-        out->stride = width * 4;
-        out->data = (uint8_t*)calloc((size_t)out->stride * out->height, 1);
-    }
-
-    QImage img(out->data, width, height, out->stride, QImage::Format_RGBA8888);
-    QImage copy = img.copy();
-
-    if (out->data) free(out->data);
-    delete out;
-    for (auto fr : sourceFrames) {
-        if (fr) {
-            if (fr->data) free(fr->data);
-            delete fr;
-        }
-    }
-
-    return copy;
-}
-
 void ExportManager::cancel() {
     running = false;
+    if (ffmpegProcess && ffmpegProcess->state() == QProcess::Running) {
+        ffmpegProcess->kill();
+    }
 }

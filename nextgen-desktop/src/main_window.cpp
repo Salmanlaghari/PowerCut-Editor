@@ -6,6 +6,7 @@
 #include <QDir>
 #include <cstring>
 #include <cstdlib>
+#include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), dag(nullptr) {
     setWindowTitle("PowerCut Desktop");
