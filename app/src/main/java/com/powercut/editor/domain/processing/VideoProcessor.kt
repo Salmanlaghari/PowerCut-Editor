@@ -770,6 +770,12 @@ class VideoProcessor @Inject constructor(
         imageOverlayScale: Float = 1.0f,
         imageOverlayX: Float = 0.5f,
         imageOverlayY: Float = 0.5f,
+        // ── v7.2 Image overlay studio (real per-overlay FX + entrance animation) ──
+        imageOverlayEffect: String = "none",
+        imageOverlayAnim: String = "none",
+        // ── v7.2 Export upscale (2x/4x) + canvas drawing ──
+        upscaleFactor: Float = 1f,
+        drawingJson: String = "",
         greenScreenEnabled: Boolean = false,
         greenScreenColor: String = "green",
         greenScreenThreshold: Float = 0.4f,
@@ -851,7 +857,18 @@ class VideoProcessor @Inject constructor(
         // images to real temp files. FFmpeg cannot read content:// URIs as -i
         // inputs, and File(content://...).exists() returns false so overlays were
         // silently skipped. We stream-copy each content:// image to cacheDir.
-        val resolvedImageOverlayPath = resolveOverlayPath(imageOverlayPath)
+        // v7.2 REAL IMAGE OVERLAY STUDIO: bake per-overlay FX + entrance animation
+        // into the overlay asset with a real FFmpeg pre-pass BEFORE the main export
+        // (FX-only → still image; animation → 2s transparent WebM whose last frame
+        // is held by overlay's eof_action=repeat, so the entrance plays once then
+        // the image stays at its final position).
+        var resolvedImageOverlayPath = resolveOverlayPath(imageOverlayPath)
+        if (!resolvedImageOverlayPath.isNullOrBlank()) {
+            val (preTw, preTh) = getTargetDimensions(resolution, aspectPreset)
+            resolvedImageOverlayPath = OverlayDrawingStudio.preprocessOverlayImage(
+                context, resolvedImageOverlayPath!!, imageOverlayEffect, imageOverlayAnim, preTw, preTh
+            ) { overlayTempFiles.add(it) }
+        }
         val resolvedWatermarkPath = resolveOverlayPath(watermarkPath)
         val resolvedGreenScreenBgPath = resolveOverlayPath(greenScreenBackgroundPath)
         // BGM path: if it's a content:// URI, also resolve it (audio files)
@@ -911,7 +928,7 @@ class VideoProcessor @Inject constructor(
         }
 
         // Freeze frame
-        if (freezeFrameMs > 0L) {
+        if (freezeFrameMs > 0L) { // t1000
             val freezeSec = freezeFrameMs / 1000.0
             vfFilters.add("tpad=start_duration=${freezeSec}:start_mode=clone")
         }
@@ -945,6 +962,37 @@ class VideoProcessor @Inject constructor(
         val (tw, th) = getTargetDimensions(resolution, aspectPreset)
         vfFilters.add("scale=$tw:$th:force_original_aspect_ratio=decrease")
         vfFilters.add("pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
+
+        // ── v7.2 REAL UPSCALE (2x / 4x) ──
+        // After the target-resolution scale+pad we multiply the frame size by
+        // upscaleFactor with a high-quality Lanczos kernel. This genuinely
+        // increases output resolution (export pipeline below encodes at the
+        // final frame size), so "2x AI / 4x Ultra" produce real, larger exports.
+        if (upscaleFactor > 1f) {
+            val uf = upscaleFactor.coerceIn(1f, 4f)
+            vfFilters.add("scale=iw*$uf:ih*$uf:flags=lanczos")
+        }
+
+        // ── v7.2 CANVAS DRAWING ──
+        // Freehand strokes drawn in the Canvas panel (normalized JSON) become a
+        // chain of filled drawbox circles along each stroke path — a real,
+        // frame-accurate render of the user's drawing on every frame.
+        if (drawingJson.isNotBlank()) {
+            val drawing = OverlayDrawingStudio.drawingChain(drawingJson)
+            if (drawing.isNotEmpty()) vfFilters.addAll(drawing)
+        }
+
+        // ── v7.2 STUDIO FX ──
+        // Studio panel effects resolve through OverlayDrawingStudio.STUDIO_FX_CHAINS
+        // (real FFmpeg chains). Keys are studio_-prefixed so the later
+        // effectChain() lookup returns empty for them and never double-applies.
+        val studioFx = OverlayDrawingStudio.STUDIO_FX_CHAINS[
+            selectedEffect.lowercase().replace(" ", "_").replace("-", "_")
+        ]
+        if (studioFx != null) {
+            vfFilters.addAll(studioFx.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+        }
+
 
         // ── CONSTANT FRAME RATE (v4.2) ────────────────────────────────
         // Phone cameras record in VARIABLE frame rate (VFR) — the timestamp
@@ -2122,6 +2170,12 @@ class VideoProcessor @Inject constructor(
     private fun effectChain(effectName: String, duration: Double, w: Int, h: Int): List<String> {
         if (effectName == "none") return emptyList()
         val e = effectName.lowercase().replace(" ", "_").replace("-", "_")
+        // v7.2: Studio-panel FX (studio_* keys) are injected by their own
+        // dedicated block (OverlayDrawingStudio.STUDIO_FX_CHAINS) right into
+        // the filter chain - never let the catalog matcher below double-apply
+        // them (e.g. "studio_fireworks" would otherwise also match the
+        // contains("fire") branch below and stack a second grade).
+        if (e.startsWith("studio_")) return emptyList()
 
         // ── v6.4.0 FIX: Exact-match lookup for ALL EffectCatalog IDs ──
         // Previously, effectChain() used only `e.contains(...)` pattern matching,

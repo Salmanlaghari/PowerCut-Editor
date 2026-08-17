@@ -363,6 +363,30 @@ class MainActivity : ComponentActivity() {
                                         onUpdateTextFontSize = { size ->
                                             viewModel.updateTextFontSize(size)
                                         },
+                                        onApplyTextBgStyle = { style ->
+                                            viewModel.applyTextBgStyle(style)
+                                        },
+                                        onUpdateTextBold = {
+                                            viewModel.toggleTextBold()
+                                        },
+                                        onUpdateTextItalic = {
+                                            viewModel.toggleTextItalic()
+                                        },
+                                        onUpdateUpscale = { factor ->
+                                            viewModel.updateUpscale(factor)
+                                        },
+                                        onUpdateImageOverlayEffect = { effect ->
+                                            viewModel.updateImageOverlayEffect(effect)
+                                        },
+                                        onUpdateImageOverlayAnim = { anim ->
+                                            viewModel.updateImageOverlayAnim(anim)
+                                        },
+                                        onUpdateDrawing = { json ->
+                                            viewModel.updateDrawing(json)
+                                        },
+                                        onDeleteSelectedClip = {
+                                            viewModel.deleteSelectedClip()
+                                        },
                                         onUpdateStickerType = { sticker ->
                                             viewModel.updateStickerType(sticker)
                                         },

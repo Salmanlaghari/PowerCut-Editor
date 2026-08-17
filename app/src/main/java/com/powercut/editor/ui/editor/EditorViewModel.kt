@@ -330,6 +330,10 @@ class EditorViewModel @Inject constructor(
         json.put("activeAiFeature", project.activeAiFeature)
         json.put("socialPreset", project.socialPreset)
         json.put("isProTier", project.isProTier)
+        json.put("imageOverlayEffect", project.imageOverlayEffect)
+        json.put("imageOverlayAnim", project.imageOverlayAnim)
+        json.put("upscaleFactor", project.upscaleFactor.toDouble())
+        json.put("drawingJson", project.drawingJson)
 
         // Professional Timeline Serialization
         val timelineJson = JSONObject()
@@ -499,6 +503,10 @@ class EditorViewModel @Inject constructor(
             activeAiFeature = json.optString("activeAiFeature", "none"),
             socialPreset = json.optString("socialPreset", "none"),
             isProTier = json.optBoolean("isProTier", false),
+            imageOverlayEffect = json.optString("imageOverlayEffect", "none"),
+            imageOverlayAnim = json.optString("imageOverlayAnim", "none"),
+            upscaleFactor = json.optDouble("upscaleFactor", 1.0).toFloat(),
+            drawingJson = json.optString("drawingJson", ""),
             timeline = json.optJSONObject("timeline")?.let { tJson ->
                 VideoTimeline(
                     zoomLevel = tJson.optDouble("zoomLevel", 1.0).toFloat(),
@@ -991,6 +999,79 @@ class EditorViewModel @Inject constructor(
         pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(cropPreset = crop)
+        }
+    }
+
+    // ── v7.2 Image overlay studio + upscale + canvas drawing ──
+
+    /** v7.2 — Real export upscale factor (1x / 2x / 4x). */
+    fun updateUpscale(factor: Float) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            project.copy(upscaleFactor = factor.coerceIn(1f, 4f))
+        }
+    }
+
+    /** v7.2 — Per-overlay image effect (grayscale/sepia/vignette/…), applied to the overlay at export. */
+    fun updateImageOverlayEffect(effect: String) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayEffect = effect)
+        }
+    }
+
+    /** v7.2 — Overlay entrance animation (fade/slide/zoom/…), rendered with real time expressions at export. */
+    fun updateImageOverlayAnim(anim: String) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            project.copy(imageOverlayAnim = anim)
+        }
+    }
+
+    /** v7.2 — Persist canvas drawing strokes (normalized JSON) so they render at export. */
+    fun updateDrawing(json: String) {
+        projectRepository.updateProject { project ->
+            project.copy(drawingJson = json)
+        }
+    }
+
+    /** v7.2 — Deletes the currently selected timeline clip (Delete Section). */
+    fun deleteSelectedClip() {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            val updatedTracks = project.timeline.tracks.map { track ->
+                val selected = track.clips.filter { it.isSelected }
+                if (selected.isEmpty()) track else track.copy(clips = track.clips - selected)
+            }
+            project.copy(timeline = project.timeline.copy(tracks = updatedTracks))
+        }
+    }
+
+    /** v7.2 — Applies a text background/stroke preset using the REAL text-style flags the export pipeline renders. */
+    fun applyTextBgStyle(style: String) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            when (style.lowercase()) {
+                "none" -> project.copy(
+                    textShadow = false, textOutline = false, textGlow = false, textNeon = false,
+                    textBgColor = "#00000000", textBgOpacity = 0.5f
+                )
+                "solid_bg" -> project.copy(textBgColor = "#000000", textBgOpacity = 0.6f)
+                "outline" -> project.copy(textOutline = true, textShadow = false, textGlow = false, textNeon = false)
+                "shadow" -> project.copy(textShadow = true, textOutline = false, textGlow = false, textNeon = false)
+                "glow" -> project.copy(textGlow = true, textShadow = false, textOutline = false, textNeon = false)
+                "neon" -> project.copy(textNeon = true, textShadow = false, textOutline = false, textGlow = false)
+                "3d_shadow" -> project.copy(textShadow = true, textBgColor = "#000000", textBgOpacity = 0.3f)
+                "double_outline" -> project.copy(textOutline = true, textShadow = true, textGlow = false, textNeon = false)
+                "gradient_bg" -> project.copy(textBgColor = "#1a1a2e", textBgOpacity = 0.5f)
+                "blur_bg" -> project.copy(textBgColor = "#000000", textBgOpacity = 0.35f)
+                "box_bg" -> project.copy(textBgColor = "#000000", textBgOpacity = 0.7f)
+                "strip_bg" -> project.copy(textBgColor = "#111111", textBgOpacity = 0.5f)
+                else -> project.copy(
+                    textShadow = false, textOutline = false, textGlow = false, textNeon = false,
+                    textBgColor = "#00000000", textBgOpacity = 0.5f
+                )
+            }
         }
     }
 
