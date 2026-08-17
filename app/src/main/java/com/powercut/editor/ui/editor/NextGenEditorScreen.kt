@@ -265,7 +265,16 @@ fun NextGenEditorScreen(
     onSelectClip: (String) -> Unit = {},
     // Undo/Redo
     onUndo: () -> Unit = {},
-    onRedo: () -> Unit = {}
+    onRedo: () -> Unit = {},
+    // v7.2 REAL feature wiring (upscale / image overlay studio / canvas / delete / text bg style)
+    onUpdateUpscale: (Float) -> Unit = {},
+    onUpdateImageOverlayEffect: (String) -> Unit = {},
+    onUpdateImageOverlayAnim: (String) -> Unit = {},
+    onDeleteSelectedClip: () -> Unit = {},
+    onApplyTextBgStyle: (String) -> Unit = {},
+    onUpdateTextBold: () -> Unit = {},
+    onUpdateTextItalic: () -> Unit = {},
+    onUpdateDrawing: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -532,7 +541,9 @@ fun NextGenEditorScreen(
             onBackToEdit = { isEditingComplete = false },
             onImport = { multiFilePicker.launch("video/*") },
             onExport = { onSaveDraft(); onExport() },
-            onBack = { onSaveDraft(); onBack() }
+            onBack = { onSaveDraft(); onBack() },
+            onUpdateResolution = onUpdateResolution,
+            onUpdateUpscale = onUpdateUpscale
         )
     } else {
         // ─── NORMAL EDITOR ───────────────────────────────────────
@@ -1238,7 +1249,15 @@ fun NextGenEditorScreen(
                 onUpdateKeyframeAnim = onUpdateKeyframeAnim,
                 onUpdateAiFeature = onUpdateAiFeature,
                 onUpdateSocialPreset = onUpdateSocialPreset,
-                onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic
+                onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic,
+                onUpdateUpscale = onUpdateUpscale,
+                onUpdateImageOverlayEffect = onUpdateImageOverlayEffect,
+                onUpdateImageOverlayAnim = onUpdateImageOverlayAnim,
+                onDeleteSelectedClip = onDeleteSelectedClip,
+                onApplyTextBgStyle = onApplyTextBgStyle,
+                onUpdateTextBold = onUpdateTextBold,
+                onUpdateTextItalic = onUpdateTextItalic,
+                onUpdateDrawing = onUpdateDrawing
             )
         }
 
@@ -1275,7 +1294,9 @@ private fun EditingCompletePage(
     onBackToEdit: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onUpdateResolution: (String) -> Unit = {},
+    onUpdateUpscale: (Float) -> Unit = {}
 ) {
     val aspect = when (project.aspectPreset) {
         "1:1" -> 1.0f; "9:16" -> 9f/16f; "4:5" -> 4f/5f; else -> 16f/9f
@@ -1335,15 +1356,17 @@ private fun EditingCompletePage(
 
             Spacer(Modifier.height(10.dp))
 
-            // Export format
-            var selectedFormat by remember { mutableStateOf("mp4_hd") }
+            // Export format — real: each MP4 option sets the export resolution
+            // (webm/gif were never wired, so they were removed rather than faked).
             Box(modifier = Modifier.fillMaxWidth().glassmorphic(shape = RoundedCornerShape(12.dp)).padding(10.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("EXPORT FORMAT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf("mp4_hd" to "📹 MP4-HD", "mp4_4k" to "🎬 MP4 4K", "mp4_8k" to "💎 MP4 8K", "webm" to "🌐 WebM", "gif" to "🎞️ GIF").forEach { (id, label) ->
-                            val sel = selectedFormat == id
-                            Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedFormat = id }.padding(4.dp), contentAlignment = Alignment.Center) {
+                        listOf("mp4_hd" to "📹 MP4-HD" to "1080p", "mp4_4k" to "🎬 MP4 4K" to "4k", "mp4_8k" to "💎 MP4 8K" to "8k").forEach { (pair, _) ->
+                            val (id, label) = pair
+                            val res = when (id) { "mp4_4k" -> "4k"; "mp4_8k" -> "8k"; else -> "1080p" }
+                            val sel = project.targetResolution == res
+                            Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateResolution(res) }.padding(4.dp), contentAlignment = Alignment.Center) {
                                 Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                             }
                         }
@@ -1351,9 +1374,10 @@ private fun EditingCompletePage(
                     Spacer(Modifier.height(2.dp))
                     Text("UPSCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf("none" to "Original", "2x" to "2x AI", "4x" to "4x Ultra").forEach { (id, label) ->
-                            Box(Modifier.weight(1f).background(NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Upscale: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
-                                Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                        listOf(1f to "Original", 2f to "2x AI", 4f to "4x Ultra").forEach { (factor, label) ->
+                            val sel = project.upscaleFactor == factor
+                            Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.25f) else NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, NeonOrange, RoundedCornerShape(6.dp)).clickable { onUpdateUpscale(factor) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                             }
                         }
                     }
@@ -1665,7 +1689,16 @@ private fun CapCutToolPanel(
     onUpdateSocialPreset: (String) -> Unit = {},
     onProTier: () -> Unit = {},
     onPremiumStudio: () -> Unit = {},
-    onGenerateRoyaltyFreeMusic: (String) -> Unit = {}
+    onGenerateRoyaltyFreeMusic: (String) -> Unit = {},
+    // v7.2 REAL feature wiring
+    onUpdateUpscale: (Float) -> Unit = {},
+    onUpdateImageOverlayEffect: (String) -> Unit = {},
+    onUpdateImageOverlayAnim: (String) -> Unit = {},
+    onDeleteSelectedClip: () -> Unit = {},
+    onApplyTextBgStyle: (String) -> Unit = {},
+    onUpdateTextBold: () -> Unit = {},
+    onUpdateTextItalic: () -> Unit = {},
+    onUpdateDrawing: (String) -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 8.dp, vertical = 2.dp)
@@ -1674,19 +1707,19 @@ private fun CapCutToolPanel(
     ) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
             when (selectedTool) {
-                0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame)
+                0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame, onDeleteSelectedClip = onDeleteSelectedClip)
                 1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve, onToggleReverse, onUpdateFreezeFrame)
                 3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
                 4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) }, onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic)
-                5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation, onUpdateTextStyle, onUpdateTextPositionX, onUpdateTextPositionY, onUpdateTextColor, onUpdateTextFontSize)
+                5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation, onUpdateTextStyle, onUpdateTextPositionX, onUpdateTextPositionY, onUpdateTextColor, onUpdateTextFontSize, onApplyTextBgStyle = onApplyTextBgStyle, onUpdateTextBold = onUpdateTextBold, onUpdateTextItalic = onUpdateTextItalic, onUpdateLogoX = onUpdateImageOverlayX, onUpdateLogoY = onUpdateImageOverlayY)
                 6 -> FiltersPanel(project, onUpdateFilter)
                 7 -> EffectsPanel(project, onUpdateSelectedEffect, onUpdateFilter)
                 8 -> StickersPanel(project, onUpdateStickerType)
                 9 -> TransitionsPanel(project, onUpdateTransition)
                 10 -> AnimationsPanel(project, onUpdateTextAnimation)
                 11 -> ThreeDPanel(project, onUpdate3DShapeMask)
-                12 -> ImagePanel(project, imagePicker, onUpdateImageOverlay, onUpdateImageOverlayOpacity, onUpdateImageOverlayScale, onUpdateImageOverlayX, onUpdateImageOverlayY, onUpdateImageOverlayCrop)
+                12 -> ImagePanel(project, imagePicker, onUpdateImageOverlay, onUpdateImageOverlayOpacity, onUpdateImageOverlayScale, onUpdateImageOverlayX, onUpdateImageOverlayY, onUpdateImageOverlayCrop, onUpdateImageFx = onUpdateImageOverlayEffect, onUpdateImageAnim = onUpdateImageOverlayAnim, onUpdateBlendMode = onUpdateBlendMode)
                 13 -> TemplatePanel(project, onUpdateTemplate)
                 14 -> com.powercut.editor.ui.editor.tools.GreenScreenPanel(
                     greenScreenEnabled = project.greenScreenEnabled,
@@ -1751,7 +1784,7 @@ private fun CapCutToolPanel(
                     onToggleAutoReframe = onToggleAutoReframe
                 )
                 18 -> BlendModePanel(project, onUpdateBlendMode)
-                19 -> ReversePanel(project, onToggleReverse, onUpdateFreezeFrame)
+                19 -> ReversePanel(project, onToggleReverse, onUpdateFreezeFrame, onDeleteSelectedClip = onDeleteSelectedClip)
                 20 -> ColorCurvesPanel(project, onUpdateColorLift, onUpdateColorGamma, onUpdateColorGain)
                 21 -> AudioEffectsPanel(project, onUpdateAudioEffect, onToggleAudioDucking)
                 22 -> VoiceChangerPanel(project, onUpdateVoiceChangerPitch)
@@ -1759,12 +1792,12 @@ private fun CapCutToolPanel(
                 24 -> VignetteStylesPanel(project, onUpdateVignetteStyle)
                 25 -> FreezeFramePanel(project, onUpdateFreezeFrame)
                 26 -> LooksPanel(project, onUpdatePremiumLook)
-                27 -> CanvasPanel()
+                27 -> CanvasPanel(project, onUpdateDrawing = onUpdateDrawing)
                 28 -> KeyframePanel(project, onUpdateKeyframeAnim)
                 29 -> AiHubPanel(project, onUpdateAiFeature)
                 30 -> PresetsPanel(project, onUpdateSocialPreset)
                 31 -> ProPanel(project, onProTier, onUpdatePremiumLook)
-                32 -> StudioPanel(project, onPremiumStudio)
+                32 -> StudioPanel(project, onUpdateEffect = onUpdateSelectedEffect, onUpdateAudioEffect = onUpdateAudioEffect, onUpdatePremiumLook = onUpdatePremiumLook, onPremiumStudio)
             }
         }
         // Collapse handle
@@ -1802,7 +1835,8 @@ private fun EditPanel(
     onUpdateVignette: (Float) -> Unit = {},
     onUpdateGrain: (Float) -> Unit = {},
     onToggleReverse: () -> Unit = {},
-    onUpdateFreezeFrame: (Long) -> Unit = {}
+    onUpdateFreezeFrame: (Long) -> Unit = {},
+    onDeleteSelectedClip: () -> Unit = {}
 ) {
     var editSubTab by remember { mutableStateOf("adjust") }
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -2002,7 +2036,11 @@ private fun EditPanel(
             }
             "delete" -> {
                 Text("DELETE SECTION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Box(Modifier.fillMaxWidth().background(Color(0xFFFF1744).copy(0.1f), RoundedCornerShape(8.dp)).border(1.dp, Color(0xFFFF1744).copy(0.3f), RoundedCornerShape(8.dp)).clickable { android.widget.Toast.makeText(ctx, "Section deleted!", android.widget.Toast.LENGTH_SHORT).show() }.padding(12.dp), contentAlignment = Alignment.Center) {
+                Text("Removes the currently selected timeline clip from the project", fontSize = 7.sp, color = Color.Gray)
+                Box(Modifier.fillMaxWidth().background(Color(0xFFFF1744).copy(0.1f), RoundedCornerShape(8.dp)).border(1.dp, Color(0xFFFF1744).copy(0.3f), RoundedCornerShape(8.dp)).clickable {
+                    onDeleteSelectedClip()
+                    android.widget.Toast.makeText(ctx, "Section deleted!", android.widget.Toast.LENGTH_SHORT).show()
+                }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🗑️", fontSize = 28.sp)
                         Text("Delete Selected", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF1744))
@@ -2547,7 +2585,12 @@ private fun TextPanel(
     onUpdatePosX: (Float) -> Unit = {},
     onUpdatePosY: (Float) -> Unit = {},
     onUpdateColor: (String) -> Unit = {},
-    onUpdateFontSize: (Float) -> Unit = {}
+    onUpdateFontSize: (Float) -> Unit = {},
+    onApplyTextBgStyle: (String) -> Unit = {},
+    onUpdateTextBold: () -> Unit = {},
+    onUpdateTextItalic: () -> Unit = {},
+    onUpdateLogoX: (Float) -> Unit = {},
+    onUpdateLogoY: (Float) -> Unit = {}
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var txt by remember { mutableStateOf(project.activeTextOverlay ?: "") }
@@ -2697,40 +2740,31 @@ private fun TextPanel(
             }
 
             "fonts" -> {
-                // 100+ font/style options
-                Text("100+ FONT STYLES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                val fonts = listOf(
-                    "Default", "Bold", "Italic", "Bold Italic", "Thin", "Light", "Medium", "Black",
-                    "Serif", "Serif Bold", "Serif Italic", "Sans Serif", "Monospace", "Cursive",
-                    "Comic", "Handwriting", "Typewriter", "Retro", "Vintage", "Classic",
-                    "Modern", "Futuristic", "Minimal", "Elegant", "Luxury", "Gothic",
-                    "Graffiti", "Street", "Urban", "Bubble", "Outline", "Shadow",
-                    "3D Block", "Chrome", "Gold", "Silver", "Bronze", "Metallic",
-                    "Neon Glow", "Fire", "Ice", "Rainbow", "Gradient", "Holographic",
-                    "Pixel", "8-Bit", "Arcade", "Digital", "Matrix", "Cyberpunk",
-                    "Calligraphy", "Script", "Brush", "Marker", "Pencil", "Sketch",
-                    "Stamp", "Stencil", "Military", "Sports", "Athletic", "Collegiate",
-                    "Western", "Saloon", "Carnival", "Circus", "Magician", "Wizard",
-                    "Fairy", "Princess", "Royal", "Knight", "Viking", "Samurai",
-                    "Ninja", "Pirate", "Zombie", "Horror", "Vampire", "Ghost",
-                    "Halloween", "Christmas", "Birthday", "Wedding", "Love", "Heart",
-                    "Valentine", "Summer", "Winter", "Spring", "Autumn", "Tropical",
-                    "Beach", "Ocean", "Mountain", "Desert", "Forest", "Galaxy",
-                    "Space", "Star", "Moon", "Sun", "Cloud", "Lightning",
-                    "Thunder", "Rain", "Snow", "Storm"
-                )
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    fonts.forEachIndexed { idx, fontName ->
-                        val sel = selectedFontIndex == idx
-                        Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
-                            .clickable { selectedFontIndex = idx; android.widget.Toast.makeText(ctx, "Font: $fontName", android.widget.Toast.LENGTH_SHORT).show() }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)) {
-                            Text(fontName, fontSize = 7.sp, fontWeight = if (sel) FontWeight.Black else FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
+                // v7.2 — REAL text attributes. The old 100-name "font list" was
+                // cosmetic only (FFmpeg drawtext has no on-device font switching),
+                // so it was replaced by Bold/Italic toggles + real size control —
+                // both are consumed by the export drawtext chain.
+                Text("TEXT ATTRIBUTES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.weight(1f).background(if (project.textBold) NeonOrange.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (project.textBold) NeonOrange else Color.Transparent, RoundedCornerShape(8.dp)).clickable { onUpdateTextBold() }.padding(8.dp), contentAlignment = Alignment.Center) {
+                        Text("B Bold", fontSize = 10.sp, fontWeight = FontWeight.Black, color = if (project.textBold) NeonOrange else Color.White)
+                    }
+                    Box(Modifier.weight(1f).background(if (project.textItalic) NeonOrange.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, if (project.textItalic) NeonOrange else Color.Transparent, RoundedCornerShape(8.dp)).clickable { onUpdateTextItalic() }.padding(8.dp), contentAlignment = Alignment.Center) {
+                        Text("I Italic", fontSize = 10.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontWeight = FontWeight.Bold, color = if (project.textItalic) NeonOrange else Color.White)
+                    }
+                }
+                Text("FONT SIZE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Small" to 28f, "Normal" to 42f, "Large" to 56f, "Huge" to 72f, "Title" to 90f).forEach { (label, size) ->
+                        val sel = project.textFontSize == size
+                        Box(Modifier.weight(1f).background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onUpdateFontSize(size) }.padding(4.dp), contentAlignment = Alignment.Center) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                         }
                     }
                 }
+                Text("CUSTOM SIZE: ${project.textFontSize.toInt()}px", fontSize = 7.sp, color = Color.Gray)
+                Slider(value = project.textFontSize, onValueChange = { onUpdateFontSize(it) }, valueRange = 8f..120f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.fillMaxWidth().height(20.dp))
             }
-
             "color" -> {
                 // Color picker for text
                 Text("TEXT COLOR", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
@@ -2769,9 +2803,17 @@ private fun TextPanel(
                 // Text background/stroke options
                 Text("TEXT BACKGROUND & STROKE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf("None", "Solid BG", "Outline", "Shadow", "Glow", "Neon", "3D Shadow", "Double Outline", "Gradient BG", "Blur BG", "Box BG", "Strip BG").forEach { style ->
-                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Text style: $style", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                            Text(style, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    val styleIds = listOf(
+                        "None" to "none", "Solid BG" to "solid_bg", "Outline" to "outline", "Shadow" to "shadow",
+                        "Glow" to "glow", "Neon" to "neon", "3D Shadow" to "3d_shadow", "Double Outline" to "double_outline",
+                        "Gradient BG" to "gradient_bg", "Blur BG" to "blur_bg", "Box BG" to "box_bg", "Strip BG" to "strip_bg"
+                    )
+                    styleIds.forEach { (label, id) ->
+                        val sel = (project.textShadow && id == "shadow") || (project.textOutline && id == "outline") ||
+                                (project.textGlow && id == "glow") || (project.textNeon && id == "neon") ||
+                                (id == "none" && !project.textShadow && !project.textOutline && !project.textGlow && !project.textNeon && project.textBgColor == "#00000000")
+                        Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onApplyTextBgStyle(id) }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                         }
                     }
                 }
@@ -2806,9 +2848,19 @@ private fun TextPanel(
                 Text("Add your brand logo or watermark image on top of the video. Use the Image tool (tool dock) to pick a logo image, then adjust opacity and scale here.", fontSize = 8.sp, color = Color.Gray)
                 Spacer(Modifier.height(4.dp))
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf("Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right", "Center", "Top-Center", "Bottom-Center").forEach { pos ->
-                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Logo position: $pos — Use Image tool to pick logo", android.widget.Toast.LENGTH_LONG).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                            Text(pos, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    // Real logo placement: sets the image overlay position (the
+                    // logo IS the image overlay) — renders at export.
+                    listOf(
+                        "Top-Left" to Pair(0.15f, 0.15f), "Top-Right" to Pair(0.85f, 0.15f),
+                        "Bottom-Left" to Pair(0.15f, 0.85f), "Bottom-Right" to Pair(0.85f, 0.85f),
+                        "Center" to Pair(0.5f, 0.5f), "Top-Center" to Pair(0.5f, 0.15f), "Bottom-Center" to Pair(0.5f, 0.85f)
+                    ).forEach { (pos, xy) ->
+                        val sel = kotlin.math.abs(project.imageOverlayX - xy.first) < 0.1f && kotlin.math.abs(project.imageOverlayY - xy.second) < 0.1f
+                        Box(Modifier.background(if (sel) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            onUpdateLogoX(xy.first); onUpdateLogoY(xy.second)
+                            android.widget.Toast.makeText(ctx, "Logo placed: $pos", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(pos, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                         }
                     }
                 }
@@ -3748,7 +3800,10 @@ private fun ImagePanel(
     onUpdateScale: (Float) -> Unit = {},
     onUpdateX: (Float) -> Unit = {},
     onUpdateY: (Float) -> Unit = {},
-    onUpdateCrop: (String) -> Unit = {}
+    onUpdateCrop: (String) -> Unit = {},
+    onUpdateImageFx: (String) -> Unit = {},
+    onUpdateImageAnim: (String) -> Unit = {},
+    onUpdateBlendMode: (String) -> Unit = {}
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var imageSubTab by remember { mutableStateOf("add") }
@@ -3867,33 +3922,56 @@ private fun ImagePanel(
             "fx" -> {
                 Text("IMAGE EFFECTS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("None", "Blur Edge", "Round Corners", "Circle Mask", "Shadow", "Glow", "Border", "Grayscale", "Sepia", "Invert", "Vignette", "Gradient BG", "Neon Edge", "3D Pop", "Glass", "Frosted").forEach { fx ->
-                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
-                            android.widget.Toast.makeText(ctx, "Image FX: $fx", android.widget.Toast.LENGTH_SHORT).show()
+                    val fxIds = listOf(
+                        "None" to "none", "Blur Edge" to "blur_edge", "Round Corners" to "round_corners",
+                        "Circle Mask" to "circle_mask", "Shadow" to "shadow", "Glow" to "glow", "Border" to "border",
+                        "Grayscale" to "grayscale", "Sepia" to "sepia", "Invert" to "invert", "Vignette" to "vignette",
+                        "Gradient BG" to "gradient_bg", "Neon Edge" to "neon_edge", "3D Pop" to "3d_pop",
+                        "Glass" to "glass", "Frosted" to "frosted"
+                    )
+                    fxIds.forEach { (label, id) ->
+                        val sel = project.imageOverlayEffect == id
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            onUpdateImageFx(id)
+                            android.widget.Toast.makeText(ctx, "Image FX: $label", android.widget.Toast.LENGTH_SHORT).show()
                         }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                            Text(fx, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                         }
                     }
                 }
-                // Blend mode for image
+                // Blend mode for image — applies a real tblend effect at export
                 Text("BLEND MODE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf("Normal", "Multiply", "Screen", "Overlay", "Soft Light", "Hard Light", "Color Dodge", "Color Burn", "Darken", "Lighten", "Difference", "Exclusion").forEach { mode ->
-                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
-                            android.widget.Toast.makeText(ctx, "Blend: $mode", android.widget.Toast.LENGTH_SHORT).show()
+                    listOf(
+                        "Normal" to "none", "Multiply" to "multiply", "Screen" to "screen", "Overlay" to "overlay",
+                        "Soft Light" to "soft_light", "Hard Light" to "hard_light", "Color Dodge" to "color_dodge",
+                        "Color Burn" to "color_burn", "Darken" to "darken", "Lighten" to "lighten",
+                        "Difference" to "difference", "Exclusion" to "exclusion"
+                    ).forEach { (label, id) ->
+                        val sel = project.blendMode == id
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            onUpdateBlendMode(id)
+                            android.widget.Toast.makeText(ctx, "Blend: $label", android.widget.Toast.LENGTH_SHORT).show()
                         }.padding(horizontal = 5.dp, vertical = 3.dp)) {
-                            Text(mode, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                         }
                     }
                 }
-                // Animation
+                // Entrance animation — real time-based entrance, rendered at export
                 Text("ENTRANCE ANIMATION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf("Fade In", "Slide L", "Slide R", "Slide Up", "Slide Down", "Zoom In", "Zoom Out", "Pop", "Bounce", "Flip", "Rotate", "Elastic").forEach { anim ->
-                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
-                            android.widget.Toast.makeText(ctx, "Image anim: $anim", android.widget.Toast.LENGTH_SHORT).show()
+                    listOf(
+                        "Fade In" to "fade_in", "Slide L" to "slide_left", "Slide R" to "slide_right",
+                        "Slide Up" to "slide_up", "Slide Down" to "slide_down", "Zoom In" to "zoom_in",
+                        "Zoom Out" to "zoom_out", "Pop" to "pop", "Bounce" to "bounce", "Flip" to "flip",
+                        "Rotate" to "rotate", "Elastic" to "elastic"
+                    ).forEach { (label, id) ->
+                        val sel = project.imageOverlayAnim == id
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            onUpdateImageAnim(id)
+                            android.widget.Toast.makeText(ctx, "Entrance: $label", android.widget.Toast.LENGTH_SHORT).show()
                         }.padding(horizontal = 5.dp, vertical = 3.dp)) {
-                            Text(anim, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                         }
                     }
                 }
@@ -3985,7 +4063,8 @@ private fun BlendModePanel(
 private fun ReversePanel(
     project: VideoProject,
     onToggleReverse: () -> Unit,
-    onUpdateFreezeFrame: (Long) -> Unit
+    onUpdateFreezeFrame: (Long) -> Unit,
+    onDeleteSelectedClip: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Reverse toggle
@@ -4009,6 +4088,12 @@ private fun ReversePanel(
                     Text(if (ms == 0L) "None" else "${ms/1000.0}s", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
                 }
             }
+        }
+        // Delete selected clip (parity with Edit panel)
+        Box(Modifier.fillMaxWidth().background(Color(0xFFFF1744).copy(0.1f), RoundedCornerShape(8.dp)).border(1.dp, Color(0xFFFF1744).copy(0.3f), RoundedCornerShape(8.dp)).clickable {
+            onDeleteSelectedClip()
+        }.padding(10.dp), contentAlignment = Alignment.Center) {
+            Text("🗑️ Delete Selected Section", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF1744))
         }
     }
 }
@@ -4290,17 +4375,208 @@ private fun LooksPanel(
 
 
 // ──────────────────────────────────────────────────────────────────────────
-//  27. CANVAS / DRAWING PANEL (v5.2.0)
-//  User request: "Conva add karo" — Canvas/drawing feature for drawing on video
+//  27. CANVAS / DRAWING PANEL (v7.2 — REAL)
+//  Draws freehand strokes on a real canvas; strokes are committed to the
+//  project (normalized JSON) and rendered onto every frame of the video at
+//  export/preview via OverlayDrawingStudio.drawingChain().
 // ──────────────────────────────────────────────────────────────────────────
+private data class CanvasStrokeData(
+    val color: String,
+    val size: Float,
+    val opacity: Float,
+    val points: List<Pair<Float, Float>>
+)
+
+private fun canvasStrokesToJson(strokes: List<CanvasStrokeData>): String {
+    val arr = org.json.JSONArray()
+    for (s in strokes) {
+        val o = org.json.JSONObject()
+        o.put("color", s.color)
+        o.put("size", s.size.toDouble())
+        o.put("opacity", s.opacity.toDouble())
+        val pts = org.json.JSONArray()
+        for ((x, y) in s.points) {
+            pts.put(org.json.JSONArray().put(x.toDouble()).put(y.toDouble()))
+        }
+        o.put("points", pts)
+        arr.put(o)
+    }
+    return arr.toString()
+}
+
+private fun canvasParseStrokes(json: String): List<CanvasStrokeData> {
+    if (json.isBlank()) return emptyList()
+    return try {
+        val arr = org.json.JSONArray(json)
+        val out = mutableListOf<CanvasStrokeData>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val ptsArr = o.optJSONArray("points") ?: continue
+            val pts = mutableListOf<Pair<Float, Float>>()
+            for (j in 0 until ptsArr.length()) {
+                val p = ptsArr.getJSONArray(j)
+                pts.add(p.getDouble(0).toFloat() to p.getDouble(1).toFloat())
+            }
+            if (pts.isEmpty()) continue
+            out.add(
+                CanvasStrokeData(
+                    color = o.optString("color", "#FFFFFF"),
+                    size = o.optDouble("size", 0.012).toFloat(),
+                    opacity = o.optDouble("opacity", 1.0).toFloat(),
+                    points = pts
+                )
+            )
+        }
+        out
+    } catch (e: Exception) {
+        emptyList()
+    }
+}
+
+/** Generates normalized (0..1) outline points for a shape stamp (drawn at export). */
+private fun canvasShapePoints(id: String): List<Pair<Float, Float>> {
+    val cx = 0.5f; val cy = 0.5f; val r = 0.22f
+    fun ring(n: Int, radius: Float): List<Pair<Float, Float>> =
+        (0 until n).map { i ->
+            val a = i / n.toDouble() * 2.0 * Math.PI
+            (cx + (Math.cos(a) * radius).toFloat()) to (cy + (Math.sin(a) * radius).toFloat())
+        }
+    return when (id) {
+        "circle" -> ring(28, r)
+        "ring" -> ring(40, r)
+        "dot" -> listOf(cx to cy)
+        "square" -> ring(4, r)
+        "square_out" -> ring(4, r * 0.92f)
+        "triangle" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            pts.add(cx to (cy - r))
+            pts.add((cx + r * 0.9f) to (cy + r * 0.7f))
+            pts.add((cx - r * 0.9f) to (cy + r * 0.7f))
+            pts.add(cx to (cy - r))
+            pts
+        }
+        "diamond" -> ring(4, r).let { listOf(it[0], it[1], it[2], it[3], it[0]) }
+        "hexagon" -> ring(6, r).let { it + listOf(it[0]) }
+        "play" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            pts.add((cx - r * 0.8f) to (cy - r))
+            pts.add((cx + r * 0.8f) to cy)
+            pts.add((cx - r * 0.8f) to (cy + r))
+            pts.add((cx - r * 0.8f) to (cy - r))
+            pts
+        }
+        "star" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            for (i in 0 until 10) {
+                val a = i / 10.0 * 2.0 * Math.PI - Math.PI / 2
+                val rad = if (i % 2 == 0) r else r * 0.45f
+                pts.add((cx + (Math.cos(a) * rad).toFloat()) to (cy + (Math.sin(a) * rad).toFloat()))
+            }
+            pts + listOf(pts[0])
+        }
+        "heart" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            for (i in 0..40) {
+                val t = i / 40.0 * 2.0 * Math.PI
+                val x = 16.0 * Math.pow(Math.sin(t), 3.0)
+                val y = 13.0 * Math.cos(t) - 5.0 * Math.cos(2 * t) - 2.0 * Math.cos(3 * t) - Math.cos(4 * t)
+                pts.add((cx + (x / 17.0 * r).toFloat()) to (cy - (y / 17.0 * r).toFloat()))
+            }
+            pts
+        }
+        "block" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            val step = r / 6f
+            var xx = cx - r
+            while (xx <= cx + r) {
+                var yy = cy - r
+                while (yy <= cy + r) {
+                    pts.add(xx to yy)
+                    yy += step
+                }
+                xx += step
+            }
+            pts
+        }
+        "check" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            pts.add((cx - r * 0.9f) to (cy + r * 0.2f))
+            pts.add((cx - r * 0.2f) to (cy + r * 0.8f))
+            pts.add((cx + r * 0.9f) to (cy - r * 0.7f))
+            pts
+        }
+        "cross" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            pts.add((cx - r) to (cy - r)); pts.add((cx + r) to (cy + r))
+            pts.add(cx to cy)
+            pts.add((cx + r) to (cy - r)); pts.add((cx - r) to (cy + r))
+            pts
+        }
+        "arrow" -> {
+            val pts = mutableListOf<Pair<Float, Float>>()
+            pts.add((cx - r * 0.9f) to (cy + r * 0.4f))
+            pts.add((cx + r * 0.5f) to (cy + r * 0.4f))
+            pts.add((cx + r * 0.5f) to (cy + r * 0.8f))
+            pts.add((cx + r * 0.95f) to cy)
+            pts.add((cx + r * 0.5f) to (cy - r * 0.8f))
+            pts.add((cx + r * 0.5f) to (cy - r * 0.4f))
+            pts.add((cx - r * 0.9f) to (cy - r * 0.4f))
+            pts.add((cx - r * 0.9f) to (cy + r * 0.4f))
+            pts
+        }
+        else -> ring(28, r)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CanvasPanel() {
+private fun CanvasPanel(
+    project: VideoProject,
+    onUpdateDrawing: (String) -> Unit = {}
+) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var selectedBrush by remember { mutableStateOf("pen") }
+    var selectedStyle by remember { mutableStateOf("Solid") }
     var brushColor by remember { mutableStateOf(0) }
     var brushSize by remember { mutableStateOf(8f) }
     var canvasSubTab by remember { mutableStateOf("draw") }
+
+    // REAL drawing state — strokes in the exact JSON format the export
+    // renderer (OverlayDrawingStudio.drawingChain) consumes.
+    var strokes by remember { mutableStateOf(canvasParseStrokes(project.drawingJson)) }
+    var currentPoints by remember { mutableStateOf<List<Pair<Float, Float>>>(emptyList()) }
+
+    // Compose swatch colors (UI) + matching FFmpeg hex colors (render)
+    val drawSwatches = listOf(
+        Color.White, Color.Black, Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Cyan, Color.Magenta,
+        Color(0xFF7C5CFF), Color(0xFFFF6B35), Color(0xFF2DD4BF), Color(0xFFFF3D7F), Color(0xFFFFD700), Color(0xFF00FF00), Color(0xFFFF00FF), Color(0xFF00FFFF),
+        Color(0xFFFFA500), Color(0xFF800080), Color(0xFFFF1493), Color(0xFF00CED1)
+    )
+    val drawHex = listOf(
+        "#FFFFFF", "#000000", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF",
+        "#7C5CFF", "#FF6B35", "#2DD4BF", "#FF3D7F", "#FFD700", "#00FF00", "#FF00FF", "#00FFFF",
+        "#FFA500", "#800080", "#FF1493", "#00CED1"
+    )
+
+    // Brush style → real stroke properties (opacity × size multiplier)
+    val styleMap = mapOf(
+        "Solid" to (1.0f to 1.0f), "Dotted" to (0.9f to 0.55f), "Dashed" to (0.9f to 0.75f),
+        "Double" to (1.0f to 1.0f), "Rough" to (0.85f to 1.05f), "Smooth" to (1.0f to 0.9f),
+        "Calligraphy" to (1.0f to 0.7f), "Neon Glow" to (0.95f to 1.35f), "Shadow" to (0.6f to 1.15f),
+        "3D" to (1.0f to 1.1f), "Spray" to (0.5f to 1.4f), "Watercolor" to (0.45f to 1.25f),
+        "Oil" to (0.9f to 1.2f), "Pencil Sketch" to (0.7f to 0.8f), "Chalk" to (0.8f to 1.15f),
+        "Crayon" to (0.9f to 1.1f), "Marker" to (0.85f to 1.0f), "Ink" to (1.0f to 0.85f),
+        "Charcoal" to (0.8f to 1.2f), "Airbrush" to (0.4f to 1.5f)
+    )
+    val (styleOpacity, styleSizeMult) = styleMap[selectedStyle] ?: (1.0f to 1.0f)
+    val strokeColor = drawHex[brushColor.coerceIn(0, drawHex.size - 1)]
+    // size fraction relative to the video's short edge (matches the renderer's clamp)
+    val strokeSizeFrac = (brushSize / 320f * styleSizeMult).coerceIn(0.002f, 0.2f)
+    val strokeOpacity = styleOpacity.coerceIn(0.05f, 1.0f)
+
+    fun commitStrokes() {
+        onUpdateDrawing(canvasStrokesToJson(strokes))
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LiveAnimatedHeader("CANVAS", "🖌️", CyberCyan)
@@ -4308,11 +4584,11 @@ private fun CanvasPanel() {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("CANVAS & DRAW", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
-                Text("✓ Draw on Video", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+                Text("${strokes.size} stroke${if (strokes.size == 1) "" else "s"} · Rendered on video", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
             }
         }
 
-        // Sub-tabs: Draw | Brush | Color
+        // Sub-tabs: Draw | Brush | Color | Shapes
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf("draw" to "Draw", "brush" to "Brush", "color" to "Color", "shapes" to "Shapes").forEach { (id, label) ->
                 val sel = canvasSubTab == id
@@ -4328,59 +4604,154 @@ private fun CanvasPanel() {
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("✏️ Pen" to "pen", "🖍️ Pencil" to "pencil", "🎨 Brush" to "brush", "🔽 Highlighter" to "highlighter", "🗝️ Marker" to "marker", "🧹 Eraser" to "eraser", "🏖 Spray" to "spray", "🎯 Calligraphy" to "calligraphy").forEach { (label, id) ->
                         val sel = selectedBrush == id
-                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedBrush = id; android.widget.Toast.makeText(ctx, "Brush: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedBrush = id }.padding(horizontal = 6.dp, vertical = 4.dp)) {
                             Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                        }
+                    }
+                }
+                // REAL draw surface — draw with a finger/stylus, strokes render on the video
+                Box(
+                    Modifier.fillMaxWidth().height(120.dp)
+                        .background(Color(0xFF0B0B14), RoundedCornerShape(8.dp))
+                        .border(1.dp, if (selectedBrush == "eraser") NeonOrange.copy(0.5f) else CyberCyan.copy(0.3f), RoundedCornerShape(8.dp))
+                        .pointerInput(selectedBrush) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    if (selectedBrush == "eraser") {
+                                        if (strokes.isNotEmpty()) {
+                                            strokes = strokes.dropLast(1)
+                                            commitStrokes()
+                                        }
+                                    } else {
+                                        currentPoints = listOf(
+                                            ((offset.x / size.width).coerceIn(0f, 1f)) to ((offset.y / size.height).coerceIn(0f, 1f))
+                                        )
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    if (selectedBrush != "eraser") {
+                                        currentPoints = currentPoints + listOf(
+                                            ((change.position.x / size.width).coerceIn(0f, 1f)) to ((change.position.y / size.height).coerceIn(0f, 1f))
+                                        )
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (selectedBrush != "eraser" && currentPoints.isNotEmpty()) {
+                                        strokes = strokes + CanvasStrokeData(strokeColor, strokeSizeFrac, strokeOpacity, currentPoints)
+                                        currentPoints = emptyList()
+                                        commitStrokes()
+                                    }
+                                }
+                            )
+                        }
+                ) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        strokes.forEach { s ->
+                            if (s.points.isEmpty()) return@forEach
+                            val path = androidx.compose.ui.graphics.Path()
+                            s.points.forEachIndexed { i, p ->
+                                val x = p.first * size.width
+                                val y = p.second * size.height
+                                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            val c = try {
+                                android.graphics.Color.parseColor(s.color)
+                            } catch (e: IllegalArgumentException) {
+                                android.graphics.Color.WHITE
+                            }
+                            drawPath(
+                                path,
+                                Color(c).copy(alpha = s.opacity.coerceIn(0f, 1f)),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = (s.size * size.minDimension).coerceAtLeast(1f))
+                            )
+                        }
+                        if (currentPoints.isNotEmpty()) {
+                            val path = androidx.compose.ui.graphics.Path()
+                            currentPoints.forEachIndexed { i, p ->
+                                val x = p.first * size.width
+                                val y = p.second * size.height
+                                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            drawPath(
+                                path,
+                                Color(android.graphics.Color.parseColor(strokeColor)).copy(alpha = strokeOpacity),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = (strokeSizeFrac * size.minDimension).coerceAtLeast(1f))
+                            )
+                        }
+                    }
+                    if (selectedBrush == "eraser") {
+                        Box(Modifier.align(Alignment.Center)) {
+                            Text("Eraser — tap/drag to remove the last stroke", fontSize = 8.sp, color = Color.Gray)
                         }
                     }
                 }
                 // Brush size slider
                 Text("BRUSH SIZE: ${brushSize.toInt()}px", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Slider(value = brushSize, onValueChange = { brushSize = it }, valueRange = 1f..50f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(20.dp))
-                // Undo/Redo/Clear
+                // Undo / Clear / Save
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("Undo" to "undo", "Redo" to "redo", "Clear" to "clear", "Save" to "save").forEach { (label, id) ->
-                        Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Canvas: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(4.dp), contentAlignment = Alignment.Center) {
-                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (id == "clear") NeonOrange else Color.White)
+                    Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                        if (strokes.isNotEmpty()) {
+                            strokes = strokes.dropLast(1)
+                            commitStrokes()
                         }
+                    }.padding(4.dp), contentAlignment = Alignment.Center) {
+                        Text("↩ Undo", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    Box(Modifier.weight(1f).background(NeonOrange.copy(0.12f), RoundedCornerShape(6.dp)).clickable {
+                        strokes = emptyList()
+                        currentPoints = emptyList()
+                        commitStrokes()
+                        android.widget.Toast.makeText(ctx, "Canvas cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(4.dp), contentAlignment = Alignment.Center) {
+                        Text("🗑 Clear", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
+                    }
+                    Box(Modifier.weight(1f).background(CyberCyan.copy(0.18f), RoundedCornerShape(6.dp)).clickable {
+                        commitStrokes()
+                        android.widget.Toast.makeText(ctx, "Drawing saved — renders on the video ✓", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(4.dp), contentAlignment = Alignment.Center) {
+                        Text("💾 Save", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
                     }
                 }
             }
             "brush" -> {
-                Text("BRUSH STYLES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Text("BRUSH STYLES — each maps to real stroke opacity/width", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    listOf("Solid", "Dotted", "Dashed", "Double", "Rough", "Smooth", "Calligraphy", "Neon Glow", "Shadow", "3D", "Spray", "Watercolor", "Oil", "Pencil Sketch", "Chalk", "Crayon", "Marker", "Ink", "Charcoal", "Airbrush").forEach { style ->
-                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Brush style: $style", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                            Text(style, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    styleMap.keys.forEach { style ->
+                        val sel = selectedStyle == style
+                        Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedStyle = style }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(style, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                         }
                     }
                 }
             }
             "color" -> {
                 Text("DRAWING COLORS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                val drawColors = listOf(Color.White, Color.Black, Color.Red, Color.Green, Color.Blue, Color.Yellow, Color.Cyan, Color.Magenta, Color(0xFF7C5CFF), Color(0xFFFF6B35), Color(0xFF2DD4BF), Color(0xFFFF3D7F), Color(0xFFFFD700), Color(0xFF00FF00), Color(0xFFFF00FF), Color(0xFF00FFFF), Color(0xFFFFA500), Color(0xFF800080), Color(0xFFFF1493), Color(0xFF00CED1))
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    drawColors.forEachIndexed { idx, color ->
+                    drawSwatches.forEachIndexed { idx, color ->
                         val sel = brushColor == idx
                         Box(Modifier.size(26.dp).background(color, RoundedCornerShape(6.dp)).border(if (sel) 2.dp else 0.dp, Color.White, RoundedCornerShape(6.dp)).clickable { brushColor = idx }) {}
                     }
                 }
             }
             "shapes" -> {
-                Text("SHAPES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                Text("SHAPES — tap to stamp on the drawing (rendered on video)", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("⭕ Circle" to "circle", "⬜ Square" to "square", "▲ Triangle" to "triangle", "⭐ Star" to "star", "❤️ Heart" to "heart", "🔴 Dot" to "dot", "🔵 Ring" to "ring", "◈ Diamond" to "diamond", "⬢ Hexagon" to "hexagon", "⬛ Block" to "block", "▶ Play" to "play", "✓ Check" to "check", "✕ Cross" to "cross", "→ Arrow" to "arrow", "↺ Curved" to "curved", "☐ Square Out" to "square_out").forEach { (label, id) ->
-                    Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { android.widget.Toast.makeText(ctx, "Shape: $label", android.widget.Toast.LENGTH_SHORT).show() }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                        Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {
+                            strokes = strokes + CanvasStrokeData(strokeColor, (strokeSizeFrac * 1.5f).coerceIn(0.002f, 0.2f), strokeOpacity, canvasShapePoints(id))
+                            commitStrokes()
+                            android.widget.Toast.makeText(ctx, "Shape: $label added ✓", android.widget.Toast.LENGTH_SHORT).show()
+                        }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
-                }
                 }
             }
         }
     }
 }
-
-
-
 // ── 28. KEYFRAME PANEL (KineMaster-style) ──────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -4904,11 +5275,15 @@ private fun ProPanel(project: VideoProject, onUpdateProTier: () -> Unit, onApply
         }
     }
 }
-
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StudioPanel(project: VideoProject, onPremiumStudio: () -> Unit) {
+private fun StudioPanel(
+    project: VideoProject,
+    onUpdateEffect: (String) -> Unit = {},
+    onUpdateAudioEffect: (String) -> Unit = {},
+    onUpdatePremiumLook: (String) -> Unit = {},
+    onPremiumStudio: () -> Unit = {}
+) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val pulse = rememberPulse()
 
@@ -4948,50 +5323,76 @@ private fun StudioPanel(project: VideoProject, onPremiumStudio: () -> Unit) {
 
         Text("PREMIUM STUDIO EFFECTS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
 
-        // Studio effect categories
+        // Studio effect categories — REAL: every id is a studio_-prefixed key in
+        // OverlayDrawingStudio.STUDIO_FX_CHAINS, applied to the video frames at
+        // preview AND export (same chain builder — no fake UI).
         val studioEffects = listOf(
-            "🎬 Cinematic Bars" to "cinematic_bars",
-            "📽️ Film Burn" to "film_burn",
-            "📼 VHS Effect" to "vhs",
-            "📡 Glitch TV" to "glitch_tv",
-            "🌈 RGB Split" to "rgb_split",
-            "🔮 Prism" to "prism",
-            "⚡ Lightning" to "lightning",
-            "🎆 Fireworks" to "fireworks",
-            "❄️ Frozen" to "frozen",
-            "🔥 Fire Effect" to "fire_effect",
-            "💧 Water Ripple" to "water_ripple",
-            "🌌 Starfield" to "starfield",
-            "🫧 Bokeh" to "bokeh",
-            "📐 Light Leak" to "light_leak",
-            "🎞️ Film Scratch" to "film_scratch",
-            "🌫️ Dream Blur" to "dream_blur",
-            "🌑 Vignette Pro" to "vignette_pro",
-            "✨ Sparkle" to "sparkle",
-            "🎯 Lens Flare" to "lens_flare",
-            "⭐ Star Burst" to "star_burst"
+            "🎬 Cinematic Bars" to "studio_cinematic_bars",
+            "📽️ Film Burn" to "studio_film_burn",
+            "📼 VHS Effect" to "studio_tape",
+            "📡 Glitch TV" to "studio_glitch_tv",
+            "🌈 RGB Split" to "studio_chroma_split",
+            "🔮 Prism" to "studio_prism",
+            "⚡ Lightning" to "studio_lightning",
+            "🎆 Fireworks" to "studio_fireworks",
+            "❄️ Frozen" to "studio_frozen",
+            "🔥 Fire Effect" to "studio_ember",
+            "💧 Water Ripple" to "studio_ripple",
+            "🌌 Starfield" to "studio_starfield",
+            "🫧 Bokeh" to "studio_orb",
+            "📐 Light Leak" to "studio_light_spill",
+            "🎞️ Film Scratch" to "studio_scratch",
+            "🌫️ Dream Blur" to "studio_soft_blur",
+            "🌑 Vignette Pro" to "studio_dark_edges",
+            "✨ Sparkle" to "studio_shimmer",
+            "🎯 Lens Flare" to "studio_glare",
+            "⭐ Star Burst" to "studio_burst"
         )
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             studioEffects.forEach { (label, id) ->
-                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, CyberCyan.copy(0.2f), RoundedCornerShape(6.dp))
+                val sel = project.selectedEffect == id
+                Box(Modifier.background(if (sel) CyberCyan.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (sel) CyberCyan else CyberCyan.copy(0.2f), RoundedCornerShape(6.dp))
                     .clickable {
-                        android.widget.Toast.makeText(ctx, "Studio FX: $label", android.widget.Toast.LENGTH_SHORT).show()
+                        val newId = if (sel) "none" else id
+                        onUpdateEffect(newId)
+                        android.widget.Toast.makeText(ctx, if (sel) "Studio FX removed" else "$label applied ✓ (preview + export)", android.widget.Toast.LENGTH_SHORT).show()
                     }.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
                 }
             }
         }
 
-        // Advanced studio controls
-        Text("ADVANCED CONTROLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        val advancedTools = listOf("🎚️ Audio Mixer", "🎨 Color Grader", "📐 Composition Guide", "🔌 Plugin Manager", "📊 Analytics", "🎥 Multi-Cam", "📱 Screen Record", "🖥️ Desktop Sync")
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            advancedTools.forEach { tool ->
-                Box(Modifier.background(Color.White.copy(0.04f), RoundedCornerShape(8.dp)).border(1.dp, CyberCyan.copy(0.2f), RoundedCornerShape(8.dp)).clickable {
-                    onPremiumStudio()
-                    android.widget.Toast.makeText(ctx, "Studio: $tool", android.widget.Toast.LENGTH_SHORT).show()
-                }.padding(8.dp)) {
-                    Text(tool, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        // Real premium grades (same chains the Looks panel uses)
+        Text("QUICK GRADES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        val quickLooks = listOf(
+            "🎬 HDR Cinema" to "hdr_cinema", "🟠 Teal-Orange" to "cinema_teal", "🕶️ Noir" to "cinema_noir",
+            "✨ Bright Pop" to "bright_pop", "🔥 Warm" to "iphone_warm", "🧊 Cool" to "iphone_cool"
+        )
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            quickLooks.forEach { (label, id) ->
+                val sel = project.activePremiumLook == id
+                Box(Modifier.background(if (sel) SignatureOrange.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (sel) SignatureOrange else SignatureOrange.copy(0.2f), RoundedCornerShape(6.dp))
+                    .clickable {
+                        onUpdatePremiumLook(if (sel) "none" else id)
+                        android.widget.Toast.makeText(ctx, if (sel) "Grade removed" else "$label applied ✓", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) SignatureOrange else Color.White)
+                }
+            }
+        }
+
+        // Real audio effects (same chains the AudioFX panel uses)
+        Text("QUICK AUDIO FX", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        val quickAudio = listOf("🎚️ Bass Boost" to "bass_boost", "🎤 Vocal Remove" to "vocal_remove", "🔊 Echo" to "echo", "📞 Phone" to "phone", "🤖 Robot" to "robot")
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            quickAudio.forEach { (label, id) ->
+                val sel = project.audioEffect == id
+                Box(Modifier.background(if (sel) SignaturePurple.copy(0.3f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (sel) SignaturePurple else SignaturePurple.copy(0.2f), RoundedCornerShape(6.dp))
+                    .clickable {
+                        onUpdateAudioEffect(if (sel) "none" else id)
+                        android.widget.Toast.makeText(ctx, if (sel) "Audio FX removed" else "$label applied ✓", android.widget.Toast.LENGTH_SHORT).show()
+                    }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Text(label, fontSize = 6.sp, fontWeight = FontWeight.Bold, color = if (sel) SignaturePurple else Color.White)
                 }
             }
         }

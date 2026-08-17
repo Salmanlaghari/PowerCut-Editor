@@ -119,6 +119,13 @@ data class VideoProject(
     val imageOverlayScale: Float = 1.0f,
     val imageOverlayX: Float = 0.5f,
     val imageOverlayY: Float = 0.5f,
+    // ── v7.2 Image overlay studio: real per-overlay FX + entrance animation ──
+    val imageOverlayEffect: String = "none",
+    val imageOverlayAnim: String = "none",
+    // ── v7.2 Export upscale (2x / 4x) ──
+    val upscaleFactor: Float = 1f,
+    // ── v7.2 Canvas drawing (strokes as normalized JSON, rendered by FFmpeg) ──
+    val drawingJson: String = "",
     val selectedEffect: String = "none",
     val activeLayers: List<String> = emptyList(),
 
@@ -350,6 +357,10 @@ data class VideoProject(
                 put("social_preset", project.socialPreset)
                 put("is_pro_tier", project.isProTier)
                 put("active_keyframe_preset", project.activeKeyframePreset)
+                put("image_overlay_effect", project.imageOverlayEffect)
+                put("image_overlay_anim", project.imageOverlayAnim)
+                put("upscale_factor", project.upscaleFactor)
+                put("drawing_json", project.drawingJson)
             }
             root.put(KEY_PROJECT, projectJson)
 
@@ -513,6 +524,10 @@ data class VideoProject(
                 activeAiFeature = projectJson.optString("active_ai_feature", "none"),
                 socialPreset = projectJson.optString("social_preset", "none"),
                 isProTier = projectJson.optBoolean("is_pro_tier", false),
+                imageOverlayEffect = projectJson.optString("image_overlay_effect", "none"),
+                imageOverlayAnim = projectJson.optString("image_overlay_anim", "none"),
+                upscaleFactor = projectJson.optDouble("upscale_factor", 1.0).toFloat(),
+                drawingJson = projectJson.optString("drawing_json", ""),
                 timeline = timeline,
                 keyframeTracks = keyframeTracksList,
                 activeKeyframePreset = projectJson.optString("active_keyframe_preset", "none"),
