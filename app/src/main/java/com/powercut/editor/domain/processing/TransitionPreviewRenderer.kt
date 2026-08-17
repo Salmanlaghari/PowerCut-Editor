@@ -156,23 +156,25 @@ class TransitionPreviewRenderer(private val context: Context) {
             "fps=$PREVIEW_FPS,settb=AVTB,format=yuv420p[v$inputIndex];"
 
     /** Resolves a content:// / file:// / plain path to a real cache file. */
-    private fun resolveToFile(sourcePath: String): File? = try {
-        when {
-            sourcePath.startsWith("content://") -> {
-                val uri = Uri.parse(sourcePath)
-                val input = context.contentResolver.openInputStream(uri)
-                    ?: return null
-                val copy = File(context.cacheDir, "transition_src_${System.currentTimeMillis()}.mp4")
-                copy.outputStream().use { os -> input.use { it.copyTo(os) } }
-                copy
+    private fun resolveToFile(sourcePath: String): File? {
+        return try {
+            when {
+                sourcePath.startsWith("content://") -> {
+                    val uri = Uri.parse(sourcePath)
+                    val input = context.contentResolver.openInputStream(uri)
+                        ?: return null
+                    val copy = File(context.cacheDir, "transition_src_${System.currentTimeMillis()}.mp4")
+                    copy.outputStream().use { os -> input.use { it.copyTo(os) } }
+                    copy
+                }
+                sourcePath.startsWith("file://") ->
+                    File(Uri.parse(sourcePath).path ?: return null)
+                else -> File(sourcePath)
             }
-            sourcePath.startsWith("file://") ->
-                File(Uri.parse(sourcePath).path ?: return null)
-            else -> File(sourcePath)
+        } catch (e: Exception) {
+            Log.e(TAG, "resolveToFile failed", e)
+            null
         }
-    } catch (e: Exception) {
-        Log.e(TAG, "resolveToFile failed", e)
-        null
     }
 
     private fun mediaDurationMs(file: File): Long? = try {
