@@ -28,11 +28,7 @@ class FilterCatalogTest {
         0f, 0f, 0f, 1f, 0f
     )
 
-    private fun matrixArray(m: ColorMatrix): FloatArray {
-        val out = FloatArray(20)
-        m.getArray(out)
-        return out
-    }
+    private fun matrixArray(m: ColorMatrix): FloatArray = m.values.copyOf()
 
     @Test
     fun everyUiFilterHasRealFfmpegChain() {

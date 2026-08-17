@@ -323,4 +323,71 @@ object TransitionCatalog {
         val overlap = transitionDurationsSec.sum()
         return (sum - overlap).coerceAtLeast(0.0)
     }
+
+    /**
+     * One resolved cut point in a multi-clip timeline.
+     *
+     * This is the SINGLE piece of transition state shared by the export
+     * pipeline ([com.powercut.editor.domain.processing.VideoProcessor.processMultiClipTimeline])
+     * and the live transition preview
+     * ([com.powercut.editor.domain.processing.TransitionPreviewRenderer]):
+     * both consume the same [cutSpecs] output, so the xfade name, clamped
+     * duration and cut offset can never diverge between what the user sees on
+     * the preview and what is burned into the exported file.
+     *
+     * @param xfadeName the REAL `xfade` transition name, or null when this cut
+     *                  must be a hard cut (no transition selected, or both
+     *                  joined clips are too short to host one).
+     */
+    data class CutSpec(
+        val transitionId: String,
+        val xfadeName: String?,
+        val durationSec: Double,
+        val offsetSec: Double
+    )
+
+    /**
+     * Resolves every cut point of a multi-clip timeline into a [CutSpec].
+     *
+     * This is the exact math the export pipeline used inline (name lookup,
+     * per-cut clamping to half the shorter clip, and the cumulative xfade
+     * offset on the accumulated left-hand stream). Extracting it here lets the
+     * live transition preview build the SAME graph, and lets tests pin the
+     * parity — same rule as Phase 1's shared `buildEffects`/`buildEffectsFromProject`.
+     *
+     * Returns an empty list when no real transition is selected or fewer than
+     * two clips are provided (the caller then joins with plain hard cuts).
+     */
+    fun cutSpecs(
+        transitionId: String?,
+        clipDurationsSec: List<Double>,
+        requestedDurationSec: Double
+    ): List<CutSpec> {
+        val name = xfadeNameFor(transitionId) ?: return emptyList()
+        val n = clipDurationsSec.size
+        if (n < 2) return emptyList()
+
+        val requested = requestedDurationSec.takeIf { it > 0.0 } ?: DEFAULT_DURATION_SEC
+        val clamped = (0 until n - 1).map { i ->
+            clampDuration(requested, clipDurationsSec[i], clipDurationsSec[i + 1])
+        }
+
+        val specs = ArrayList<CutSpec>(n - 1)
+        var accDuration = clipDurationsSec[0]
+        for (i in 1 until n) {
+            val t = clamped[i - 1]
+            if (t < MIN_DURATION_SEC) {
+                // Too short to transition on: hard cut, no overlap.
+                specs.add(CutSpec(normalize(transitionId), null, 0.0, 0.0))
+                accDuration += clipDurationsSec[i]
+            } else {
+                // xfade consumes [t] from the end of the accumulated left
+                // stream, so the transition starts at accDuration - t.
+                val offset = (accDuration - t).coerceAtLeast(0.0)
+                specs.add(CutSpec(normalize(transitionId), name, t, offset))
+                accDuration += clipDurationsSec[i] - t
+            }
+        }
+        return specs
+    }
 }
