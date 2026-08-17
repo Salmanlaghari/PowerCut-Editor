@@ -2613,7 +2613,16 @@ class VideoProcessor @Inject constructor(
     }
 
     /**
-     * Builds a drawtext filter with animation for text overlays (37 animations).
+     * Builds a drawtext filter with animation for text overlays.
+     *
+     * PART 3: delegates to [TextAnimationCatalog.buildDrawtextFilters] — the
+     * single source of truth also consumed by the live animation preview
+     * ([TextAnimationPreviewRenderer]), so the animation burned into the
+     * exported file can never diverge from what the preview showed (pinned by
+     * `TextAnimationPreviewExportParityTest`). The catalog only uses FFmpeg
+     * 4.4 per-frame mechanisms (x / y / alpha / fontsize / text expansion);
+     * the old `fontcolor=@'expr'` (hard graph-init failure) and
+     * `fontcolor_expr` (init-time-only) colour expressions are gone.
      */
     private fun buildTextOverlay(
         text: String,
@@ -2632,79 +2641,24 @@ class VideoProcessor @Inject constructor(
         textNeon: Boolean = false,
         textBgColor: String = "#00000000",
         textBgOpacity: Float = 0.5f
-    ): String {
-        val safeText = text.replace("'", "\\'").replace(":", "\\:")
-        val anim = animation.lowercase().replace(" ", "_")
-        // Convert hex color (#RRGGBB) to FFmpeg format (0xRRGGBB)
-        val fcHex = colorHex.removePrefix("#").let { h ->
-            when (h.length) {
-                6 -> h
-                3 -> "${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}"
-                else -> "FFFFFF"
-            }
-        }
-        val fontColor = "0x$fcHex"
-        val xExpr = "w*${String.format("%.3f", posX)}-text_w/2"
-        val yExpr = "h*${String.format("%.3f", posY)}-text_h/2"
-        val fs = fontSize.toInt().coerceIn(8, 200)
-        // Build style-specific box/flags
-        val shadowFlag = if (textShadow) ":shadowx=3:shadowy=3:shadowcolor=black@0.8" else ""
-        val outlineFlag = if (textOutline) ":borderw=3:bordercolor=black" else ""
-        val boldFlag = if (textBold) ":bold=1" else ""
-        val italicFlag = if (textItalic) ":italic=1" else ""
-        val glowFlag = if (textGlow) ":fontcolor_expr=0x${fcHex}@'0.7+0.3*sin(t*4)'" else ""
-        val neonFlag = if (textNeon) ":fontcolor_expr=0x${fcHex}@'0.5+0.5*sin(t*6)'" else ""
-        // Background box
-        val bgBox = if (textBgColor != "#00000000") {
-            val bgHex = textBgColor.removePrefix("#")
-            val bgArgb = if (bgHex.length == 8) bgHex else "FF$bgHex"
-            val bgR = bgArgb.substring(2, 4); val bgG = bgArgb.substring(4, 6); val bgB = bgArgb.substring(6, 8)
-            ":box=1:boxcolor=0x${bgR}${bgG}${bgB}@${textBgOpacity}"
-        } else ":box=1:boxcolor=black@0.5"
-        val base = "drawtext=text='$safeText':fontsize=$fs:fontcolor=$fontColor$bgBox:x=($xExpr):y=($yExpr)${fontFileClause()}$shadowFlag$outlineFlag$boldFlag$italicFlag$glowFlag$neonFlag"
-        return when (anim) {
-            "none", "fade_in", "fade" -> "$base:alpha='if(lt(t,1)\\,t\\,1)'"
-            "fade_out" -> "$base:alpha='if(gt(t,${duration - 1})\\,${duration}-t\\,1)'"
-            "fade_in_out" -> "$base:alpha='if(lt(t,1)\\,t\\,if(gt(t,${duration - 1})\\,${duration}-t\\,1))'"
-            "typewriter" -> "$base:alpha='1':text='$safeText%{eif\\:trunc(t*8)\\:d}'"
-            "bounce" -> "$base:y='($yExpr)+20*abs(sin(t*4))'"
-            "slide_left" -> "$base:x='w-text_w-(w-text_w)*min(1\\,t/0.5)':y=h-100"
-            "slide_right" -> "$base:x='(w-text_w)*min(1\\,t/0.5)':y=h-100"
-            "slide_up" -> "$base:x=(w-text_w)/2:y='h-(h-100)*min(1\\,t/0.5)'"
-            "slide_down" -> "$base:x=(w-text_w)/2:y='(h-100)*min(1\\,t/0.5)'"
-            "zoom_in" -> "$base:fontsize='${fs}*min(1\\,t/0.5)'"
-            "zoom_out" -> "$base:fontsize='${fs}*max(0.1\\,1-t/${duration})'"
-            "rotate" -> "$base:x='(w-text_w)/2+10*sin(t*2)':y=h-100"
-            "wave" -> "$base:x='(w-text_w)/2+20*sin(t*3)':y='h-100+10*cos(t*3)'"
-            "glitch_in" -> "$base:x='(w-text_w)/2+5*sin(t*30)':y='h-100+3*cos(t*30)':alpha='min(1\\,t*2)'"
-            "neon_pulse" -> "$base:fontcolor=0x7C5CFF@'0.7+0.3*sin(t*6)'"
-            "pop" -> "$base:fontsize='${fs}*(1+0.3*exp(-t*4))'"
-            "flip" -> "$base:x=(w-text_w)/2:y=h-100:alpha='min(1\\,t*2)'"
-            "elastic" -> "$base:y='($yExpr)+30*exp(-t*2)*sin(t*10)'"
-            "spring" -> "$base:y='($yExpr)+20*exp(-t*3)*cos(t*8)'"
-            "rubber" -> "$base:y='($yExpr)+15*exp(-t*2)*sin(t*6)'"
-            "swing" -> "$base:x='(w-text_w)/2+30*sin(t*2)':y=h-100"
-            "typewriter_fast" -> "$base:alpha='1':text='$safeText%{eif\\:trunc(t*16)\\:d}'"
-            "shake" -> "$base:x='(w-text_w)/2+5*sin(t*20)':y='h-100+3*cos(t*20)'"
-            "blink" -> "$base:alpha='0.5+0.5*sin(t*8)'"
-            "pulse" -> "$base:fontsize='${fs}*(1+0.1*sin(t*5))'"
-            "color_cycle" -> "$base:fontcolor=0xFFFFFF@'0.5+0.5*sin(t*3)'"
-            "neon_flicker" -> "$base:fontcolor=0x00ffff@'0.5+0.5*sin(t*15)'"
-            "slide_in_3d" -> "$base:x='(w-text_w)/2+100*exp(-t*3)':y=h-100:alpha='min(1\\,t*3)'"
-            "explode_in" -> "$base:fontsize='${fs}*2*exp(-t*3)+${fs}'"
-            "implode" -> "$base:fontsize='${fs}+100*exp(-t*4)'"
-            "marquee" -> "$base:x='w-w*t':y=h-100"
-            "scroll_up" -> "$base:x=(w-text_w)/2:y='ih-t*200':alpha='1'"
-            "scroll_down" -> "$base:x=(w-text_w)/2:y='-text_w+t*200':alpha='1'"
-            "glow" -> "$base:fontcolor=0xffff00@'0.7+0.3*sin(t*4)'"
-            "rainbow" -> "$base:fontcolor=0xFF0000@'0.5+0.5*sin(t*2+0)'"
-            "frozen" -> "$base:fontcolor=0x88ccff"
-            "fire" -> "$base:fontcolor=0xff6600@'0.7+0.3*sin(t*6)'"
-            "metallic" -> "$base:fontcolor=0xc0c0c0"
-            "gold" -> "$base:fontcolor=0xffd700"
-            else -> "$base"
-        }
-    }
+    ): String = TextAnimationCatalog.buildDrawtextFilters(
+        text = text,
+        animation = animation,
+        duration = duration,
+        posX = posX,
+        posY = posY,
+        colorHex = colorHex,
+        fontSize = fontSize,
+        textBold = textBold,
+        textItalic = textItalic,
+        textShadow = textShadow,
+        textOutline = textOutline,
+        textGlow = textGlow,
+        textNeon = textNeon,
+        textBgColor = textBgColor,
+        textBgOpacity = textBgOpacity,
+        fontFileClause = fontFileClause()
+    )
 
     /**
      * v4.5.0 — Real per-template FFmpeg grades.
