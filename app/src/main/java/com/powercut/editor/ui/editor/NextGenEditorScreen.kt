@@ -110,6 +110,8 @@ import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.processing.Media3EffectPipeline
 import com.powercut.editor.domain.processing.TransitionCatalog
+import com.powercut.editor.domain.processing.TextAnimationCatalog
+import com.powercut.editor.domain.processing.TextAnimationPreviewRenderer
 import com.powercut.editor.domain.processing.TransitionPreviewRenderer
 import java.io.File
 import com.powercut.editor.ui.theme.AccentSecondary
@@ -363,8 +365,53 @@ fun NextGenEditorScreen(
         }
     }
 
-    DisposableEffect(project.videoPath, transitionPreviewFile) {
-        val uri = transitionPreviewFile?.let { Uri.fromFile(it) }
+    // ─── TEXT ANIMATION LIVE PREVIEW (Phase 3) ────────────────────────────
+    // Same instant tap-to-preview pattern as transitions: tapping an animation
+    // re-renders a short MP4 of the EXACT drawtext chain the export builds
+    // (TextAnimationPreviewRenderer -> TextAnimationCatalog.buildDrawtextFilters,
+    // the same pure function VideoProcessor.buildTextOverlay delegates to) and
+    // plays it back on the preview player. Tapping "None" restores the raw
+    // video. When no text has been typed yet, a demo text is used so the
+    // animation is still visible instantly.
+    val textAnimPreviewRenderer = remember { TextAnimationPreviewRenderer(context) }
+    var textAnimPreviewFile by remember { mutableStateOf<File?>(null) }
+    var textAnimPreviewBusy by remember { mutableStateOf(false) }
+    var textAnimPreviewError by remember { mutableStateOf(false) }
+    var textAnimPreviewToken by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(project.textAnimationType, project.videoPath, project.activeTextOverlay) {
+        val animId = TextAnimationCatalog.normalize(project.textAnimationType)
+        if (TextAnimationCatalog.isNone(animId) || project.videoPath.isBlank()) {
+            textAnimPreviewFile = null
+            textAnimPreviewBusy = false
+            textAnimPreviewError = false
+            return@LaunchedEffect
+        }
+        val token = ++textAnimPreviewToken
+        textAnimPreviewBusy = true
+        textAnimPreviewError = false
+        val demoText = project.activeTextOverlay?.takeIf { it.isNotBlank() }
+            ?: TextAnimationCatalog.DEFAULT_DEMO_TEXT
+        val preview = textAnimPreviewRenderer.renderPreview(
+            sourcePath = project.videoPath,
+            animationId = animId,
+            text = demoText,
+            fontSize = project.textFontSize
+        )
+        textAnimPreviewBusy = false
+        // A newer tap superseded this render while FFmpeg was working.
+        if (token != textAnimPreviewToken) return@LaunchedEffect
+        if (preview == null) {
+            textAnimPreviewError = true
+            textAnimPreviewFile = null
+        } else {
+            textAnimPreviewFile = preview
+        }
+    }
+
+    DisposableEffect(project.videoPath, transitionPreviewFile, textAnimPreviewFile) {
+        val uri = textAnimPreviewFile?.let { Uri.fromFile(it) }
+            ?: transitionPreviewFile?.let { Uri.fromFile(it) }
             ?: if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
                 Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
@@ -546,6 +593,25 @@ fun NextGenEditorScreen(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text("Transition preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                    }
+                }
+
+                // ── Text animation live preview status (Phase 3) ──
+                if (textAnimPreviewBusy) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Rendering animation preview…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                } else if (textAnimPreviewError) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Animation preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 
@@ -3476,15 +3542,7 @@ private fun AnimationsPanel(project: VideoProject, onUpdateAnim: (String) -> Uni
             }
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(
-                "none", "fade", "fade_out", "fade_in_out", "typewriter", "typewriter_fast",
-                "bounce", "slide_left", "slide_right", "slide_up", "slide_down",
-                "slide_in_3d", "zoom_in", "zoom_out", "rotate", "wave", "glitch_in",
-                "neon_pulse", "neon_flicker", "pop", "flip", "elastic", "spring",
-                "rubber", "swing", "shake", "blink", "pulse", "color_cycle",
-                "explode_in", "implode", "marquee", "scroll_up", "scroll_down",
-                "glow", "rainbow", "frozen", "fire", "metallic", "gold"
-            ).forEach { a ->
+            TextAnimationCatalog.UI_IDS.forEach { a ->
                 val display = a.replace("_", " ").replaceFirstChar { it.uppercase() }
                 val sel = project.textAnimationType.lowercase() == a.lowercase()
                 Column(

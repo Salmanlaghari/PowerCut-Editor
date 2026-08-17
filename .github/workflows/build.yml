@@ -114,4 +114,12 @@ jobs:
       # multi-clip A->B->C offsets/duration, A/V lock, the production graph
       # shape, and the hard-cut fallback.
       run: python3 scripts/validate_transitions_ffmpeg.py --ffmpeg "$(which ffmpeg)" --ffprobe "$(which ffprobe)"
+
+    - name: Validate text animations with real FFmpeg
+      # Renders every animation the Animations panel offers (TextAnimationCatalog)
+      # with real FFmpeg and proves it is genuinely per-frame: decoded frames at
+      # t=0.3s and t=1.8s must differ. Also audits the catalog source for the
+      # forbidden init-time-only mechanisms (fontcolor@expr, fontcolor_expr,
+      # eval=, drawbox/boxblur/gblur time expressions).
+      run: python3 scripts/validate_animations_ffmpeg.py --ffmpeg "$(which ffmpeg)" --ffprobe "$(which ffprobe)"
 # trigger
