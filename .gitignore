@@ -17,6 +17,8 @@ app/.cxx/
 **/build/**
 **/.gradle/
 **/.gradle/**
+.kotlin/
+local.properties
 
 # Dependencies
 node_modules/

@@ -1190,6 +1190,15 @@ class VideoProcessor @Inject constructor(
                 clipSpeedFactor = speedFactor
             )
             vfFilters.addAll(kfFilters)
+            // v7.3 audit fix: keyframe crop/scale/rotate run AFTER the target
+            // scale+pad, so without this they changed the final output
+            // resolution (a zoom-in preset exported at 1.5x, a pan at 0.7x).
+            // Pin the frame back to the target size whenever keyframes ran.
+            // (Note: this intentionally re-pins after the v7.2 upscale when
+            // keyframes are active — upscale + keyframes is a rare combo.)
+            if (kfFilters.isNotEmpty()) {
+                vfFilters.add("scale=$tw:$th:force_original_aspect_ratio=decrease,pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -1737,6 +1746,26 @@ class VideoProcessor @Inject constructor(
                     if (speed != 1.0f) append(",setpts=PTS/$speed")
                     append(",scale=$tw:$th:force_original_aspect_ratio=decrease")
                     append(",pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
+                    // v7.3 audit fix: keyframe animations now also render on
+                    // multi-clip timelines (previously single-clip only).
+                    // Keyframe times are clip-relative (t restarts at 0 after
+                    // setpts=PTS-STARTPTS), and the frame is pinned back to
+                    // tw×th so the xfade inputs keep identical dimensions.
+                    val clipKfTracks = project.keyframeTracks.filter { it.clipId == clip.id }
+                    if (clipKfTracks.isNotEmpty()) {
+                        val kfFilters = buildKeyframeExpressions(
+                            keyframeTracks = clipKfTracks,
+                            clipStartTimeMs = 0L,
+                            clipDurationMs = clip.trimEndMs - clip.trimStartMs,
+                            clipSpeedFactor = clip.speedFactor
+                        )
+                        if (kfFilters.isNotEmpty()) {
+                            append(",")
+                            append(kfFilters.joinToString(","))
+                            append(",scale=$tw:$th:force_original_aspect_ratio=decrease")
+                            append(",pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
+                        }
+                    }
                     append(",fps=${project.targetFps}")
                     append(",settb=AVTB")
                     append(",format=yuv420p[v$idx]")
@@ -1896,6 +1925,11 @@ class VideoProcessor @Inject constructor(
             if (project.activeAiFeature != "none") {
                 val aiChain = com.powercut.editor.domain.premium.PremiumFeatureCatalog.videoChainFor(project.activeAiFeature)
                 if (aiChain.isNotBlank()) postFilters.add(aiChain)
+            }
+            // v7.3 audit fix: template look was single-clip only — apply the
+            // same real FFmpeg grade to multi-clip timelines too.
+            if (project.activeTemplateId != "none" && project.activeTemplateId != "free") {
+                postFilters.addAll(templateChain(project.activeTemplateId))
             }
             if (project.socialPreset != "none") {
                 val socialChain = com.powercut.editor.domain.premium.PremiumFeatureCatalog.videoChainFor(project.socialPreset)
@@ -2836,12 +2870,25 @@ class VideoProcessor @Inject constructor(
     private fun threeDMaskChain(mask: String, w: Int, h: Int): List<String> {
         if (mask == "none") return emptyList()
         val m = mask.lowercase().replace(" ", "_")
+        // v7.3 audit fix: the old "3D" shapes were ALL just vignette with
+        // different angles — picking Heart vs Triangle produced nearly the
+        // same frame. Every shape id below is now a REAL geometric mask:
+        // pixels outside the shape are cut to black via geq (which survives
+        // yuv420p export; alpha-based masks would be dropped by the encoder).
+        // Expressions are plane-relative (X,Y,W,H), so luma and subsampled
+        // chroma planes cut the same shape.
+        fun maskGeq(expr: String): String =
+            "geq=lum='if($expr,lum(X,Y),0)':cb='if($expr,cb(X,Y),128)':cr='if($expr,cr(X,Y),128)'"
         return when (m) {
-            "circle_mask", "circle" -> listOf("vignette=angle=PI/3")
-            "heart_mask", "heart" -> listOf("lenscorrection=k1=0.2:k2=0.2", "vignette=angle=PI/2")
-            "star_mask", "star" -> listOf("vignette=angle=PI/4")
-            "hexagon", "diamond" -> listOf("vignette=angle=PI/3")
-            "triangle" -> listOf("vignette=angle=PI/2")
+            "circle_mask", "circle" -> listOf(maskGeq("lt(hypot(X-(W/2),Y-(H/2)),0.42*min(W,H))"))
+            "heart_mask", "heart" -> listOf(maskGeq("lt(pow(pow((X-(W/2))/(0.44*W),2)+pow((Y-(H/2))/(0.44*H),2)-1,3)+pow((X-(W/2))/(0.44*W),2)*pow((Y-(H/2))/(0.44*H),3),0)"))
+            "star_mask", "star" -> listOf(maskGeq("lt(hypot(X-(W/2),Y-(H/2)),0.42*min(W,H)*(0.72+0.28*cos(5*atan2(Y-(H/2),X-(W/2)))))"))
+            "hexagon" -> listOf(maskGeq("gt(lt(abs(Y-(H/2)),0.866*0.42*min(W,H))*lt(abs(X-(W/2)),0.5*0.42*min(W,H)+0.577*abs(Y-(H/2))),0)"))
+            "diamond" -> listOf(maskGeq("lt(abs(X-(W/2))+abs(Y-(H/2)),0.42*min(W,H))"))
+            "triangle" -> listOf(maskGeq("gt(gt(Y,0.15*H)*lt(abs(X-(W/2)),(Y-0.15*H)/(0.70*H)*(0.38*W)),0)"))
+            "oval" -> listOf(maskGeq("lt(pow((X-(W/2))/(0.46*W),2)+pow((Y-(H/2))/(0.42*H),2),1)"))
+            "arch" -> listOf(maskGeq("gt(lt(Y,0.85*H)*if(gt(Y,0.20*H),lt(abs(X-(W/2)),0.32*W),lt(hypot(X-(W/2),Y-0.20*H),0.32*W)),0)"))
+            "spotlight" -> listOf("geq=lum='lum(X,Y)*(1-0.8*min(1,pow(hypot(X-(W/2),Y-(H/2))/(0.45*min(W,H)),2)))'")
             "vignette" -> listOf("vignette=angle=PI/3")
             "film_burn" -> listOf("eq=brightness='0.3*exp(-t*2)':saturation=1.3", "colorbalance=rs=0.15:rm=0.1")
             "light_leak" -> listOf("vignette=angle=PI/4", "colorbalance=rs=0.1:rm=0.08")
@@ -3300,15 +3347,44 @@ class VideoProcessor @Inject constructor(
                 }
             }
         }
+        // v7.3 audit fixes:
+        //  - The pan window was 0.9x with a 0.1 range → presets barely moved.
+        //    Now the crop window is 0.7x and the keyframe value maps across a
+        //    0.3 range (a real pan), centred when only one axis is animated.
+        //  - scale values are clamped to >= 0.2 and rounded to EVEN dimensions.
+        //    The old 0.05 floor produced a 16x12 first frame for bounceIn; the
+        //    next scale re-init then broke FFmpeg 4.4 swscale (Slice parameters
+        //    invalid) and exported ALTERNATING BLACK FRAMES.
+        //  - rotation keyframe values are DEGREES (spin360 = 360) → converted
+        //    to radians for FFmpeg's rotate filter.
+        //  - opacity: colorchannelmixer=aa is a NO-OP on yuv420p (verified with
+        //    real FFmpeg — signalstats YAVG unchanged), so opacity now fades
+        //    luma to black with geq, which survives yuv encoding.
         if (posXExpr.isNotBlank() || posYExpr.isNotBlank()) {
-            val xExpr = if (posXExpr.isNotBlank()) "'(iw*0.1)*($posXExpr)'" else "'0'"
-            val yExpr = if (posYExpr.isNotBlank()) "'(ih*0.1)*($posYExpr)'" else "'0'"
-            filters.add("crop=w=iw*0.9:h=ih*0.9:x=$xExpr:y=$yExpr")
+            val xExpr = if (posXExpr.isNotBlank()) "'(iw*0.3)*($posXExpr)'" else "'(iw*0.3)*0.5'"
+            val yExpr = if (posYExpr.isNotBlank()) "'(ih*0.3)*($posYExpr)'" else "'(ih*0.3)*0.5'"
+            filters.add("crop=w=iw*0.7:h=ih*0.7:x=$xExpr:y=$yExpr")
         }
 
-        piecewise("scale", "1.0", "scale") { "'iw*$it:ih*$it'" }
-        piecewise("rotation", "0.0", "rotate") { "a='$it'" }
-        piecewise("opacity", "1.0", "colorchannelmixer") { "aa='$it'" }
+        // scale MUST set eval=frame: the preset expressions use the frame
+        // variable t, and scale otherwise evaluates at init and fails with
+        // "Expressions with frame variables 'n', 't', 'pos' are not valid".
+        piecewise("scale", "1.0", "scale") { "'trunc(iw*max($it,0.2)/2)*2:trunc(ih*max($it,0.2)/2)*2':eval=frame" }
+        piecewise("rotation", "0.0", "rotate") { "a='($it)*PI/180'" }
+        // geq uses CAPITAL T for time (lowercase t is unknown there), so the
+        // piecewise expression is rewritten t -> T on word boundaries.
+        piecewise("opacity", "1.0", "geq") {
+            val e = Regex("\\bt\\b").replace(it, "T")
+            "lum='lum(X,Y)*$e':cb='(cb(X,Y)-128)*$e+128':cr='(cr(X,Y)-128)*$e+128'"
+        }
+
+        // Keyframe scale/rotate change the frame size per frame. A downstream
+        // scale on varying-size input hits the FFmpeg 4.4 swscale re-init bug
+        // (intermittent black frames), so normalise to even dimensions HERE,
+        // before the callers' pin scale+pad sees the frames.
+        if (filters.isNotEmpty()) {
+            filters.add("pad=ceil(iw/2)*2:ceil(ih/2)*2:(ow-iw)/2:(oh-ih)/2:black:eval=frame")
+        }
 
         return filters
     }
