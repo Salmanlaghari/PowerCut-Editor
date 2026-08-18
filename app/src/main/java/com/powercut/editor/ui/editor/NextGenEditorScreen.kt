@@ -4992,7 +4992,7 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
                 Text("🤖 AI HUB", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.background(SignatureOrange.copy(0.3f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                    Text("50+ AI Tools", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("ALL REAL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
@@ -5016,52 +5016,50 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
             }
         }
 
-        // AI features grid (40+ AI tools from PremiumFeatureCatalog)
+        // AI features grid — every item below maps to a REAL FFmpeg chain in
+        // PremiumFeatureCatalog (video and/or audio). Generation-only tools
+        // (script writer, avatar, voice gen, captions, ...) were removed
+        // because they cannot be rendered by a filter and must wait for an AI
+        // backend — nothing here is a UI stub anymore.
         val aiTools = listOf(
             "✂️" to "AI Auto Cut" to "ai_auto_cut",
-            "✍️" to "AI Script Writer" to "ai_script_writer",
-            "📖" to "AI Story Gen" to "ai_story_gen",
-            "🧑‍💼" to "AI Avatar" to "ai_avatar",
-            "🧙" to "AI Character" to "ai_character",
-            "🗣️" to "AI Talking Photo" to "ai_talking_photo",
-            "🎤" to "AI Voice Gen" to "ai_voice_gen",
-            "🎭" to "AI Voice Clone" to "ai_voice_clone",
-            "🔄" to "AI Voice Changer" to "ai_voice_changer",
-            "🔇" to "AI Noise Removal" to "ai_noise_removal",
-            "🎵" to "AI Music Gen" to "ai_music_gen",
-            "🥁" to "AI Beat Detect" to "ai_beat_detect",
-            "💬" to "AI Auto Captions" to "ai_captions",
-            "📑" to "AI Subtitles" to "ai_subtitle_gen",
-            "🌍" to "AI Translation" to "ai_translate",
-            "👄" to "AI Lip Sync" to "ai_lip_sync",
+            "🎨" to "AI Color Correct" to "ai_color_correct",
+            "🎯" to "AI Color Match" to "ai_color_match",
             "✨" to "AI Face Retouch" to "ai_face_retouch",
             "🖼️" to "AI Enhance" to "ai_enhance",
             "🔍" to "AI Upscale" to "ai_upscale",
             "🛠️" to "AI Restore" to "ai_restore",
             "🌟" to "AI Image Enhance" to "ai_image_enhance",
-            "🎨" to "AI Color Correct" to "ai_color_correct",
-            "🎯" to "AI Color Match" to "ai_color_match",
             "🪄" to "AI Object Remove" to "ai_object_remove",
             "🧹" to "AI BG Remove" to "ai_bg_remove",
-            "🌤️" to "AI Sky Replace" to "ai_sky_replace",
             "💡" to "AI Relight" to "ai_relight",
-            "🎯" to "AI Motion Track" to "ai_motion_track",
-            "🤖" to "AI Smart Crop" to "ai_smart_crop",
-            "📐" to "AI Auto Reframe" to "ai_auto_reframe",
-            "🖼️" to "AI BG Blur" to "ai_bg_blur",
-            "🎭" to "AI Style Transfer" to "ai_style_transfer",
-            "✨" to "AI Glamour" to "ai_glamour",
-            "👁️" to "AI Eye Enhance" to "ai_eye_enhance",
-            "💄" to "AI Makeup" to "ai_makeup",
-            "🔄" to "AI Deinterlace" to "ai_deinterlace",
-            "📊" to "AI Stabilize" to "ai_stabilize",
             "🎞️" to "AI Frame Interp" to "ai_frame_interp",
+            "📐" to "AI Auto Reframe" to "ai_auto_reframe",
+            "🧽" to "AI Denoise" to "ai_denoise",
+            "🌫️" to "AI Deblur" to "ai_deblur",
+            "⚡" to "AI Deflicker" to "ai_deflicker",
+            "🚫" to "AI Remove Watermark" to "ai_remove_watermark",
+            "🐌" to "AI Slow Motion" to "ai_slow_motion",
+            "🔬" to "AI Super Res" to "ai_super_res",
+            "🔍" to "AI Auto Zoom" to "ai_auto_zoom",
+            "🤖" to "AI Smart Crop" to "ai_smart_crop",
+            "🌫️" to "AI BG Blur" to "ai_bg_blur",
+            "🎨" to "AI Style Transfer" to "ai_style_transfer",
+            "💄" to "AI Glamour" to "ai_glamour",
+            "👁️" to "AI Eye Enhance" to "ai_eye_enhance",
+            "💋" to "AI Makeup" to "ai_makeup",
+            "🖥️" to "AI Deinterlace" to "ai_deinterlace",
+            "📐" to "AI Stabilize" to "ai_stabilize",
             "🌈" to "AI HDR" to "ai_hdr",
             "🎬" to "AI Cinematic" to "ai_cinematic",
+            "🪄" to "AI Magic Edit" to "ai_magic_edit",
+            "📲" to "AI Shorts" to "ai_shorts",
+            "🎵" to "AI TikTok" to "ai_tiktok",
+            "▶️" to "AI YouTube" to "ai_youtube",
+            "🔀" to "AI Voice Changer" to "ai_voice_changer",
+            "🔇" to "AI Noise Removal" to "ai_noise_removal",
             "🔊" to "AI Audio Enhance" to "ai_audio_enhance",
-            "🎵" to "AI Music Match" to "ai_music_match",
-            "📝" to "AI Text Gen" to "ai_text_gen",
-            "🪄" to "AI Magic Edit" to "ai_magic_edit"
+            "🎵" to "AI Music Match" to "ai_music_match"
         )
 
         val filtered = aiTools.filter { tool ->

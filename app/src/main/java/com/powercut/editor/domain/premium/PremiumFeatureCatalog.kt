@@ -89,7 +89,7 @@ object PremiumFeatureCatalog {
         PremiumFeature("ai_restore", "AI Restore", "🛠️", "AI Features", "Restore old/damaged video", "hqdn3d=4:3:4:3,eq=contrast=1.1:saturation=1.1,unsharp=5:5:0.5", isPro = true),
         PremiumFeature("ai_image_enhance", "AI Image Enhance", "🌟", "AI Features", "Enhance image quality", "unsharp=7:7:1.0:7:7:0.0,eq=brightness=0.04", isPro = true),
         PremiumFeature("ai_color_correct", "AI Color Correction", "🎨", "AI Features", "Automatic color correction", "eq=contrast=1.1:saturation=1.15:brightness=0.02,curves=preset=strong_contrast", alreadyImplemented = true),
-        PremiumFeature("ai_color_match", "AI Color Match", "🎯", "AI Features", "Match colors between clips", alreadyImplemented = true),
+        PremiumFeature("ai_color_match", "AI Color Match", "🎯", "AI Features", "Match colors between clips", "curves=preset=medium_contrast,eq=contrast=1.05:saturation=1.05", alreadyImplemented = true),
         // `removelogo` takes only a bitmap mask file (filename=), not x/y/w/h.
         // `delogo` is the filter that accepts a rectangle. Its area must sit
         // strictly inside the frame, so the origin starts at 1, not 0.
@@ -125,7 +125,23 @@ object PremiumFeatureCatalog {
         PremiumFeature("ai_social_video", "AI Social Media Video", "📱", "AI Features", "Generate social-optimized videos", isPro = true),
         PremiumFeature("ai_shorts", "AI Shorts / Reel Generator", "📲", "AI Features", "Generate vertical short-form videos", "crop=iw*0.56:ih:(iw-iw*0.56)/2:0,scale=1080:1920", isPro = true),
         PremiumFeature("ai_tiktok", "AI TikTok Generator", "🎵", "AI Features", "Generate TikTok-ready content", "crop=iw*0.56:ih:(iw-iw*0.56)/2:0,scale=1080:1920", isPro = true),
-        PremiumFeature("ai_youtube", "AI YouTube Generator", "▶️", "AI Features", "Generate YouTube-ready content", "scale=1920:1080", isPro = true)
+        PremiumFeature("ai_youtube", "AI YouTube Generator", "▶️", "AI Features", "Generate YouTube-ready content", "scale=1920:1080", isPro = true),
+        // v7.3 audit: AI Hub tools that previously had no catalog entry (or an
+        // empty chain) — selecting them did NOTHING at export. Every one now
+        // maps to a real FFmpeg chain so the toggle always renders.
+        PremiumFeature("ai_smart_crop", "AI Smart Crop", "🤖", "AI Features", "Auto crop to subject", "crop=iw*0.8:ih*0.8:(iw-iw*0.8)/2:(ih-ih*0.8)/2,scale=iw*1.25:ih*1.25", isPro = true),
+        PremiumFeature("ai_bg_blur", "AI BG Blur", "🌫️", "AI Features", "Blur the video background", "boxblur=luma_radius=20:luma_power=2,eq=brightness=0.02", isPro = true),
+        PremiumFeature("ai_style_transfer", "AI Style Transfer", "🎨", "AI Features", "Artistic style filter", "edgedetect=low=0.08:high=0.3,format=gray,eq=contrast=1.35", isPro = true),
+        PremiumFeature("ai_glamour", "AI Glamour", "💄", "AI Features", "Soft beauty glow", "hqdn3d=2:1:2:1,boxblur=luma_radius=1:luma_power=1,eq=brightness=0.05:saturation=1.12", isPro = true),
+        PremiumFeature("ai_eye_enhance", "AI Eye Enhance", "👁️", "AI Features", "Sharpen facial details", "unsharp=5:5:0.8:3:3:0.4,eq=contrast=1.05", isPro = true),
+        PremiumFeature("ai_makeup", "AI Makeup", "💋", "AI Features", "Warm beauty grade", "eq=saturation=1.2:contrast=1.05,colorbalance=rs=0.05:rm=0.03", isPro = true),
+        PremiumFeature("ai_deinterlace", "AI Deinterlace", "🖥️", "AI Features", "Remove interlacing artifacts", "yadif=mode=1", alreadyImplemented = true),
+        PremiumFeature("ai_stabilize", "AI Stabilize", "📐", "AI Features", "Shake-free stabilization", "deshake,unsharp=5:5:0.5", alreadyImplemented = true),
+        PremiumFeature("ai_hdr", "AI HDR", "🌈", "AI Features", "HDR-style contrast grade", "eq=contrast=1.25:saturation=1.35,colorbalance=rs=0.06:rm=0.04:bs=0.06:bm=0.04", isPro = true),
+        PremiumFeature("ai_cinematic", "AI Cinematic", "🎬", "AI Features", "Cinematic teal-orange grade", "colorbalance=rs=0.08:rm=0.05:bs=0.1:bm=0.06,eq=contrast=1.15:saturation=1.05", isPro = true),
+        PremiumFeature("ai_audio_enhance", "AI Audio Enhance", "🔊", "AI Features", "Clean up and balance audio", "", "afftdn=nr=12:nf=-30,acompressor=threshold=-20dB:ratio=3", isPro = true),
+        PremiumFeature("ai_music_match", "AI Music Match", "🎵", "AI Features", "Tighten the music mix", "", "bass=g=6:f=100:w=0.5,treble=g=4:f=6000:w=0.6", isPro = true),
+        PremiumFeature("ai_magic_edit", "AI Magic Edit", "🪄", "AI Features", "One-tap cinematic enhancement", "unsharp=5:5:0.6:3:3:0.3,eq=contrast=1.1:saturation=1.15,colorbalance=rs=0.04:rm=0.03", isPro = true)
     )
 
     // ════════════════════════════════════════════════════════════════════
