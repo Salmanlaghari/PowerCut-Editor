@@ -99,11 +99,17 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Install FFmpeg
+    - name: Install FFmpeg (if not pre-installed)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg
-        ffmpeg -version | head -1
+        if command -v ffmpeg &>/dev/null; then
+          echo "FFmpeg already available:"
+          ffmpeg -version | head -1
+        else
+          echo "FFmpeg not found — installing via apt (timeout 120s)..."
+          timeout 120 sudo apt-get update -qq
+          timeout 120 sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+        fi
 
     - name: Run VideoProcessor FFmpeg validation
       run: python3 scripts/validate_video_processor_ffmpeg.py --ffmpeg "$(which ffmpeg)"
