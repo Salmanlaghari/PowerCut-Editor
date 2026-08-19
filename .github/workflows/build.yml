@@ -105,9 +105,9 @@ jobs:
           echo "FFmpeg already available:"
           ffmpeg -version | head -1
         else
-          echo "FFmpeg not found — installing via apt (timeout 120s)..."
-          timeout 120 sudo apt-get update -qq
-          timeout 120 sudo apt-get install -y -qq ffmpeg
+          echo "FFmpeg not found — installing via apt (timeout 300s)..."
+          timeout 300 sudo apt-get update -qq
+          timeout 300 sudo apt-get install -y -qq ffmpeg
           ffmpeg -version | head -1
         fi
 
