@@ -75,6 +75,8 @@ class Media3TransformerExporter @Inject constructor(
         if (!singleClip) return false
 
         val noStructuralEdits =
+            project.selectedEffect == "none" &&
+            project.keyframeTracks.isEmpty() &&
             project.speedFactor == 1.0f &&
             project.transitionType == "none" &&
             project.backgroundMusicPath.isNullOrEmpty() &&
