@@ -113,6 +113,7 @@ import com.powercut.editor.domain.processing.TransitionCatalog
 import com.powercut.editor.domain.processing.TextAnimationCatalog
 import com.powercut.editor.domain.processing.TextAnimationPreviewRenderer
 import com.powercut.editor.domain.processing.TransitionPreviewRenderer
+import com.powercut.editor.domain.processing.FilterPreviewRenderer
 import java.io.File
 import com.powercut.editor.ui.theme.AccentSecondary
 import com.powercut.editor.ui.theme.CyberCyan
@@ -418,8 +419,58 @@ fun NextGenEditorScreen(
         }
     }
 
-    DisposableEffect(project.videoPath, transitionPreviewFile, textAnimPreviewFile) {
-        val uri = textAnimPreviewFile?.let { Uri.fromFile(it) }
+    // ─── FILTER LIVE PREVIEW (Filters fix) ──────────────────────────────
+    // The GPU preview (Media3 RgbAdjustment) can only render eq=/colorbalance=
+    // filters. Every other filter in FilterCatalog (posterize, edgedetect,
+    // emboss, pixelize, colorchannelmixer, solarize, noise…) silently did
+    // nothing on the preview while the SAME filter WAS baked into the export.
+    // This renders a short MP4 of the EXACT filter chain the export uses
+    // (FilterCatalog.ffmpeg) and plays it on the preview player — so tapping a
+    // filter applies it for real, instantly, with the same look as the export.
+    // Tapping "none"/Original restores the raw video.
+    val filterPreviewRenderer = remember { FilterPreviewRenderer(context) }
+    var filterPreviewFile by remember { mutableStateOf<File?>(null) }
+    var filterPreviewBusy by remember { mutableStateOf(false) }
+    var filterPreviewError by remember { mutableStateOf(false) }
+    var filterPreviewToken by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(project.selectedFilter, project.videoPath) {
+        val fid = project.selectedFilter.lowercase()
+        if (fid == "none" || fid.isBlank() || project.videoPath.isBlank()) {
+            filterPreviewFile = null
+            filterPreviewBusy = false
+            filterPreviewError = false
+            return@LaunchedEffect
+        }
+        if (FilterPreviewRenderer.buildPreviewFilter(fid) == null) {
+            // No real FFmpeg chain (e.g. a pure GPU matrix filter) — play raw.
+            filterPreviewFile = null
+            filterPreviewBusy = false
+            filterPreviewError = false
+            return@LaunchedEffect
+        }
+        val token = ++filterPreviewToken
+        filterPreviewBusy = true
+        filterPreviewError = false
+        val preview = filterPreviewRenderer.renderPreview(
+            sourcePath = project.videoPath,
+            filterId = fid,
+            requestedSec = FilterPreviewRenderer.PREVIEW_SEC
+        )
+        filterPreviewBusy = false
+        // A newer tap superseded this render while FFmpeg was working.
+        if (token != filterPreviewToken) return@LaunchedEffect
+        if (preview == null) {
+            filterPreviewError = true
+            filterPreviewFile = null
+        } else {
+            filterPreviewFile = preview
+        }
+    }
+
+    DisposableEffect(project.videoPath, transitionPreviewFile, textAnimPreviewFile, filterPreviewFile) {
+        val uri = filterPreviewFile?.let { Uri.fromFile(it) }
+            ?: textAnimPreviewFile?.let { Uri.fromFile(it) }
             ?: transitionPreviewFile?.let { Uri.fromFile(it) }
             ?: if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
                 Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
@@ -496,10 +547,16 @@ fun NextGenEditorScreen(
         project.imageEditorExposure,
         project.colorLift,
         project.colorGamma,
-        project.colorGain
+        project.colorGain,
+        filterPreviewFile
     ) {
+        // When a real FFmpeg filter preview clip is on screen, the filter is
+        // already baked into those pixels — don't also apply it as a GPU matrix
+        // (that would double-apply for the eq=/colorbalance= filters). The
+        // image-editor / premium-look / curves portions still apply on top.
+        val resolvedFilterId = if (filterPreviewFile != null) "none" else project.selectedFilter
         media3Pipeline.buildEffects(
-            filterId = project.selectedFilter,
+            filterId = resolvedFilterId,
             premiumLookId = project.activePremiumLook,
             imageEditorBrightness = project.imageEditorBrightness,
             imageEditorContrast = project.imageEditorContrast,
@@ -623,6 +680,25 @@ fun NextGenEditorScreen(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text("Animation preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                    }
+                }
+
+                // ── Filter live preview status (Filters fix) ──
+                if (filterPreviewBusy) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Applying filter…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                } else if (filterPreviewError) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Filter preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 

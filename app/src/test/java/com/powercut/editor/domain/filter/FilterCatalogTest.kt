@@ -147,7 +147,8 @@ class FilterCatalogTest {
         // New user-requested filters
         assertTrue(FilterCatalog.ffmpeg("blur_light").startsWith("boxblur="))
         assertTrue(FilterCatalog.ffmpeg("rotate_90").startsWith("transpose="))
-        assertTrue(FilterCatalog.ffmpeg("solarize").startsWith("solarize="))
+        assertTrue(FilterCatalog.ffmpeg("solarize").startsWith("eq=gamma=0.5:saturation=1.2"))
+        assertTrue(FilterCatalog.ffmpeg("solarize_strong").startsWith("eq=gamma=0.3:saturation=1.5:brightness=0.1"))
         assertTrue(FilterCatalog.ffmpeg("posterize_8").startsWith("posterize="))
         assertTrue(FilterCatalog.ffmpeg("edge_detect").startsWith("edgedetect"))
         assertTrue(FilterCatalog.ffmpeg("color_swap").startsWith("colorchannelmixer="))
