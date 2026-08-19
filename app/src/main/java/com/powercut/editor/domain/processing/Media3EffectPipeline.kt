@@ -410,4 +410,55 @@ class Media3EffectPipeline @Inject constructor() {
             colorGain = project.colorGain
         )
     }
+
+    /**
+     * Builds the COMPLETE list of Media3 Effects for live preview, including:
+     *  1. Filter/Look color effects (from FilterCatalog / PremiumLooks)
+     *  2. Image editor adjustments (brightness, contrast, etc.)
+     *  3. **Visual effects** from EffectCatalog (the EffectsScreen)
+     *
+     * This is the method that should be used in NextGenEditorScreen to ensure
+     * ALL effects are visible in the live ExoPlayer preview — not just filters.
+     *
+     * @param selectedEffect The active visual effect ID from EffectCatalog (e.g., "hdr", "vivid")
+     * @param project The full VideoProject for all other parameters
+     * @return Combined list of ColorEffect objects for ExoPlayer.setVideoEffects()
+     */
+    fun buildAllEffects(
+        selectedEffect: String = "none",
+        project: com.powercut.editor.data.VideoProject
+    ): List<ColorEffect> {
+        val allEffects = mutableListOf<ColorEffect>()
+
+        // 1. Color effects from filters/looks/editor
+        val colorEffects = buildEffectsFromProject(project)
+        allEffects.addAll(colorEffects)
+
+        // 2. Visual effect from EffectCatalog (the EffectsScreen effects)
+        //    Converts FFmpeg chain → ColorEffect via EffectGLConverter
+        if (selectedEffect != "none" && selectedEffect.isNotBlank()) {
+            val visualEffects = buildVisualEffect(selectedEffect)
+            allEffects.addAll(visualEffects)
+        }
+
+        Log.d(TAG, "Built ${allEffects.size} total effects (color=${colorEffects.size}, visual=$selectedEffect)")
+        return allEffects
+    }
+
+    /**
+     * Converts an EffectCatalog visual effect ID to ColorEffect objects
+     * by parsing its FFmpeg chain through EffectGLConverter.
+     *
+     * This bridges the gap: EffectCatalog stores FFmpeg chains (for export),
+     * and this method converts them to OpenGL color matrices (for live preview).
+     */
+    private fun buildVisualEffect(effectId: String): List<ColorEffect> {
+        // Look up the FFmpeg chain from EffectCatalog
+        val effect = com.powercut.editor.ui.premium.EffectCatalog.effects
+            .firstOrNull { it.id == effectId }
+        if (effect == null || effect.ffmpegChain.isBlank()) return emptyList()
+
+        // Convert FFmpeg chain → ColorEffect objects
+        return EffectGLConverter.convertChain(effect.ffmpegChain)
+    }
 }

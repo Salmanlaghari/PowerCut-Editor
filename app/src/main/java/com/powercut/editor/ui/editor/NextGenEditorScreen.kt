@@ -486,9 +486,14 @@ fun NextGenEditorScreen(
     // ═══════════════════════════════════════════════════════════════════════════════
     val media3Pipeline = remember { Media3EffectPipeline() }
     
+    // v7.5: Includes selectedEffect (EffectsScreen) in live preview.
+    // Previously only filters/looks/editor adjustments were previewed;
+    // visual effects (HDR, Noir, Vintage, etc.) only appeared at export.
+    // Now ALL effects render live via EffectGLConverter (FFmpeg → OpenGL).
     val videoEffects = remember(
         project.selectedFilter,
         project.activePremiumLook,
+        project.selectedEffect,
         project.imageEditorBrightness,
         project.imageEditorContrast,
         project.imageEditorSaturation,
@@ -498,23 +503,15 @@ fun NextGenEditorScreen(
         project.colorGamma,
         project.colorGain
     ) {
-        media3Pipeline.buildEffects(
-            filterId = project.selectedFilter,
-            premiumLookId = project.activePremiumLook,
-            imageEditorBrightness = project.imageEditorBrightness,
-            imageEditorContrast = project.imageEditorContrast,
-            imageEditorSaturation = project.imageEditorSaturation,
-            imageEditorTemperature = project.imageEditorTemperature,
-            imageEditorExposure = project.imageEditorExposure,
-            colorLift = project.colorLift,
-            colorGamma = project.colorGamma,
-            colorGain = project.colorGain
+        media3Pipeline.buildAllEffects(
+            selectedEffect = project.selectedEffect,
+            project = project
         )
     }
 
-    // Apply the Media3 RgbAdjustment effects live to ExoPlayer video frames.
-    // Tapping a filter or moving a slider recomputes videoEffects above,
-    // which re-runs this effect so the change is visible immediately on GPU.
+    // Apply all effects live to ExoPlayer video frames.
+    // Tapping a filter/effect or moving a slider recomputes videoEffects above,
+    // which re-runs the GPU pipeline so the change is visible immediately.
     DisposableEffect(videoEffects, exoPlayer) {
         if (videoEffects.isNotEmpty()) {
             exoPlayer.setVideoEffects(videoEffects)
