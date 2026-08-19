@@ -105,10 +105,21 @@ jobs:
           echo "FFmpeg already available:"
           ffmpeg -version | head -1
         else
-          echo "FFmpeg not found — installing via apt (timeout 300s)..."
-          timeout 300 sudo apt-get update -qq
-          timeout 300 sudo apt-get install -y -qq ffmpeg
-          ffmpeg -version | head -1
+          echo "FFmpeg not found — trying apt first (timeout 180s)..."
+          if timeout 180 sudo apt-get update -qq 2>/dev/null && \
+             timeout 180 sudo apt-get install -y -qq ffmpeg 2>/dev/null; then
+            echo "FFmpeg installed via apt:"
+            ffmpeg -version | head -1
+          else
+            echo "apt failed or timed out — downloading static FFmpeg build..."
+            curl -sL https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz -o /tmp/ffmpeg.tar.xz
+            tar -xf /tmp/ffmpeg.tar.xz -C /tmp
+            sudo cp /tmp/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg /usr/local/bin/ffmpeg
+            sudo cp /tmp/ffmpeg-master-latest-linux64-gpl/bin/ffprobe /usr/local/bin/ffprobe
+            sudo chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+            echo "FFmpeg installed via static build:"
+            ffmpeg -version | head -1
+          fi
         fi
 
     - name: Run VideoProcessor FFmpeg validation
