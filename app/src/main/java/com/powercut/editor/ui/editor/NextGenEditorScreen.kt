@@ -2887,7 +2887,7 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
         }
         // Category tabs
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("all" to "All", "basic" to "Basic", "cinema" to "Cinema", "film" to "Film", "vintage" to "Vintage", "mood" to "Mood", "neon" to "Neon").forEach { (id, label) ->
+            listOf("all" to "All", "basic" to "Basic", "cinema" to "Cinema", "film" to "Film", "vintage" to "Vintage", "mood" to "Mood", "neon" to "Neon", "adjust" to "Adjust", "transform" to "Transform", "color" to "Color", "effect" to "Effect").forEach { (id, label) ->
                 val sel = filterCategory == id
                 Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { filterCategory = id }.padding(horizontal = 6.dp, vertical = 3.dp)) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
@@ -2956,6 +2956,41 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
                             "autumn" -> Color(0xFFDD6622)
                             "spring" -> Color(0xFF88DD44)
                             "summer" -> Color(0xFFFFDD44)
+                            "blur_light", "blur_medium", "blur_heavy", "gaussian_blur" -> Color(0xFF6688AA)
+                            "sharpen_strong" -> Color(0xFF445566)
+                            "brightness_10", "brightness_20", "brightness_30" -> Color(0xFFFFEECC)
+                            "brightness_neg10", "brightness_neg20" -> Color(0xFF221133)
+                            "contrast_20", "contrast_40" -> Color(0xFF222222)
+                            "contrast_neg20" -> Color(0xFFBBBBBB)
+                            "saturation_0", "saturation_50" -> Color(0xFF999999)
+                            "saturation_150", "saturation_200" -> Color(0xFFFF0066)
+                            "vignette", "vignette_strong" -> Color(0xFF332211)
+                            "hflip", "vflip", "mirror_lr", "mirror_tb" -> Color(0xFF667788)
+                            "rotate_90", "rotate_180", "rotate_270" -> Color(0xFF778899)
+                            "green_tint" -> Color(0xFF22AA44)
+                            "curves_drama" -> Color(0xFF222222)
+                            "curves_retro" -> Color(0xFFCC8855)
+                            "curves_highlight" -> Color(0xFFBBBBBB)
+                            "increase_red", "decrease_red", "red_monochrome" -> Color(0xFFDD2233)
+                            "increase_green", "decrease_green", "green_monochrome" -> Color(0xFF22AA44)
+                            "increase_blue", "decrease_blue", "blue_monochrome" -> Color(0xFF2255DD)
+                            "solarize", "solarize_strong" -> Color(0xFFFF8800)
+                            "posterize_8", "posterize_4" -> Color(0xFFAA66CC)
+                            "edge_detect" -> Color(0xFF555555)
+                            "emboss_filter" -> Color(0xFF888888)
+                            "film_grain", "film_grain_heavy" -> Color(0xFF665544)
+                            "pixelate", "pixelate_medium" -> Color(0xFF776655)
+                            "color_swap" -> Color(0xFFCC44AA)
+                            "sepia_vignette" -> Color(0xFF907030)
+                            "warm_vintage_combo" -> Color(0xFFCC9955)
+                            "cold_blue_combo" -> Color(0xFF4488CC)
+                            "vivid_cinema" -> Color(0xFF5566AA)
+                            "soft_dreamy" -> Color(0xFFD0C0E0)
+                            "grayscale_contrast" -> Color(0xFF555555)
+                            "purple_tone" -> Color(0xFF9944CC)
+                            "yellow_tone" -> Color(0xFFDDCC22)
+                            "cyan_tone" -> Color(0xFF22AACC)
+                            "magenta_tone" -> Color(0xFFCC22AA)
                             else -> Color(0xFF4A6FA5)
                         }
                         // Draw gradient sky
