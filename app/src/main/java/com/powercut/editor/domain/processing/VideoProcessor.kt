@@ -2123,7 +2123,8 @@ class VideoProcessor @Inject constructor(
     // ffmpegChain field, ensuring every user-selectable effect produces a
     // real, visible change in the exported video (fixes the "export looks
     // identical to import" bug where 49/72 effects were silently dropped).
-    private val exactEffectChains: Map<String, String> = mapOf(
+    // internal: exposed for Media3EffectPipeline
+    internal val exactEffectChains: Map<String, String> = mapOf(
         "vivid" to "eq=saturation=1.5:contrast=1.1",
         "cinematic" to "curves=preset=strong_contrast,eq=saturation=0.9",
         "tealorange" to "colorbalance=rs=0.12:gs=-0.05:bs=0.05:rm=0.1:bm=0.08,eq=saturation=1.3:contrast=1.15",

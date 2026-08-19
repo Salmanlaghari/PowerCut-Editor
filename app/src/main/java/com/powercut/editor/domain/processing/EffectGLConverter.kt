@@ -142,6 +142,32 @@ object EffectGLConverter {
             // ── Identity / passthrough ──
             filter == "null" || filter.startsWith("null") -> null
 
+            // ── Kaleidoscope → high saturation + contrast (geometric effect is
+            //    export-only via FFmpeg, but color shift gives a visible preview hint) ──
+            filter.startsWith("kaleidoscope=") -> {
+                createColorMatrixEffect(saturation = 1.4f, contrast = 1.2f, temperature = 8f)
+            }
+
+            // ── Filterboxes / edges (cartoon) → posterize-like high contrast ──
+            filter.startsWith("filterboxes=") || filter.startsWith("edges") -> {
+                createColorMatrixEffect(saturation = 1.6f, contrast = 1.3f)
+            }
+
+            // ── LUT3D (posterize) → high contrast + saturation lift ──
+            filter.startsWith("lut3d=") -> {
+                createColorMatrixEffect(saturation = 1.3f, contrast = 1.2f)
+            }
+
+            // ── Lens correction (distort) → slight saturation + warmth for visible hint ──
+            filter.startsWith("lenscorrection=") -> {
+                createColorMatrixEffect(saturation = 1.1f, contrast = 1.05f)
+            }
+
+            // ── Colormatrix (teal-orange etc.) → parse as color balance approximation ──
+            filter.startsWith("colormatrix=") -> {
+                createColorMatrixEffect(temperature = 8f, saturation = 1.15f, contrast = 1.05f)
+            }
+
             else -> {
                 Log.d(TAG, "Unknown filter, skipping: $filter")
                 null
@@ -211,7 +237,11 @@ object EffectGLConverter {
     }
 
     private fun parseNegate(): ColorEffect {
-        return createColorMatrixEffect(contrast = -1f, brightness = 1f)
+        // contrast=-1 alone produces out = 1-in via the mid-gray offset
+        // (mid = 0.5 - 0.5*(-1) = 1.0), which is a correct color inversion.
+        // Do NOT add brightness=1 — that would push values to 2-in, clamping
+        // everything to white (black frame bug).
+        return createColorMatrixEffect(contrast = -1f)
     }
 
     private fun parseCurves(filter: String): ColorEffect {
@@ -221,7 +251,7 @@ object EffectGLConverter {
             "lighter" -> createColorMatrixEffect(brightness = 0.08f, contrast = 0.95f)
             "vintage" -> createColorMatrixEffect(saturation = 0.7f, contrast = 0.9f, brightness = 0.05f, temperature = 8f)
             "cross_process" -> createColorMatrixEffect(saturation = 1.3f, contrast = 1.1f, temperature = 10f)
-            "negative" -> createColorMatrixEffect(contrast = -1f, brightness = 1f)
+            "negative" -> createColorMatrixEffect(contrast = -1f)
             else -> createColorMatrixEffect(contrast = 1.15f)
         }
     }

@@ -453,12 +453,12 @@ class Media3EffectPipeline @Inject constructor() {
      * and this method converts them to OpenGL color matrices (for live preview).
      */
     private fun buildVisualEffect(effectId: String): List<ColorEffect> {
-        // Look up the FFmpeg chain from EffectCatalog
-        val effect = com.powercut.editor.ui.premium.EffectCatalog.effects
-            .firstOrNull { it.id == effectId }
-        if (effect == null || effect.ffmpegChain.isBlank()) return emptyList()
+        // Use VideoProcessor.exactEffectChains as the single source of truth,
+        // the same map export reads from. EffectCatalog.effects may diverge.
+        val chain = VideoProcessor.exactEffectChains[effectId]
+        if (chain.isNullOrBlank()) return emptyList()
 
-        // Convert FFmpeg chain → ColorEffect objects
-        return EffectGLConverter.convertChain(effect.ffmpegChain)
+        // Convert FFmpeg chain → ColorEffect objects for GPU preview
+        return EffectGLConverter.convertChain(chain)
     }
 }
