@@ -486,9 +486,14 @@ fun NextGenEditorScreen(
     // ═══════════════════════════════════════════════════════════════════════════════
     val media3Pipeline = remember { Media3EffectPipeline() }
     
+    // v7.5: Includes selectedEffect (EffectsScreen) in live preview.
+    // Previously only filters/looks/editor adjustments were previewed;
+    // visual effects (HDR, Noir, Vintage, etc.) only appeared at export.
+    // Now ALL effects render live via EffectGLConverter (FFmpeg → OpenGL).
     val videoEffects = remember(
         project.selectedFilter,
         project.activePremiumLook,
+        project.selectedEffect,
         project.imageEditorBrightness,
         project.imageEditorContrast,
         project.imageEditorSaturation,
@@ -498,23 +503,15 @@ fun NextGenEditorScreen(
         project.colorGamma,
         project.colorGain
     ) {
-        media3Pipeline.buildEffects(
-            filterId = project.selectedFilter,
-            premiumLookId = project.activePremiumLook,
-            imageEditorBrightness = project.imageEditorBrightness,
-            imageEditorContrast = project.imageEditorContrast,
-            imageEditorSaturation = project.imageEditorSaturation,
-            imageEditorTemperature = project.imageEditorTemperature,
-            imageEditorExposure = project.imageEditorExposure,
-            colorLift = project.colorLift,
-            colorGamma = project.colorGamma,
-            colorGain = project.colorGain
+        media3Pipeline.buildAllEffects(
+            selectedEffect = project.selectedEffect,
+            project = project
         )
     }
 
-    // Apply the Media3 RgbAdjustment effects live to ExoPlayer video frames.
-    // Tapping a filter or moving a slider recomputes videoEffects above,
-    // which re-runs this effect so the change is visible immediately on GPU.
+    // Apply all effects live to ExoPlayer video frames.
+    // Tapping a filter/effect or moving a slider recomputes videoEffects above,
+    // which re-runs the GPU pipeline so the change is visible immediately.
     DisposableEffect(videoEffects, exoPlayer) {
         if (videoEffects.isNotEmpty()) {
             exoPlayer.setVideoEffects(videoEffects)
@@ -680,8 +677,9 @@ fun NextGenEditorScreen(
                             .drawWithContent {
                                 drawContent()
                                 when (project.selectedEffect) {
+                                    // Scanline/grid effects: overlays are the ONLY way to show
+                                    // horizontal lines — color matrices can't do this.
                                     "vhs", "scanline", "crt", "old_film" -> {
-                                        // VHS scanlines
                                         for (i in 0..20) {
                                             val y = size.height * i / 20f
                                             drawRect(
@@ -691,16 +689,8 @@ fun NextGenEditorScreen(
                                             )
                                         }
                                     }
-                                    "vignette" -> {
-                                        drawRect(
-                                            brush = Brush.radialGradient(
-                                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
-                                                center = center,
-                                                radius = size.maxDimension * 0.6f
-                                            )
-                                        )
-                                    }
-                                    "film_grain", "lofi" -> {
+                                    // Film grain: noise dots can't be represented by a color matrix.
+                                    "film_grain" -> {
                                         for (i in 0..30) {
                                             val x = (i * 137 + 53) % size.width.toInt()
                                             val y = (i * 89 + 29) % size.height.toInt()
@@ -711,16 +701,9 @@ fun NextGenEditorScreen(
                                             )
                                         }
                                     }
-                                    "night_vision" -> {
-                                        drawRect(color = Color(0xFF00FF00).copy(alpha = 0.08f))
-                                    }
-                                    "thermal" -> {
-                                        drawRect(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(Color(0xFFFF0000).copy(alpha = 0.06f), Color(0xFF0000FF).copy(alpha = 0.06f))
-                                            )
-                                        )
-                                    }
+                                    // vignette, lofi, night_vision, thermal: GPU color matrix
+                                    // handles the color shift — no overlay needed (prevents
+                                    // double-application which washed out the effect).
                                     else -> { /* no overlay for other effects */ }
                                 }
                             }
