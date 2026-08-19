@@ -453,9 +453,9 @@ class Media3EffectPipeline @Inject constructor() {
      * and this method converts them to OpenGL color matrices (for live preview).
      */
     private fun buildVisualEffect(effectId: String): List<ColorEffect> {
-        // Use VideoProcessor.exactEffectChains as the single source of truth,
+        // Use VideoProcessor.EXACT_EFFECT_CHAINS as the single source of truth,
         // the same map export reads from. EffectCatalog.effects may diverge.
-        val chain = VideoProcessor.exactEffectChains[effectId]
+        val chain = VideoProcessor.EXACT_EFFECT_CHAINS[effectId]
         if (chain.isNullOrBlank()) return emptyList()
 
         // Convert FFmpeg chain → ColorEffect objects for GPU preview
