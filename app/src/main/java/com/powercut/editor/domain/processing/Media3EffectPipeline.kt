@@ -410,4 +410,44 @@ class Media3EffectPipeline @Inject constructor() {
             colorGain = project.colorGain
         )
     }
+
+    /**
+     * Builds the COMPLETE list of live-preview effects, combining the colour
+     * adjustments (filters / looks / image editor / curves) with the active
+     * visual effect from the EffectsScreen.
+     *
+     * Only effects that can be faithfully reproduced by a GPU colour matrix
+     * (pure `eq`/`colorbalance`/`hue`/`vignette`/`curves`/`negate` chains) are
+     * applied here. Complex effects that need blur / noise / edges / pixelation /
+     * convolution / geometric distortion are intentionally NOT returned — they
+     * are rendered through the REAL FFmpeg preview path ([EffectPreviewRenderer])
+     * so the live preview matches the exported frame exactly.
+     */
+    fun buildAllEffects(
+        selectedEffect: String = "none",
+        project: com.powercut.editor.data.VideoProject
+    ): List<ColorEffect> {
+        val allEffects = mutableListOf<ColorEffect>()
+        allEffects.addAll(buildEffectsFromProject(project))
+        if (selectedEffect != "none" && selectedEffect.isNotBlank()) {
+            allEffects.addAll(buildVisualEffect(selectedEffect))
+        }
+        Log.d(TAG, "Built ${allEffects.size} total live effects (visual=$selectedEffect)")
+        return allEffects
+    }
+
+    /**
+     * Converts an EffectsScreen effect ID to GPU ColorEffect(s) via
+     * [EffectGLConverter], reading the SAME chain the export uses
+     * ([VideoProcessor.EXACT_EFFECT_CHAINS]). Returns empty for effects that
+     * cannot be represented on the GPU so they fall back to the FFmpeg path.
+     */
+    private fun buildVisualEffect(effectId: String): List<ColorEffect> {
+        if (!VideoProcessor.isGpuRepresentableEffect(effectId)) return emptyList()
+        val chain = VideoProcessor.EXACT_EFFECT_CHAINS[
+            effectId.lowercase().replace(" ", "_").replace("-", "_")
+        ] ?: return emptyList()
+        if (chain.isBlank()) return emptyList()
+        return EffectGLConverter.convertChain(chain)
+    }
 }

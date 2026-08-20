@@ -109,6 +109,7 @@ import androidx.media3.ui.PlayerView
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.VideoProject
 import com.powercut.editor.domain.processing.Media3EffectPipeline
+import com.powercut.editor.domain.processing.VideoProcessor
 import com.powercut.editor.domain.processing.TransitionCatalog
 import com.powercut.editor.domain.processing.TextAnimationCatalog
 import com.powercut.editor.domain.processing.TextAnimationPreviewRenderer
@@ -434,16 +435,18 @@ fun NextGenEditorScreen(
     var filterPreviewError by remember { mutableStateOf(false) }
     var filterPreviewToken by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(project.selectedFilter, project.videoPath) {
+    LaunchedEffect(project.selectedFilter, project.selectedEffect, project.videoPath) {
         val fid = project.selectedFilter.lowercase()
-        if (fid == "none" || fid.isBlank() || project.videoPath.isBlank()) {
+        val eid = project.selectedEffect.lowercase()
+        if (fid == "none" && (eid == "none" || eid.isBlank()) || project.videoPath.isBlank()) {
             filterPreviewFile = null
             filterPreviewBusy = false
             filterPreviewError = false
             return@LaunchedEffect
         }
-        if (FilterPreviewRenderer.buildPreviewFilter(fid) == null) {
-            // No real FFmpeg chain (e.g. a pure GPU matrix filter) — play raw.
+        if (FilterPreviewRenderer.buildPreviewFilter(fid, eid) == null) {
+            // No real FFmpeg chain needed (e.g. only GPU-matrix colour effects,
+            // which the Media3 pipeline draws live) — play raw.
             filterPreviewFile = null
             filterPreviewBusy = false
             filterPreviewError = false
@@ -455,6 +458,7 @@ fun NextGenEditorScreen(
         val preview = filterPreviewRenderer.renderPreview(
             sourcePath = project.videoPath,
             filterId = fid,
+            effectId = eid,
             requestedSec = FilterPreviewRenderer.PREVIEW_SEC
         )
         filterPreviewBusy = false
@@ -539,6 +543,7 @@ fun NextGenEditorScreen(
     
     val videoEffects = remember(
         project.selectedFilter,
+        project.selectedEffect,
         project.activePremiumLook,
         project.imageEditorBrightness,
         project.imageEditorContrast,
@@ -550,22 +555,18 @@ fun NextGenEditorScreen(
         project.colorGain,
         filterPreviewFile
     ) {
-        // When a real FFmpeg filter preview clip is on screen, the filter is
-        // already baked into those pixels — don't also apply it as a GPU matrix
-        // (that would double-apply for the eq=/colorbalance= filters). The
-        // image-editor / premium-look / curves portions still apply on top.
+        // When a real FFmpeg preview clip is on screen, the filter (and any
+        // non-GPU effect) is already baked into those pixels — don't also apply
+        // it as a GPU matrix (that would double-apply or distort the look).
+        // GPU-representable effects that were NOT baked still apply live.
         val resolvedFilterId = if (filterPreviewFile != null) "none" else project.selectedFilter
-        media3Pipeline.buildEffects(
-            filterId = resolvedFilterId,
-            premiumLookId = project.activePremiumLook,
-            imageEditorBrightness = project.imageEditorBrightness,
-            imageEditorContrast = project.imageEditorContrast,
-            imageEditorSaturation = project.imageEditorSaturation,
-            imageEditorTemperature = project.imageEditorTemperature,
-            imageEditorExposure = project.imageEditorExposure,
-            colorLift = project.colorLift,
-            colorGamma = project.colorGamma,
-            colorGain = project.colorGain
+        val effectBaked =
+            filterPreviewFile != null && project.selectedEffect != "none" &&
+                !VideoProcessor.isGpuRepresentableEffect(project.selectedEffect)
+        val resolvedEffectId = if (effectBaked) "none" else project.selectedEffect
+        media3Pipeline.buildAllEffects(
+            selectedEffect = resolvedEffectId,
+            project = project.copy(selectedFilter = resolvedFilterId)
         )
     }
 
@@ -690,7 +691,7 @@ fun NextGenEditorScreen(
                             .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Applying filter…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Applying filter / effect…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 } else if (filterPreviewError) {
                     Box(
@@ -698,7 +699,7 @@ fun NextGenEditorScreen(
                             .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Filter preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                        Text("Filter / effect preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 
@@ -748,60 +749,11 @@ fun NextGenEditorScreen(
                             }
                     )
                 }
-                // Selected effect overlay (VHS scanlines, glitch, etc.)
-                if (project.selectedEffect != "none") {
-                    val effectOverlayAlpha = 0.12f
-                    Box(
-                        modifier = Modifier.fillMaxSize()
-                            .drawWithContent {
-                                drawContent()
-                                when (project.selectedEffect) {
-                                    "vhs", "scanline", "crt", "old_film" -> {
-                                        // VHS scanlines
-                                        for (i in 0..20) {
-                                            val y = size.height * i / 20f
-                                            drawRect(
-                                                color = Color.Black.copy(alpha = effectOverlayAlpha),
-                                                topLeft = GeomOffset(0f, y),
-                                                size = GeomSize(size.width, size.height * 0.02f)
-                                            )
-                                        }
-                                    }
-                                    "vignette" -> {
-                                        drawRect(
-                                            brush = Brush.radialGradient(
-                                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
-                                                center = center,
-                                                radius = size.maxDimension * 0.6f
-                                            )
-                                        )
-                                    }
-                                    "film_grain", "lofi" -> {
-                                        for (i in 0..30) {
-                                            val x = (i * 137 + 53) % size.width.toInt()
-                                            val y = (i * 89 + 29) % size.height.toInt()
-                                            drawCircle(
-                                                color = Color.White.copy(alpha = 0.1f),
-                                                radius = 1f,
-                                                center = GeomOffset(x.toFloat(), y.toFloat())
-                                            )
-                                        }
-                                    }
-                                    "night_vision" -> {
-                                        drawRect(color = Color(0xFF00FF00).copy(alpha = 0.08f))
-                                    }
-                                    "thermal" -> {
-                                        drawRect(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(Color(0xFFFF0000).copy(alpha = 0.06f), Color(0xFF0000FF).copy(alpha = 0.06f))
-                                            )
-                                        )
-                                    }
-                                    else -> { /* no overlay for other effects */ }
-                                }
-                            }
-                    )
-                }
+                // Selected visual effects are now rendered through the REAL
+                // FFmpeg preview path (FilterPreviewRenderer bakes the effect
+                // chain into the preview clip) or, for pure colour-matrix
+                // effects, via the Media3 GPU pipeline — so a Compose overlay is
+                // no longer needed and would only double-draw the effect.
                 // Chroma key overlay: show green screen indicator
                 if (project.greenScreenEnabled) {
                     Box(

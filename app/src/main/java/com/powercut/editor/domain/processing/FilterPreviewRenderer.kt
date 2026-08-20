@@ -50,34 +50,52 @@ class FilterPreviewRenderer(private val context: Context) {
         /** Minimum source duration needed to extract a preview segment. */
         const val MIN_SOURCE_SEC = 0.5
 
-        /**
-         * Returns the real FFmpeg `-vf` chain for [filterId], or null when the
-         * filter is "none"/blank/unknown (no preview needed — play raw video).
-         * Pure function — mirrors [FilterCatalog.ffmpeg].
-         */
-        fun buildPreviewFilter(filterId: String?): String? {
-            val id = filterId?.trim()?.lowercase() ?: return null
-            if (id.isEmpty() || id == "none") return null
-            val chain = FilterCatalog.ffmpeg(id)
-            return chain.ifBlank { null }
-        }
+    /**
+     * Returns the real FFmpeg `-vf` chain for a live preview combining the
+     * selected [filterId] and [effectId], or null when neither needs a real
+     * FFmpeg render (none selected, or only GPU-representable colour effects
+     * that the Media3 pipeline already draws live).
+     *
+     * A complex effect (blur / noise / edges / pixelate / emboss / convolution /
+     * geometric distortion) cannot be approximated by a colour matrix, so it is
+     * always baked into the FFmpeg preview clip together with the filter. A
+     * GPU-representable effect (pure eq/colorbalance/hue/vignette/curves/negate)
+     * is intentionally excluded here — the Media3 GPU pipeline applies it live.
+     *
+     * Pure function — mirrors [com.powercut.editor.domain.filter.FilterCatalog]
+     * and [VideoProcessor.EXACT_EFFECT_CHAINS] (the SAME sources the export uses).
+     */
+    fun buildPreviewFilter(filterId: String?, effectId: String? = null): String? {
+        val fid = filterId?.trim()?.lowercase()
+        val filterChain = if (fid != null && fid != "none") FilterCatalog.ffmpeg(fid) else ""
+
+        val eid = effectId?.trim()?.lowercase()
+        val effectChain = if (eid != null && eid != "none" && !VideoProcessor.isGpuRepresentableEffect(eid)) {
+            VideoProcessor.EXACT_EFFECT_CHAINS[eid] ?: ""
+        } else ""
+
+        val parts = listOf(filterChain, effectChain).map { it.trim() }.filter { it.isNotBlank() }
+        return if (parts.isEmpty()) null else parts.joinToString(",")
+    }
     }
 
     /**
-     * Renders a filter preview clip for [filterId] using [sourcePath].
+     * Renders a preview clip combining the selected [filterId] and [effectId]
+     * using [sourcePath].
      *
      * @return the rendered MP4 file, or null when the source is missing/too
-     *         short, the filter is "none", or FFmpeg fails. The caller plays
-     *         the returned file back on the preview player.
+     *         short, nothing needs a real FFmpeg render, or FFmpeg fails. The
+     *         caller plays the returned file back on the preview player.
      */
     suspend fun renderPreview(
         sourcePath: String,
         filterId: String?,
+        effectId: String? = null,
         requestedSec: Double = PREVIEW_SEC
     ): File? = withContext(Dispatchers.IO) {
-        val chain = buildPreviewFilter(filterId)
+        val chain = buildPreviewFilter(filterId, effectId)
         if (chain == null) {
-            Log.d(TAG, "renderPreview: filter '$filterId' needs no preview")
+            Log.d(TAG, "renderPreview: filter '$filterId' + effect '$effectId' need no preview")
             return@withContext null
         }
 

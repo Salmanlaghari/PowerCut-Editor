@@ -209,4 +209,48 @@ class Media3EffectPipelineTest {
         assertNotNull(PremiumLooks.byId("bright_lift"))
         assertNotNull(PremiumLooks.byId("cinema_teal"))
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Unified live-preview routing (buildAllEffects)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun buildAllEffects_gpuEffectIsAppliedLive() {
+        // "vivid" is GPU-representable -> it MUST appear in the live preview list.
+        val project = VideoProject(selectedEffect = "vivid")
+        val effects = pipeline.buildAllEffects(selectedEffect = "vivid", project = project)
+        assertFalse("GPU effect 'vivid' must be applied in the live preview", effects.isEmpty())
+    }
+
+    @Test
+    fun buildAllEffects_nonGpuEffectRoutedToFfmpeg() {
+        // "posterize" is NOT GPU-representable -> it must NOT be faked on the GPU
+        // pipeline; it is rendered via the real FFmpeg preview/export path instead.
+        val project = VideoProject(selectedEffect = "posterize")
+        val effects = pipeline.buildAllEffects(selectedEffect = "posterize", project = project)
+        // Default project has no filter/look/editor, so the only possible effect
+        // would be the (rejected) GPU one -> list must be empty.
+        assertTrue(
+            "Non-GPU effect 'posterize' must NOT be applied as a fake GPU matrix",
+            effects.isEmpty()
+        )
+    }
+
+    @Test
+    fun buildAllEffects_combinesFilterAndGpuEffect() {
+        val project = VideoProject(selectedFilter = "warm", selectedEffect = "vivid")
+        val effects = pipeline.buildAllEffects(selectedEffect = "vivid", project = project)
+        // warm filter (1) + vivid effect (1) = 2 live effects.
+        assertEquals("warm filter + vivid effect should yield 2 live effects", 2, effects.size)
+    }
+
+    @Test
+    fun buildAllEffects_nonGpuEffectDoesNotDoubleApplyWithFilter() {
+        // warm (GPU filter) + posterize (FFmpeg effect). The posterize must not be
+        // added as a fake GPU matrix, but the warm filter should still apply.
+        val project = VideoProject(selectedFilter = "warm", selectedEffect = "posterize")
+        val effects = pipeline.buildAllEffects(selectedEffect = "posterize", project = project)
+        // Only the warm filter is on the GPU path -> exactly 1 effect.
+        assertEquals("warm filter only (posterize routed to FFmpeg) => 1 live effect", 1, effects.size)
+    }
 }
