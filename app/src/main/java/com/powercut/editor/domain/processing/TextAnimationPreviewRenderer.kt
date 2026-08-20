@@ -1,7 +1,6 @@
 package com.powercut.editor.domain.processing
 
 import android.content.Context
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
@@ -40,9 +39,6 @@ class TextAnimationPreviewRenderer(private val context: Context) {
 
         /** Seconds of footage shown in the preview clip. */
         const val PREVIEW_SEC = 2.4
-
-        /** Minimum source duration needed to render a preview clip. */
-        const val MIN_SOURCE_SEC = PREVIEW_SEC
 
         /**
          * Builds the `drawtext` chain for a 2.4s preview clip using the SAME
@@ -90,11 +86,16 @@ class TextAnimationPreviewRenderer(private val context: Context) {
             Log.e(TAG, "renderPreview: could not resolve source $sourcePath")
             return@withContext null
         }
-        val durationMs = mediaDurationMs(resolved)
-        if (durationMs == null || durationMs / 1000.0 < MIN_SOURCE_SEC) {
+        // Robust duration probe: MediaMetadataRetriever tried first, FFmpeg
+        // fallback. Only a clip we *measured* as degenerate (≤ floor) is
+        // skipped; an unreadable duration no longer blocks legitimate short
+        // clips (e.g. a 13 s test clip) from previewing.
+        val durationMs = PreviewDurationProbe.probe(resolved)
+        if (PreviewDurationPolicy.isDegenerate(durationMs)) {
             Log.w(TAG, "renderPreview: source too short for an animation preview")
             return@withContext null
         }
+        val effectiveMs = durationMs ?: (PREVIEW_SEC * 1000).toLong()
         val anim = TextAnimationCatalog.normalize(animationId)
         if (TextAnimationCatalog.isNone(anim) || text.isBlank()) {
             Log.w(TAG, "renderPreview: animation '$anim' or text is empty")
@@ -197,18 +198,5 @@ class TextAnimationPreviewRenderer(private val context: Context) {
             Log.e(TAG, "resolveToFile failed", e)
             null
         }
-    }
-
-    private fun mediaDurationMs(file: File): Long? = try {
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(file.absolutePath)
-        val duration = retriever
-            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            ?.toLongOrNull()
-        retriever.release()
-        duration
-    } catch (e: Exception) {
-        Log.e(TAG, "mediaDurationMs failed", e)
-        null
     }
 }

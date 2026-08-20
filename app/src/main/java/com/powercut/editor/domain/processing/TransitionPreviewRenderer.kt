@@ -1,7 +1,6 @@
 package com.powercut.editor.domain.processing
 
 import android.content.Context
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
@@ -39,9 +38,6 @@ class TransitionPreviewRenderer(private val context: Context) {
 
         /** Seconds of footage on each side of the cut in the preview clip. */
         const val SEGMENT_SEC = 1.2
-
-        /** Minimum source duration needed to extract two distinct segments. */
-        const val MIN_SOURCE_SEC = SEGMENT_SEC * 2
 
         /**
          * Builds the labeled `xfade` filter for a 2-segment preview from the
@@ -91,11 +87,16 @@ class TransitionPreviewRenderer(private val context: Context) {
             Log.e(TAG, "renderPreview: could not resolve source $sourcePath")
             return@withContext null
         }
-        val durationMs = mediaDurationMs(resolved)
-        if (durationMs == null || durationMs / 1000.0 < MIN_SOURCE_SEC) {
+        // Robust duration probe: MediaMetadataRetriever tried first, FFmpeg
+        // fallback. Only a clip we *measured* as degenerate (≤ floor) is
+        // skipped; an unreadable duration no longer blocks legitimate short
+        // clips (e.g. a 13 s test clip) from previewing.
+        val durationMs = PreviewDurationProbe.probe(resolved)
+        if (PreviewDurationPolicy.isDegenerate(durationMs)) {
             Log.w(TAG, "renderPreview: source too short for a two-segment preview")
             return@withContext null
         }
+        val effectiveMs = durationMs ?: (SEGMENT_SEC * 2 * 1000).toLong()
 
         val filter = buildPreviewFilter(transitionId, SEGMENT_SEC, requestedSec)
         if (filter == null) {
@@ -105,7 +106,7 @@ class TransitionPreviewRenderer(private val context: Context) {
 
         // Two distinct segments: A near the start, B from the middle.
         val startA = 0.0
-        val startB = (durationMs / 1000.0 / 2.0).coerceAtLeast(SEGMENT_SEC)
+        val startB = (effectiveMs / 1000.0 / 2.0).coerceAtLeast(SEGMENT_SEC)
         val out = File(context.cacheDir, "transition_preview_${System.currentTimeMillis()}.mp4")
 
         val args = arrayListOf(
@@ -175,18 +176,5 @@ class TransitionPreviewRenderer(private val context: Context) {
             Log.e(TAG, "resolveToFile failed", e)
             null
         }
-    }
-
-    private fun mediaDurationMs(file: File): Long? = try {
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(file.absolutePath)
-        val duration = retriever
-            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            ?.toLongOrNull()
-        retriever.release()
-        duration
-    } catch (e: Exception) {
-        Log.e(TAG, "mediaDurationMs failed", e)
-        null
     }
 }

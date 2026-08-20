@@ -661,7 +661,7 @@ fun NextGenEditorScreen(
                             .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Transition preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                        Text("Transition preview unavailable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 
@@ -680,7 +680,7 @@ fun NextGenEditorScreen(
                             .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Animation preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                        Text("Animation preview unavailable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 
@@ -699,7 +699,7 @@ fun NextGenEditorScreen(
                             .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Filter / effect preview unavailable (video too short)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
+                        Text("Filter / effect preview unavailable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 

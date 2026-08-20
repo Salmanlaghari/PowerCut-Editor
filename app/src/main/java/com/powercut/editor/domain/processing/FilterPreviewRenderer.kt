@@ -1,7 +1,6 @@
 package com.powercut.editor.domain.processing
 
 import android.content.Context
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
@@ -47,10 +46,7 @@ class FilterPreviewRenderer(private val context: Context) {
         /** Seconds of footage used for the filter preview clip. */
         const val PREVIEW_SEC = 3.0
 
-        /** Minimum source duration needed to extract a preview segment. */
-        const val MIN_SOURCE_SEC = 0.5
-
-    /**
+/**
      * Returns the real FFmpeg `-vf` chain for a live preview combining the
      * selected [filterId] and [effectId], or null when neither needs a real
      * FFmpeg render (none selected, or only GPU-representable colour effects
@@ -105,13 +101,19 @@ class FilterPreviewRenderer(private val context: Context) {
             return@withContext null
         }
 
-        val durationMs = mediaDurationMs(resolved)
-        if (durationMs == null || durationMs / 1000.0 < MIN_SOURCE_SEC) {
+        // Robust duration probe: MediaMetadataRetriever is tried first, with an
+        // FFmpeg fallback. A clip whose duration CANNOT be read must NOT be
+        // rejected as "too short" — only a clip we actually measured as
+        // degenerate (≤ floor) is skipped. This is what unblocks legitimate
+        // short clips (e.g. a 13 s test clip) from the preview blocker.
+        val durationMs = PreviewDurationProbe.probe(resolved)
+        if (PreviewDurationPolicy.isDegenerate(durationMs)) {
             Log.w(TAG, "renderPreview: source too short for a filter preview")
             return@withContext null
         }
+        val effectiveMs = durationMs ?: (requestedSec * 1000).toLong()
 
-        val segSec = requestedSec.coerceAtMost(durationMs / 1000.0)
+        val segSec = requestedSec.coerceAtMost(effectiveMs / 1000.0)
         val out = File(context.cacheDir, "filter_preview_${System.currentTimeMillis()}.mp4")
 
         val args = arrayListOf(
@@ -173,18 +175,5 @@ class FilterPreviewRenderer(private val context: Context) {
             Log.e(TAG, "resolveToFile failed", e)
             null
         }
-    }
-
-    private fun mediaDurationMs(file: File): Long? = try {
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(file.absolutePath)
-        val duration = retriever
-            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            ?.toLongOrNull()
-        retriever.release()
-        duration
-    } catch (e: Exception) {
-        Log.e(TAG, "mediaDurationMs failed", e)
-        null
     }
 }
