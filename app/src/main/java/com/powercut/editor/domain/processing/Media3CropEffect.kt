@@ -13,10 +13,12 @@ object Media3CropEffect {
             "4:5" -> 4f / 5f
             "21:9" -> 21f / 9f
             "3:4" -> 3f / 4f
+            "2:3" -> 2f / 3f
             else -> return null
         }
-        val sourceWidth = project.resolutionWidth.takeIf { it > 0 } ?: 1920
-        val sourceHeight = project.resolutionHeight.takeIf { it > 0 } ?: 1080
+        val sourceWidth = project.resolutionWidth
+        val sourceHeight = project.resolutionHeight
+        if (sourceWidth <= 0 || sourceHeight <= 0) return null
         val sourceAspect = sourceWidth.toFloat() / sourceHeight.toFloat()
         return if (sourceAspect > targetAspect) {
             val halfWidth = (targetAspect / sourceAspect).coerceIn(0.01f, 1f)
@@ -24,8 +26,6 @@ object Media3CropEffect {
         } else if (sourceAspect < targetAspect) {
             val halfHeight = (sourceAspect / targetAspect).coerceIn(0.01f, 1f)
             Crop(-1f, 1f, -halfHeight, halfHeight)
-        } else {
-            null
-        }
+        } else null
     }
 }
