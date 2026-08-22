@@ -21,7 +21,7 @@ import androidx.media3.common.util.GlUtil
 //  - hue= (hue rotation, saturation)
 //  - vignette= (brightness reduction + contrast boost)
 //  - unsharp= (contrast boost approximation)
-//  - negate (invert → contrast=-1, brightness=1)
+//  - negate (invert → contrast=-1)
 //  - curves= (preset → color adjustments)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -113,6 +113,13 @@ object EffectGLConverter {
                 createColorMatrixEffect(saturation = 1.2f, contrast = 1.1f)
             }
 
+            // ── Geometry-only filters still need a visible live-preview hint.
+            // The exact geometry is retained for FFmpeg export; the GPU path
+            // uses a restrained contrast/saturation cue instead of going blank.
+            filter.startsWith("scale=") -> {
+                createColorMatrixEffect(saturation = 1.15f, contrast = 1.15f)
+            }
+
             // ── Convolution (emboss) → high contrast ──
             filter.startsWith("convolution=") -> {
                 createColorMatrixEffect(contrast = 1.4f, saturation = 0.3f, brightness = 0.1f)
@@ -133,12 +140,6 @@ object EffectGLConverter {
                 createColorMatrixEffect(brightness = 0.02f, contrast = 0.95f)
             }
 
-            // ── Lens correction → no color change ──
-            filter.startsWith("lenscorrection=") -> null
-
-            // ── Scale (pixelate pipeline) → no color change ──
-            filter.startsWith("scale=") -> null
-
             // ── Identity / passthrough ──
             filter == "null" || filter.startsWith("null") -> null
 
@@ -153,12 +154,12 @@ object EffectGLConverter {
                 createColorMatrixEffect(saturation = 1.6f, contrast = 1.3f)
             }
 
-            // ── LUT3D (posterize) → high contrast + saturation lift ──
-            filter.startsWith("lut3d=") -> {
+            // ── LUT filters (posterize) → high contrast + saturation lift ──
+            filter.startsWith("lut3d=") || filter.startsWith("lutrgb=") -> {
                 createColorMatrixEffect(saturation = 1.3f, contrast = 1.2f)
             }
 
-            // ── Lens correction (distort) → slight saturation + warmth for visible hint ──
+            // ── Lens correction → slight saturation + warmth for visible hint ──
             filter.startsWith("lenscorrection=") -> {
                 createColorMatrixEffect(saturation = 1.1f, contrast = 1.05f)
             }
