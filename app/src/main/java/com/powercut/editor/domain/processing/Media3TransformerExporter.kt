@@ -6,7 +6,6 @@ import android.os.Looper
 import android.util.Log
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
-import androidx.media3.effect.RgbMatrix
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
@@ -14,6 +13,7 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
+import com.powercut.editor.data.TrackType
 import com.powercut.editor.data.VideoProject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -34,14 +34,15 @@ class Media3TransformerExporter @Inject constructor(
     }
 
     fun shouldUseForProject(project: VideoProject): Boolean {
-        val videoClipCount = project.timeline.tracks.filter { it.type == com.powercut.editor.data.TrackType.VIDEO }.flatMap { it.clips }.size
+        val videoClipCount = project.timeline.tracks.filter { it.type == TrackType.VIDEO }.flatMap { it.clips }.size
         if (videoClipCount > 1) return false
-        if (!hasColorAdjustments(project) && !hasCrop(project)) return false
+        if (!hasColorAdjustments(project) && Media3CropEffect.forProject(project) == null) return false
         return project.selectedEffect == "none" && project.keyframeTracks.isEmpty() && project.speedFactor == 1.0f &&
             project.transitionType == "none" && project.backgroundMusicPath.isNullOrEmpty() && !project.isMuted &&
             project.autoCaptionsLanguage == "off" && project.rotationDegrees == 0f && !project.isFlippedHorizontal &&
-            !project.isFlippedVertical && project.activeTextOverlay.isNullOrEmpty() && project.stickerType == "none" &&
-            project.activeTemplateId == "none" && project.imageOverlayPath.isNullOrEmpty() && !project.greenScreenEnabled
+            !project.isFlippedVertical && !project.isReverseEnabled && project.activeTextOverlay.isNullOrEmpty() &&
+            project.stickerType == "none" && project.activeTemplateId == "none" && project.imageOverlayPath.isNullOrEmpty() &&
+            !project.greenScreenEnabled
     }
 
     private fun hasColorAdjustments(project: VideoProject): Boolean =
@@ -51,8 +52,6 @@ class Media3TransformerExporter @Inject constructor(
             project.imageEditorTemperature != 0f || project.imageEditorExposure != 0f || project.colorLift != 0f ||
             project.colorGamma != 0f || project.colorGain != 0f
 
-    private fun hasCrop(project: VideoProject): Boolean = project.cropPreset.isNotBlank() && !project.cropPreset.equals("free", ignoreCase = true)
-
     suspend fun export(project: VideoProject, inputPath: String, outputPath: String, onProgress: (Int) -> Unit): Boolean {
         if (!File(inputPath).exists()) return false
         val effects = mutableListOf<Effect>()
@@ -61,26 +60,53 @@ class Media3TransformerExporter @Inject constructor(
         if (effects.isEmpty()) return false
         File(outputPath).takeIf { it.exists() }?.delete()
         onProgress(0)
+        val mainHandler = Handler(Looper.getMainLooper())
         val finished = java.util.concurrent.atomic.AtomicBoolean(false)
         val progressHolder = ProgressHolder()
-        val mainHandler = Handler(Looper.getMainLooper())
-        val edited = EditedMediaItem.Builder(buildMediaItem(inputPath, project)).setEffects(Effects(emptyList(), effects)).build()
+        val mediaItem = buildMediaItem(inputPath, project)
+        val edited = EditedMediaItem.Builder(mediaItem).setEffects(Effects(emptyList(), effects)).build()
+
         return suspendCancellableCoroutine { cont ->
-            val transformer = Transformer.Builder(context).addListener(object : Transformer.Listener {
-                override fun onCompleted(composition: Composition, exportResult: ExportResult) { finished.set(true); cont.resume(true) }
-                override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) { Log.e(TAG, "Transformer export failed", exportException); finished.set(true); cont.resume(false) }
-            }).build()
+            var transformer: Transformer? = null
             val poll = object : Runnable {
                 override fun run() {
                     if (finished.get() || cont.isCancelled) return
-                    if (transformer.getProgress(progressHolder) == Transformer.PROGRESS_STATE_AVAILABLE) onProgress(progressHolder.progress.coerceIn(0, 100))
+                    try {
+                        val current = transformer
+                        if (current != null && current.getProgress(progressHolder) == Transformer.PROGRESS_STATE_AVAILABLE) {
+                            onProgress(progressHolder.progress.coerceIn(0, 100))
+                        }
+                    } catch (error: Exception) {
+                        Log.w(TAG, "Transformer progress polling failed: ${error.message}")
+                    }
                     if (!finished.get() && !cont.isCancelled) mainHandler.postDelayed(this, PROGRESS_POLL_INTERVAL_MS)
                 }
             }
-            mainHandler.post(poll)
-            cont.invokeOnCancellation { finished.set(true); mainHandler.removeCallbacks(poll); runCatching { transformer.cancel() } }
-            runCatching { transformer.start(edited, outputPath) }.onFailure {
-                finished.set(true); mainHandler.removeCallbacks(poll); if (cont.isActive) cont.resume(false)
+            mainHandler.post {
+                try {
+                    transformer = Transformer.Builder(context).addListener(object : Transformer.Listener {
+                        override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                            finished.set(true); mainHandler.removeCallbacks(poll); cont.resume(true)
+                        }
+                        override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                            Log.e(TAG, "Transformer export failed", exportException)
+                            finished.set(true); mainHandler.removeCallbacks(poll); cont.resume(false)
+                        }
+                    }).build()
+                    transformer!!.start(edited, outputPath)
+                    mainHandler.post(poll)
+                } catch (error: Exception) {
+                    Log.e(TAG, "Transformer start failed", error)
+                    finished.set(true); mainHandler.removeCallbacks(poll)
+                    if (cont.isActive) cont.resume(false)
+                }
+            }
+            cont.invokeOnCancellation {
+                finished.set(true)
+                mainHandler.post {
+                    mainHandler.removeCallbacks(poll)
+                    try { transformer?.cancel() } catch (error: Exception) { Log.w(TAG, "Transformer cancel failed: ${error.message}") }
+                }
             }
         }.also { ok ->
             val output = File(outputPath)
