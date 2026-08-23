@@ -62,6 +62,6 @@ object Media3TransitionCatalog {
             }
         }
 
-        return Effects(effects, emptyList())
+        return Effects(emptyList(), effects)
     }
 }
