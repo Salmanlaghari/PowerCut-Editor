@@ -1,6 +1,5 @@
 package com.powercut.editor.data
 
-import java.util.List
 import java.util.UUID
 
 // Data structure for downloadable items
@@ -17,9 +16,7 @@ data class DownloadItem(
 object DownloadManifest {
     const val BASE_URL = "https://github.com/Salmanlaghari/PowerCut-Editor/releases/latest"
 
-    init {
-        // This would fetch from GitHub Releases API in real implementation
-        val items = listOf(
+    val items = listOf(
             // Example Effects entries
             DownloadItem(
                 id = "blur_effect",
@@ -48,8 +45,6 @@ object DownloadManifest {
                 md5Hash = "c3d4e5f6a1b29078"
             )
         )
-    }
-
     fun getAllItems(): List<DownloadItem> = items
 
     // In real implementation: fetch from GitHub releases using HttpURLConnection

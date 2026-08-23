@@ -9,11 +9,11 @@ import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import java.io.File
+import java.io.FileInputStream
 import java.security.MessageDigest
 
 class DownloadManagerService(private val context: Context) {
     private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    private val logger = Log.getLogger("DownloadManager")
     private val downloadDir = File(context.filesDir, "downloads")
 
     init {
@@ -34,13 +34,13 @@ class DownloadManagerService(private val context: Context) {
 
     fun verifyDownload(file: File, expectedMd5: String): Boolean {
         val digest = MessageDigest.getInstance("MD5")
-        val fileIs = FileInputStream(file)
-        val buffer = ByteArray(8192)
-        var bytesRead: Int
-        while (fileIs.read(buffer) != -1) {
-            digest.update(buffer, 0, bytesRead)
+        FileInputStream(file).use { fileIs ->
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (fileIs.read(buffer).also { bytesRead = it } != -1) {
+                digest.update(buffer, 0, bytesRead)
+            }
         }
-        fileIs.close()
         val md5 = digest.digest().joinToString("") { "%02x".format(it) }
         return md5.equals(expectedMd5, ignoreCase = true)
     }

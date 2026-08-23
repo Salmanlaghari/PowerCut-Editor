@@ -1,7 +1,7 @@
 package com.powercut.editor.domain.processing
 
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.transformer.Effect
+import androidx.media3.common.Effect
 import androidx.media3.transformer.Effects
 import com.powercut.editor.data.KeyframeTrack
 

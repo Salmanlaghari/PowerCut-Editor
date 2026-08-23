@@ -169,7 +169,7 @@ class Media3EffectPipeline @Inject constructor() {
      *  on live preview; now ALL effects use the shared FFmpeg chain parsing for
      *  parity between live preview and export.
      */
-    private fun buildVisualEffect(effectId: String): List<ColorEffect> {
+    fun buildVisualEffect(effectId: String): List<ColorEffect> {
         // Parse the FFmpeg chain directly from our shared catalog
         val chain = VideoProcessor.EXACT_EFFECT_CHAINS[effectId.lowercase().replace(" ", "_").replace("-", "_")] ?: return emptyList()
         if (chain.isBlank()) return emptyList()
@@ -185,13 +185,15 @@ class Media3EffectPipeline @Inject constructor() {
         val params = parseFfmpegChain(chain)
         val rs = params["rs"] ?: 0f; val gs = params["gs"] ?: 0f; val bs = params["bs"] ?: 0f
         val rm = params["rm"] ?: 0f; val gm = params["gm"] ?: 0f; val bm = params["bm"] ?: 0f
-        return ColorEffect(
-            brightness = (params["brightness"] ?: 0f).coerceIn(-1f, 1f),
-            contrast = (params["contrast"] ?: 1f).coerceIn(0f, 4f),
-            saturation = (params["saturation"] ?: 1f).coerceIn(0f, 4f),
-            temperature = (((rs + rm) - (bs + bm)) * 50f).coerceIn(-100f, 100f),
-            tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f),
-            matrix = matrix16
+        return listOf(
+            ColorEffect(
+                brightness = (params["brightness"] ?: 0f).coerceIn(-1f, 1f),
+                contrast = (params["contrast"] ?: 1f).coerceIn(0f, 4f),
+                saturation = (params["saturation"] ?: 1f).coerceIn(0f, 4f),
+                temperature = (((rs + rm) - (bs + bm)) * 50f).coerceIn(-100f, 100f),
+                tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f),
+                matrix = matrix16
+            )
         )
     }
 }
