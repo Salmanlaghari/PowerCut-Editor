@@ -164,9 +164,36 @@ class Media3EffectPipeline @Inject constructor() {
         return allEffects
     }
 
-    private fun buildVisualEffect(effectId: String): List<ColorEffect> {
-        if (!VideoProcessor.isGpuRepresentableEffect(effectId)) return emptyList()
+    /** Builds color effects for ALL effects using shared FFmpeg chain parsing.
+     *  Previously only GPU-representable effects (eq/colorbalance/hue) were faked
+     *  on live preview; now ALL effects use the shared FFmpeg chain parsing for
+     *  parity between live preview and export.
+     */
+    fun buildVisualEffect(effectId: String): List<ColorEffect> {
+        // Parse the FFmpeg chain directly from our shared catalog
         val chain = VideoProcessor.EXACT_EFFECT_CHAINS[effectId.lowercase().replace(" ", "_").replace("-", "_")] ?: return emptyList()
-        return if (chain.isBlank()) emptyList() else EffectGLConverter.convertChain(chain)
+        if (chain.isBlank()) return emptyList()
+        
+        // Use shared filterPreviewMatrix so ALL effects (not just GPU-representable)
+        // produce a visible live-preview matrix that matches the export chain.
+        // Previously, effects like blur, noise, pixelate, etc. silently returned empty
+        // and showed nothing in live preview while still being baked into exports.
+        val previewMatrix = filterPreviewMatrix(chain) ?: return emptyList()
+        val matrix16 = previewMatrix.values.copyOf(16)
+
+        // Extract human-readable parameters from parsed chain for tests/debugging.
+        val params = parseFfmpegChain(chain)
+        val rs = params["rs"] ?: 0f; val gs = params["gs"] ?: 0f; val bs = params["bs"] ?: 0f
+        val rm = params["rm"] ?: 0f; val gm = params["gm"] ?: 0f; val bm = params["bm"] ?: 0f
+        return listOf(
+            ColorEffect(
+                brightness = (params["brightness"] ?: 0f).coerceIn(-1f, 1f),
+                contrast = (params["contrast"] ?: 1f).coerceIn(0f, 4f),
+                saturation = (params["saturation"] ?: 1f).coerceIn(0f, 4f),
+                temperature = (((rs + rm) - (bs + bm)) * 50f).coerceIn(-100f, 100f),
+                tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f),
+                matrix = matrix16
+            )
+        )
     }
 }
