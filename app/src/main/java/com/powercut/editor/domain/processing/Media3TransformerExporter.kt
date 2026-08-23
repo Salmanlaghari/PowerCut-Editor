@@ -37,7 +37,7 @@ class Media3TransformerExporter @Inject constructor(
         val videoClipCount = project.timeline.tracks.filter { it.type == TrackType.VIDEO }.flatMap { it.clips }.size
         if (videoClipCount > 1) return false
         if (!hasColorAdjustments(project) && Media3CropEffect.forProject(project) == null) return false
-        return project.selectedEffect == "none" && project.keyframeTracks.isEmpty() && project.speedFactor == 1.0f &&
+        return project.keyframeTracks.isEmpty() && project.speedFactor == 1.0f &&
             project.transitionType == "none" && project.backgroundMusicPath.isNullOrEmpty() && !project.isMuted &&
             project.autoCaptionsLanguage == "off" && project.rotationDegrees == 0f && !project.isFlippedHorizontal &&
             !project.isFlippedVertical && !project.isReverseEnabled && project.activeTextOverlay.isNullOrEmpty() &&
@@ -56,6 +56,10 @@ class Media3TransformerExporter @Inject constructor(
         if (!File(inputPath).exists()) return false
         val effects = mutableListOf<Effect>()
         effects.addAll(pipeline.buildEffectsFromProject(project))
+        // Include the selected visual effect from EffectsGallery for export parity
+        if (project.selectedEffect != "none" && project.selectedEffect.isNotBlank()) {
+            effects.addAll(pipeline.buildVisualEffect(project.selectedEffect))
+        }
         Media3CropEffect.forProject(project)?.let(effects::add)
         if (effects.isEmpty()) return false
         File(outputPath).takeIf { it.exists() }?.delete()
