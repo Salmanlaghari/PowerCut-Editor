@@ -62,7 +62,7 @@ import com.powercut.editor.ui.theme.tactileClick
 // ═══════════════════════════════════════════════════════════════════════════════
 
 @Composable
-fun AiFeatureHubScreen(
+fun SmartToolsHubScreen(
     viewModel: EditorViewModel,
     onBack: () -> Unit
 ) {
@@ -92,9 +92,9 @@ fun AiFeatureHubScreen(
                 Icon(Icons.Default.ArrowBack, "Back", tint = OnPrimary, modifier = Modifier.size(18.dp))
             }
             Column {
-                Text("AI Feature Hub", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = OnPrimary)
+                Text("Smart Tools Hub", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = OnPrimary)
                 Text(
-                    "${aiFeatures.size} AI tools · real FFmpeg chains",
+                    "${aiFeatures.size} smart tools · real FFmpeg chains",
                     fontSize = 11.sp,
                     color = OnSurfaceSecondary
                 )
@@ -120,7 +120,7 @@ fun AiFeatureHubScreen(
         ) {
             Column {
                 Text(
-                    if (activeId == "none") "No AI feature active" else "Active: $activeId",
+                    if (activeId == "none") "No smart feature active" else "Active: $activeId",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

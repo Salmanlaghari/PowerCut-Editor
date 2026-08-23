@@ -527,8 +527,8 @@ object ColorGrading {
         SliderControl("cg_crushed_blacks", "Crushed Blacks", "⬛", 0f, 100f, 0f, 1f),
         SliderControl("cg_blown_whites", "Blown Whites", "⬜", 0f, 100f, 0f, 1f),
         SliderControl("cg_split_tone_balance", "Split Tone Balance", "⚖️", -100f, 100f, 0f, 1f),
-        PremiumOption("cg_auto_color", "Auto Color Correct", "AI-powered automatic color correction", "🤖", "Color Grading"),
-        PremiumOption("cg_auto_exposure", "Auto Exposure", "AI-powered exposure correction", "📸", "Color Grading"),
+        PremiumOption("cg_auto_color", "Auto Color Correct", "Smart automatic color correction", "🤖", "Color Grading"),
+        PremiumOption("cg_auto_exposure", "Auto Exposure", "Smart exposure correction", "📸", "Color Grading"),
         PremiumOption("cg_match_reference", "Match Reference", "Match color to reference frame", "🎯", "Color Grading"),
         PremiumOption("cg_lut_blend", "LUT Blend Mode", "Adjust LUT intensity blending", "🎛️", "Color Grading"),
         SliderControl("cg_lut_intensity", "LUT Intensity", "🎨", 0f, 100f, 100f, 1f),
@@ -635,69 +635,69 @@ object ExportSettings {
 
 object AIFeatures {
 
-    // ── AI Auto Edit (8) ───────────────────────────────────────
+    // ── Smart Auto Edit (8) ───────────────────────────────────────
     val autoEdit = listOf(
-        PremiumOption("ai_auto_highlight", "Auto Highlight Reel", "AI selects best moments for highlight reel", "🌟", "AI Auto Edit"),
-        PremiumOption("ai_auto_trim_silence", "Auto Trim Silence", "AI detects and removes silent sections", "🔇", "AI Auto Edit"),
-        PremiumOption("ai_auto_pacing", "Auto Pacing", "AI adjusts clip timing for optimal pacing", "⏱️", "AI Auto Edit"),
-        PremiumOption("ai_scene_detect", "Scene Detection", "AI auto-detects scene changes", "🎬", "AI Auto Edit"),
-        PremiumOption("ai_smart_crop", "Smart Crop", "AI auto-crops to focus on subjects", "📐", "AI Auto Edit"),
-        PremiumOption("ai_auto_stabilize", "Auto Stabilize", "AI-powered video stabilization", "📹", "AI Auto Edit"),
-        PremiumOption("ai_auto_color_match", "Auto Color Match", "AI matches color across clips", "🎨", "AI Auto Edit"),
-        PremiumOption("ai_smart_transition", "Smart Transition", "AI picks best transitions between clips", "🔀", "AI Auto Edit")
+        PremiumOption("ai_auto_highlight", "Auto Highlight Reel", "selects best moments for highlight reel", "🌟", "Smart Auto Edit"),
+        PremiumOption("ai_auto_trim_silence", "Auto Trim Silence", "detects and removes silent sections", "🔇", "Smart Auto Edit"),
+        PremiumOption("ai_auto_pacing", "Auto Pacing", "adjusts clip timing for optimal pacing", "⏱️", "Smart Auto Edit"),
+        PremiumOption("ai_scene_detect", "Scene Detection", "auto-detects scene changes", "🎬", "Smart Auto Edit"),
+        PremiumOption("ai_smart_crop", "Smart Crop", "auto-crops to focus on subjects", "📐", "Smart Auto Edit"),
+        PremiumOption("ai_auto_stabilize", "Auto Stabilize", "Smart video stabilization", "📹", "Smart Auto Edit"),
+        PremiumOption("ai_auto_color_match", "Auto Color Match", "matches color across clips", "🎨", "Smart Auto Edit"),
+        PremiumOption("ai_smart_transition", "Smart Transition", "picks best transitions between clips", "🔀", "Smart Auto Edit")
     )
 
-    // ── AI Captions (8) ───────────────────────────────────────
+    // ── Smart Captions (8) ───────────────────────────────────────
     val captions = listOf(
-        PremiumOption("ai_auto_caption", "Auto Caption", "AI generates captions from speech", "💬", "AI Captions"),
-        PremiumOption("ai_translate_caption", "Translate Captions", "AI translates captions to 50+ languages", "🌍", "AI Captions"),
-        PremiumOption("ai_caption_style", "Caption Styling", "AI styles captions for platform", "✨", "AI Captions"),
-        PremiumOption("ai_word_highlight", "Word Highlight", "AI highlights spoken words in real-time", "🔦", "AI Captions"),
-        PremiumOption("ai_karaoke_mode", "Karaoke Mode", "AI-synced karaoke-style lyrics", "🎤", "AI Captions"),
-        PremiumOption("ai_subtitle_timing", "Subtitle Timing AI", "AI auto-adjusts subtitle duration", "⏱️", "AI Captions"),
-        PremiumOption("ai_speaker_id", "Speaker Identification", "AI identifies different speakers", "👥", "AI Captions"),
-        PremiumOption("ai_emotion_caption", "Emotion Captions", "AI adds emotion-aware caption styling", "😊", "AI Captions")
+        PremiumOption("ai_auto_caption", "Auto Caption", "generates captions from speech", "💬", "Smart Captions"),
+        PremiumOption("ai_translate_caption", "Translate Captions", "translates captions to 50+ languages", "🌍", "Smart Captions"),
+        PremiumOption("ai_caption_style", "Caption Styling", "styles captions for platform", "✨", "Smart Captions"),
+        PremiumOption("ai_word_highlight", "Word Highlight", "highlights spoken words in real-time", "🔦", "Smart Captions"),
+        PremiumOption("ai_karaoke_mode", "Karaoke Mode", "AI-synced karaoke-style lyrics", "🎤", "Smart Captions"),
+        PremiumOption("ai_subtitle_timing", "Subtitle Timing AI", "AI auto-adjusts subtitle duration", "⏱️", "Smart Captions"),
+        PremiumOption("ai_speaker_id", "Speaker Identification", "identifies different speakers", "👥", "Smart Captions"),
+        PremiumOption("ai_emotion_caption", "Emotion Captions", "adds emotion-aware caption styling", "😊", "Smart Captions")
     )
 
-    // ── AI Background (6) ──────────────────────────────────────
+    // ── Smart Background (6) ──────────────────────────────────────
     val background = listOf(
-        PremiumOption("ai_bg_remove", "Background Remove", "AI removes video background", "✂️", "AI Background"),
-        PremiumOption("ai_bg_blur", "Background Blur", "AI blurs background keeping subject sharp", "🌫️", "AI Background"),
-        PremiumOption("ai_bg_replace", "Background Replace", "AI replaces background with image/video", "🖼️", "AI Background"),
-        PremiumOption("ai_bg_green_screen", "Virtual Green Screen", "AI simulates green screen effect", "🟩", "AI Background"),
-        PremiumOption("ai_bg_bokeh", "AI Bokeh", "AI creates depth-based bokeh blur", "🔵", "AI Background"),
-        PremiumOption("ai_bg_night_mode", "AI Night Mode", "AI brightens low-light footage", "🌙", "AI Background")
+        PremiumOption("ai_bg_remove", "Background Remove", "removes video background", "✂️", "Smart Background"),
+        PremiumOption("ai_bg_blur", "Background Blur", "blurs background keeping subject sharp", "🌫️", "Smart Background"),
+        PremiumOption("ai_bg_replace", "Background Replace", "replaces background with image/video", "🖼️", "Smart Background"),
+        PremiumOption("ai_bg_green_screen", "Virtual Green Screen", "simulates green screen effect", "🟩", "Smart Background"),
+        PremiumOption("ai_bg_bokeh", "Smart Bokeh", "creates depth-based bokeh blur", "🔵", "Smart Background"),
+        PremiumOption("ai_bg_night_mode", "Smart Night Mode", "brightens low-light footage", "🌙", "Smart Background")
     )
 
-    // ── AI Voice (6) ───────────────────────────────────────────
+    // ── Smart Voice (6) ───────────────────────────────────────────
     val voice = listOf(
-        PremiumOption("ai_tts_narration", "TTS Narration", "AI text-to-speech narration voice", "🗣️", "AI Voice"),
-        PremiumOption("ai_voice_clone", "Voice Clone", "AI clones a voice from sample audio", "🎭", "AI Voice"),
-        PremiumOption("ai_voice_isolate", "Voice Isolate", "AI separates voice from background noise", "🎙️", "AI Voice"),
-        PremiumOption("ai_auto_duck", "Auto Duck", "AI lowers music when speech detected", "🔉", "AI Voice"),
-        PremiumOption("ai_voice_enhance", "Voice Enhance", "AI enhances voice clarity and warmth", "✨", "AI Voice"),
-        PremiumOption("ai_transcribe", "Transcribe", "AI full speech-to-text transcription", "📝", "AI Voice")
+        PremiumOption("ai_tts_narration", "TTS Narration", "AI text-to-speech narration voice", "🗣️", "Smart Voice"),
+        PremiumOption("ai_voice_clone", "Voice Clone", "clones a voice from sample audio", "🎭", "Smart Voice"),
+        PremiumOption("ai_voice_isolate", "Voice Isolate", "separates voice from background noise", "🎙️", "Smart Voice"),
+        PremiumOption("ai_auto_duck", "Auto Duck", "lowers music when speech detected", "🔉", "Smart Voice"),
+        PremiumOption("ai_voice_enhance", "Voice Enhance", "enhances voice clarity and warmth", "✨", "Smart Voice"),
+        PremiumOption("ai_transcribe", "Transcribe", "AI full speech-to-text transcription", "📝", "Smart Voice")
     )
 
-    // ── AI Enhancement (7) ─────────────────────────────────────
+    // ── Smart Enhancement (7) ─────────────────────────────────────
     val enhancement = listOf(
-        PremiumOption("ai_super_res", "Super Resolution", "AI upscales video resolution", "🔍", "AI Enhancement"),
-        PremiumOption("ai_denoise", "AI Denoise", "AI removes video noise and grain", "🧹", "AI Enhancement"),
-        PremiumOption("ai_sharpen", "AI Sharpen", "AI intelligent sharpening", "🔪", "AI Enhancement"),
-        PremiumOption("ai_hdr_enhance", "HDR Enhance", "AI creates HDR effect from SDR", "🌈", "AI Enhancement"),
-        PremiumOption("ai_slow_motion", "AI Slow Motion", "AI generates intermediate frames for slow-mo", "🐌", "AI Enhancement"),
-        PremiumOption("ai_deinterlace", "Deinterlace", "AI deinterlaces interlaced footage", "📺", "AI Enhancement"),
-        PremiumOption("ai_frame_interp", "Frame Interpolation", "AI generates smooth intermediate frames", "🎞️", "AI Enhancement")
+        PremiumOption("ai_super_res", "Super Resolution", "upscales video resolution", "🔍", "Smart Enhancement"),
+        PremiumOption("ai_denoise", "Smart Denoise", "removes video noise and grain", "🧹", "Smart Enhancement"),
+        PremiumOption("ai_sharpen", "Smart Sharpen", "intelligent sharpening", "🔪", "Smart Enhancement"),
+        PremiumOption("ai_hdr_enhance", "HDR Enhance", "creates HDR effect from SDR", "🌈", "Smart Enhancement"),
+        PremiumOption("ai_slow_motion", "Smart Slow Motion", "generates intermediate frames for slow-mo", "🐌", "Smart Enhancement"),
+        PremiumOption("ai_deinterlace", "Deinterlace", "deinterlaces interlaced footage", "📺", "Smart Enhancement"),
+        PremiumOption("ai_frame_interp", "Frame Interpolation", "generates smooth intermediate frames", "🎞️", "Smart Enhancement")
     )
 
-    // ── AI Art & Creative (6) ──────────────────────────────────
+    // ── Smart Art & Creative (6) ──────────────────────────────────
     val artCreative = listOf(
-        PremiumOption("ai_style_transfer", "Style Transfer", "Apply art style from reference image", "🎨", "AI Art"),
-        PremiumOption("ai_anime_style", "Anime Style", "Convert footage to anime art style", "🌸", "AI Art"),
-        PremiumOption("ai_painting_style", "Painting Style", "Convert footage to oil painting", "🖼️", "AI Art"),
-        PremiumOption("ai_sketch_style", "Sketch Style", "Convert footage to pencil sketch", "✏️", "AI Art"),
-        PremiumOption("ai_cartoon_style", "Cartoon Style", "Convert footage to cartoon style", "🎭", "AI Art"),
-        PremiumOption("ai_depth_map", "Depth Map", "AI generates depth map from footage", "🗺️", "AI Art")
+        PremiumOption("ai_style_transfer", "Style Transfer", "Apply art style from reference image", "🎨", "Smart Art"),
+        PremiumOption("ai_anime_style", "Anime Style", "Convert footage to anime art style", "🌸", "Smart Art"),
+        PremiumOption("ai_painting_style", "Painting Style", "Convert footage to oil painting", "🖼️", "Smart Art"),
+        PremiumOption("ai_sketch_style", "Sketch Style", "Convert footage to pencil sketch", "✏️", "Smart Art"),
+        PremiumOption("ai_cartoon_style", "Cartoon Style", "Convert footage to cartoon style", "🎭", "Smart Art"),
+        PremiumOption("ai_depth_map", "Depth Map", "generates depth map from footage", "🗺️", "Smart Art")
     )
 
     val all get() = autoEdit + captions + background + voice + enhancement + artCreative
@@ -887,7 +887,7 @@ object PremiumRegistry {
         Category("transitions", "Transitions", "🔀", "Basic, creative, cinematic, glitch, shape transitions", Transitions.all.size),
         Category("color_grading", "Color Grading", "🎨", "LUTs, manual controls, color wheels, curves", ColorGrading.all.size),
         Category("export_settings", "Export Settings", "📤", "Resolution, codec, bitrate, HDR, audio export", ExportSettings.all.size),
-        Category("ai_features", "AI Features", "🤖", "Auto-edit, captions, background, voice, art", AIFeatures.all.size),
+        Category("ai_features", "Smart Features", "🤖", "Auto-edit, captions, background, voice, art", AIFeatures.all.size),
         Category("stickers_overlays", "Stickers & Overlays", "😄", "Emoji, shapes, watermark, PiP, split screen", StickersOverlays.all.size),
         Category("project_settings", "Project Settings", "⚙️", "Timeline, preview, performance, backup", ProjectSettings.all.size)
     )

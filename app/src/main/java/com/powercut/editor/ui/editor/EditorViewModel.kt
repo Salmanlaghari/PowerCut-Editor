@@ -806,10 +806,10 @@ class EditorViewModel @Inject constructor(
     }
 
     /** v4.5.0 — AI Edit: apply an AI auto-enhance grade to a picked video. */
-    fun applyAiEdit(videoUri: Uri) {
+    fun applySmartEdit(videoUri: Uri) {
         viewModelScope.launch {
             try { UriHelper.takePersistablePermission(appContext, videoUri) } catch (_: Exception) {}
-            exportManager.applyAiEdit(videoUri)
+            exportManager.applySmartEdit(videoUri)
         }
     }
 

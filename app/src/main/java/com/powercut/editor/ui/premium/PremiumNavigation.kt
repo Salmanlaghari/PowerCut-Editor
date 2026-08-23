@@ -103,7 +103,7 @@ object PremiumStats {
         appendLine("║ Transitions:        ${transitionsCount.toString().padStart(3)} options      ║")
         appendLine("║ Color Grading:      ${colorGradingCount.toString().padStart(3)} options      ║")
         appendLine("║ Export Settings:    ${exportSettingsCount.toString().padStart(3)} options      ║")
-        appendLine("║ AI Features:        ${aiFeaturesCount.toString().padStart(3)} options      ║")
+        appendLine("║ Smart Features:        ${aiFeaturesCount.toString().padStart(3)} options      ║")
         appendLine("║ Stickers & Overlays:${stickersOverlaysCount.toString().padStart(3)} options      ║")
         appendLine("║ Project Settings:   ${projectSettingsCount.toString().padStart(3)} options      ║")
         appendLine("╠══════════════════════════════════════╣")

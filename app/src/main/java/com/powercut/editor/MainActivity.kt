@@ -51,7 +51,7 @@ import com.powercut.editor.ui.editor.NextGenEditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
 import com.powercut.editor.ui.home.HomeScreen
-import com.powercut.editor.ui.premium.AiFeatureHubScreen
+import com.powercut.editor.ui.premium.SmartToolsHubScreen
 import com.powercut.editor.ui.premium.EffectsScreen
 import com.powercut.editor.ui.premium.PremiumEntryPoint
 import com.powercut.editor.ui.premium.ProTierScreen
@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
                         val project by viewModel.currentProject.collectAsState()
                         val exportState by viewModel.exportState.collectAsState()
                         val exportProgress by viewModel.exportProgress.collectAsState()
-                        // v6.0.0 Premium overlay screen state — AI Hub, Social Presets, Pro Tier, Studio
+                        // v6.0.0 Premium overlay screen state — Smart Hub, Social Presets, Pro Tier, Studio
                         var showAiHub by remember { mutableStateOf(false) }
                         var showSocialPresets by remember { mutableStateOf(false) }
                         var showProTier by remember { mutableStateOf(false) }
@@ -271,7 +271,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel.createSlideshow(imageUris)
                                     },
                                     onApplyAiEdit = { videoUri ->
-                                        viewModel.applyAiEdit(videoUri)
+                                        viewModel.applySmartEdit(videoUri)
                                     },
                                     // v4.6.0: pass quick-tool export feedback to HomeScreen so the user
                                     // actually sees progress / success / error when MP3->MP4, Slideshow,
@@ -488,8 +488,8 @@ class MainActivity : ComponentActivity() {
                                         // v6.2.0 In-editor premium panels
                                         onUpdateAiFeature = { viewModel.updateAiFeature(it) },
                                         onUpdateSocialPreset = { viewModel.updateSocialPreset(it) },
-                                        // v6.0.0 Premium launcher — top action row buttons (AI Hub, Presets, Pro, Studio)
-                                        onAiHub = { showAiHub = true },
+                                        // v6.0.0 Premium launcher — top action row buttons (Smart Hub, Presets, Pro, Studio)
+                                        onSmartHub = { showAiHub = true },
                                         onSocialPresets = { showSocialPresets = true },
                                         onProTier = { showProTier = true },
                                         onPremiumStudio = { showPremiumStudio = true },
@@ -535,7 +535,7 @@ class MainActivity : ComponentActivity() {
                         //  chains through EditorViewModel → VideoProcessor at export.
                         // ─────────────────────────────────────────────────────────────
                         if (showAiHub) {
-                            AiFeatureHubScreen(
+                            SmartToolsHubScreen(
                                 viewModel = viewModel,
                                 onBack = { showAiHub = false }
                             )
@@ -775,7 +775,7 @@ class MainActivity : ComponentActivity() {
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PowerCutPremiumLauncherBar(
-    onAiHub: () -> Unit,
+    onSmartHub: () -> Unit,
     onSocialPresets: () -> Unit,
     onProTier: () -> Unit,
     onPremiumStudio: () -> Unit
@@ -788,7 +788,7 @@ fun PowerCutPremiumLauncherBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        PremiumLaunchChip("🤖", "AI Hub", onAiHub)
+        PremiumLaunchChip("🤖", "Smart Hub", onSmartHub)
         PremiumLaunchChip("📱", "Presets", onSocialPresets)
         PremiumLaunchChip("👑", "Pro", onProTier)
         PremiumLaunchChip("✨", "Studio", onPremiumStudio)

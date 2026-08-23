@@ -809,16 +809,16 @@ class VideoProcessor @Inject constructor(
     }
 
     /**
-     * v4.5.0 — AI Edit quick tool: applies a premium "AI-enhanced" look grade
+     * v4.5.0 — AI Edit quick tool: applies a premium "smart enhanced" look grade
      * (auto color boost + sharpen + saturation lift) to a video with real
      * FFmpeg. This is a one-tap enhancement, workable, not a placeholder.
      */
-    suspend fun applyAiEdit(
+    suspend fun applySmartEdit(
         inputPath: String,
         outputPath: String
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            // "AI" auto-enhance: lift shadows, boost saturation/contrast,
+            // smart auto-enhance: lift shadows, boost saturation/contrast,
             // mild sharpen, slight warmth — a real, perceptible grade.
             val vf = "eq=contrast=1.18:saturation=1.25:brightness=0.04," +
                     "colorbalance=rs=0.06:rm=0.04:gs=0.02," +
@@ -833,17 +833,17 @@ class VideoProcessor @Inject constructor(
             args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
             args.addAll(listOf("-movflags", "+faststart", "-threads", "0", "-y", outputPath))
 
-            Log.d(tag, "AI Edit: ffmpeg ${args.joinToString(" ")}")
+            Log.d(tag, "Smart Edit: ffmpeg ${args.joinToString(" ")}")
             val session = FFmpegKit.executeWithArguments(args.toTypedArray())
             if (ReturnCode.isSuccess(session.returnCode)) {
-                Log.d(tag, "AI Edit succeeded")
+                Log.d(tag, "Smart Edit succeeded")
                 true
             } else {
-                Log.e(tag, "AI Edit failed: ${session.failStackTrace}")
+                Log.e(tag, "Smart Edit failed: ${session.failStackTrace}")
                 false
             }
         } catch (e: Exception) {
-            Log.e(tag, "AI Edit exception", e)
+            Log.e(tag, "Smart Edit exception", e)
             false
         }
     }
@@ -1099,7 +1099,7 @@ class VideoProcessor @Inject constructor(
         // After the target-resolution scale+pad we multiply the frame size by
         // upscaleFactor with a high-quality Lanczos kernel. This genuinely
         // increases output resolution (export pipeline below encodes at the
-        // final frame size), so "2x AI / 4x Ultra" produce real, larger exports.
+        // final frame size), so "2x Smart / 4x Ultra" produce real, larger exports.
         if (upscaleFactor > 1f) {
             val uf = upscaleFactor.coerceIn(1f, 4f)
             vfFilters.add("scale=iw*$uf:ih*$uf:flags=lanczos")
