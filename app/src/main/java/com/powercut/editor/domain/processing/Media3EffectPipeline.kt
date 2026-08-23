@@ -6,6 +6,8 @@ import androidx.media3.common.Effect
 import androidx.media3.common.util.GlUtil
 import androidx.media3.effect.RgbMatrix
 import com.powercut.editor.domain.filter.FilterCatalog
+import com.powercut.editor.domain.filter.filterPreviewMatrix
+import com.powercut.editor.domain.filter.filterPreviewMatrixForId
 import com.powercut.editor.domain.look.PremiumLooks
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,32 +51,52 @@ class Media3EffectPipeline @Inject constructor() {
     private fun buildFilterEffect(filterId: String): ColorEffect? {
         val chain = FilterCatalog.ffmpeg(filterId)
         if (chain.isBlank()) return null
+
+        // BUG FIX (Phase 1 — Filters): Use filterPreviewMatrix so ALL filter types
+        // (negate, colorchannelmixer, hue=s=0, eq, colorbalance) produce a visible
+        // live-preview matrix that matches the export chain. Previously only
+        // eq=/colorbalance= were parsed here; grayscale (hue=s=0), invert (negate),
+        // and colorchannelmixer-based filters silently returned null and showed
+        // nothing in the live preview while still being baked into the exported file.
+        val previewMatrix = filterPreviewMatrixForId(filterId) ?: return null
+        val matrix16 = previewMatrix.values.copyOf(16)
+
+        // Extract human-readable parameters from parsed chain for tests/debugging.
         val params = parseFfmpegChain(chain)
-        if (params.isEmpty()) return null
         val rs = params["rs"] ?: 0f; val gs = params["gs"] ?: 0f; val bs = params["bs"] ?: 0f
         val rm = params["rm"] ?: 0f; val gm = params["gm"] ?: 0f; val bm = params["bm"] ?: 0f
-        return createRgbAdjustment(
+        return ColorEffect(
             brightness = (params["brightness"] ?: 0f).coerceIn(-1f, 1f),
             contrast = (params["contrast"] ?: 1f).coerceIn(0f, 4f),
             saturation = (params["saturation"] ?: 1f).coerceIn(0f, 4f),
             temperature = (((rs + rm) - (bs + bm)) * 50f).coerceIn(-100f, 100f),
-            tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f)
+            tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f),
+            matrix = matrix16
         )
     }
 
     private fun buildPremiumLookEffect(lookId: String): ColorEffect? {
         val chain = PremiumLooks.chainFor(lookId)
         if (chain.isBlank()) return null
+
+        // BUG FIX (Phase 1 — Filters): Use filterPreviewMatrix so ALL premium-look
+        // filter types produce a visible live-preview matrix that matches the export
+        // chain (previously only eq=/colorbalance= were parsed; filters with
+        // negate/colorchannelmixer/hue=s=0 showed nothing live but were baked into exports).
+        val previewMatrix = filterPreviewMatrix(chain) ?: return null
+        val matrix16 = previewMatrix.values.copyOf(16)
+
+        // Extract human-readable parameters from parsed chain for tests/debugging.
         val params = parseFfmpegChain(chain)
-        if (params.isEmpty()) return null
         val rs = params["rs"] ?: 0f; val gs = params["gs"] ?: 0f; val bs = params["bs"] ?: 0f
         val rm = params["rm"] ?: 0f; val gm = params["gm"] ?: 0f; val bm = params["bm"] ?: 0f
-        return createRgbAdjustment(
+        return ColorEffect(
             brightness = (params["brightness"] ?: 0f).coerceIn(-1f, 1f),
             contrast = (params["contrast"] ?: 1f).coerceIn(0f, 4f),
             saturation = (params["saturation"] ?: 1f).coerceIn(0f, 4f),
             temperature = (((rs + rm) - (bs + bm)) * 50f).coerceIn(-100f, 100f),
-            tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f)
+            tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f),
+            matrix = matrix16
         )
     }
 
