@@ -146,7 +146,7 @@ fun OrientationToolsPanel(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Default.AutoAwesome, contentDescription = "Reframe", tint = CyberCyan, modifier = Modifier.size(14.dp))
                 Column {
-                    Text("AI AUTO REFRAME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("AUTO REFRAME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text("Auto-track subject in frame", fontSize = 7.sp, color = Color.Gray)
                 }
             }
@@ -256,7 +256,7 @@ fun OrientationToolsPanel(
                 .padding(8.dp)
         ) {
             val tip = when (selectedTab) {
-                "vertical" -> "📱 Vertical mode optimizes for mobile viewing. Use AI Auto Reframe to keep subjects centered."
+                "vertical" -> "📱 Vertical mode optimizes for mobile viewing. Use Auto Reframe to keep subjects centered."
                 "horizontal" -> "🖥️ Horizontal mode is ideal for YouTube and desktop viewing. Enable letterbox for mixed content."
                 "square" -> "⬜ Square format works great for Instagram posts and profile videos."
                 else -> ""

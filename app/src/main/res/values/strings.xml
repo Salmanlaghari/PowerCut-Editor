@@ -13,7 +13,7 @@
     <string name="export_4k">Ultra HD 4K</string>
     <string name="export_8k">Extreme HD 8K</string>
     <string name="export_1080p">Full HD 1080p</string>
-    <string name="apply_filter">Apply AI Filters</string>
+    <string name="apply_filter">Apply Smart Filters</string>
     <string name="gpu_filter_sepia">Sepia Glow</string>
     <string name="gpu_filter_grayscale">Vintage Mono</string>
     <string name="gpu_filter_invert">Neon Invert</string>
@@ -87,14 +87,14 @@
     <string name="filters_title">Filters</string>
     <string name="speed_title">Speed Control</string>
 
-    <!-- Phase 4: AI Corrections & Content -->
-    <string name="ai_color">AI Auto Color</string>
-    <string name="ai_low_light">AI Low Light Enhance</string>
-    <string name="ai_noise_reduction">AI Audio De-noise</string>
-    <string name="ai_upscale">AI 4K/8K Upscale</string>
-    <string name="ai_captions">AI Auto Captions</string>
-    <string name="ai_background_remove">AI Background Eraser</string>
-    <string name="ai_skin_smooth">AI Face Retouch</string>
+    <!-- Phase 4: Smart Corrections & Content -->
+    <string name="ai_color">Smart Auto Color</string>
+    <string name="ai_low_light">Smart Low Light Enhance</string>
+    <string name="ai_noise_reduction">Smart Audio De-noise</string>
+    <string name="ai_upscale">Smart 4K/8K Upscale</string>
+    <string name="ai_captions">Smart Auto Captions</string>
+    <string name="ai_background_remove">Smart Background Eraser</string>
+    <string name="ai_skin_smooth">Smart Face Retouch</string>
 
     <!-- Phase 5: Extras -->
     <string name="mp3_to_video">MP3 to Video Beats</string>

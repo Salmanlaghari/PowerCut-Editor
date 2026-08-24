@@ -222,7 +222,7 @@ object PremiumFeatureBridge {
 
     /** Quick summary line for the export sheet / hub. */
     fun exportSummary(viewModel: EditorViewModel): String = buildString {
-        append("AI: ")
+        append("Smart: ")
         append(if (viewModel.activeAiFeature.value == "none") "Off" else viewModel.activeAiFeature.value)
         append("  |  Preset: ")
         append(if (viewModel.socialPreset.value == "none") "Off" else viewModel.socialPreset.value)

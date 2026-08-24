@@ -268,10 +268,10 @@ class ExportManager @Inject constructor(
 
     /**
      * v4.5.0 — AI Edit quick tool: apply an AI auto-enhance grade to a picked
-     * video (content:// URI). Streams to temp, runs [VideoProcessor.applyAiEdit],
+     * video (content:// URI). Streams to temp, runs [VideoProcessor.applySmartEdit],
      * saves the enhanced MP4 to the public Movies/PowerCut gallery.
      */
-    suspend fun applyAiEdit(videoUri: android.net.Uri): String? {
+    suspend fun applySmartEdit(videoUri: android.net.Uri): String? {
         _exportState.value = Resource.Loading
         _progress.value = 5
         var tempInput: File? = null
@@ -291,10 +291,10 @@ class ExportManager @Inject constructor(
             }
             _progress.value = 35
             tempOutput = File(secureDir, "ai_edited_${System.currentTimeMillis()}.mp4")
-            val ok = videoProcessor.applyAiEdit(tempInput.absolutePath, tempOutput.absolutePath)
+            val ok = videoProcessor.applySmartEdit(tempInput.absolutePath, tempOutput.absolutePath)
             _progress.value = 85
             if (!ok || !tempOutput.exists() || tempOutput.length() == 0L) {
-                _exportState.value = Resource.Error("AI Edit failed. The video may be unsupported.", Exception("applyAiEdit returned false"))
+                _exportState.value = Resource.Error("Smart Edit failed. The video may be unsupported.", Exception("applySmartEdit returned false"))
                 _progress.value = 0; return null
             }
             val galleryPath = saveToPublicGallery(context, tempOutput)
@@ -309,8 +309,8 @@ class ExportManager @Inject constructor(
                 return tempOutput.absolutePath
             }
         } catch (e: Exception) {
-            Log.e(tag, "applyAiEdit exception", e)
-            _exportState.value = Resource.Error("AI Edit failed: ${e.message}", e)
+            Log.e(tag, "applySmartEdit exception", e)
+            _exportState.value = Resource.Error("Smart Edit failed: ${e.message}", e)
             _progress.value = 0; return null
         } finally {
             tempInput?.delete()

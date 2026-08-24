@@ -248,11 +248,11 @@ fun NextGenEditorScreen(
     onUpdatePremiumLook: (String) -> Unit = {},
     // KineMaster-style keyframe animation
     onUpdateKeyframeAnim: (String) -> Unit = {},
-    // In-editor premium panels (AI Hub, Presets) — v6.2.0
+    // In-editor premium panels (Smart Hub, Presets) — v6.2.0
     onUpdateAiFeature: (String) -> Unit = {},
     onUpdateSocialPreset: (String) -> Unit = {},
-    // v6.0.0 Premium launcher — top action row (AI Hub, Presets, Pro, Studio)
-    onAiHub: () -> Unit = {},
+    // v6.0.0 Premium launcher — top action row (Smart Hub, Presets, Pro, Studio)
+    onSmartHub: () -> Unit = {},
     onSocialPresets: () -> Unit = {},
     onProTier: () -> Unit = {},
     onPremiumStudio: () -> Unit = {},
@@ -618,7 +618,7 @@ fun NextGenEditorScreen(
             )
 
             // 2027 8K: Premium launcher moved to bottom toolbar (gradient pills)
-            // Top floating buttons removed — AI Hub, Presets, Pro, Studio now in bottom toolbar.
+            // Top floating buttons removed — Smart Hub, Presets, Pro, Studio now in bottom toolbar.
 
         // ─── 2. VIDEO PREVIEW ─────────────────────────────────
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).weight(1.4f), contentAlignment = Alignment.Center) {
@@ -1292,7 +1292,7 @@ fun NextGenEditorScreen(
         // ─── 6. CAPCUT TOOL BAR (no import button) ────────────
         CapCutToolBar(
             selectedTool = selectedTool,
-            onAiHub = onAiHub,
+            onSmartHub = onSmartHub,
             onSocialPresets = onSocialPresets,
             onProTier = onProTier,
             onPremiumStudio = onPremiumStudio,
@@ -1402,7 +1402,7 @@ private fun EditingCompletePage(
                     Spacer(Modifier.height(2.dp))
                     Text("UPSCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(1f to "Original", 2f to "2x AI", 4f to "4x Ultra").forEach { (factor, label) ->
+                        listOf(1f to "Original", 2f to "2x Smart", 4f to "4x Ultra").forEach { (factor, label) ->
                             val sel = project.upscaleFactor == factor
                             Box(Modifier.weight(1f).background(if (sel) NeonOrange.copy(0.25f) else NeonOrange.copy(0.08f), RoundedCornerShape(6.dp)).border(if (sel) 1.dp else 0.dp, NeonOrange, RoundedCornerShape(6.dp)).clickable { onUpdateUpscale(factor) }.padding(4.dp), contentAlignment = Alignment.Center) {
                                 Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) NeonOrange else Color.White)
@@ -1538,7 +1538,7 @@ private fun PlaybackControls(
 private fun CapCutToolBar(
     selectedTool: Int,
     onToolSelected: (Int) -> Unit,
-    onAiHub: () -> Unit = {},
+    onSmartHub: () -> Unit = {},
     onSocialPresets: () -> Unit = {},
     onProTier: () -> Unit = {},
     onPremiumStudio: () -> Unit = {}
@@ -1555,7 +1555,7 @@ private fun CapCutToolBar(
         "🖍️" to "Canvas",
         "💎" to "Keyframe",
         // 2027 8K: Premium tools merged into bottom toolbar as gradient pills
-        "🤖" to "AI Hub", "📱" to "Presets",
+        "🤖" to "Smart Hub", "📱" to "Presets",
         "👑" to "Pro", "✨" to "Studio"
     )
     Row(
@@ -5004,7 +5004,7 @@ private fun LiveAnimatedHeader(title: String, icon: String, accentColor: Color =
 
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  IN-EDITOR PREMIUM PANELS (AI Hub, Presets, Pro, Studio)
+//  IN-EDITOR PREMIUM PANELS (Smart Hub, Presets, Pro, Studio)
 //  v6.2.0: Converted from separate screens to in-editor 3D Glass slide-up panels
 //  User request: "isko separate screen na rakho jaise anim 3D Glass CARD mein
 //  usi screen per hain waise hi in sab ko rakho"
@@ -5052,7 +5052,7 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
                 }
             }
             Row(Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("🤖 AI HUB", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Text("🤖 SMART HUB", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.background(SignatureOrange.copy(0.3f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
                     Text("ALL REAL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -5063,7 +5063,7 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
         // Search bar
         OutlinedTextField(
             value = searchQuery, onValueChange = { searchQuery = it },
-            placeholder = { Text("Search AI tools...", fontSize = 8.sp, color = Color.Gray) },
+            placeholder = { Text("Search smart tools...", fontSize = 8.sp, color = Color.Gray) },
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SignatureOrange, unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
             modifier = Modifier.fillMaxWidth().height(36.dp), shape = RoundedCornerShape(8.dp),
             leadingIcon = null, trailingIcon = null, singleLine = true
@@ -5071,7 +5071,7 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
 
         // Category filter
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("all" to "All", "ai" to "AI Features", "enhance" to "Enhance", "audio" to "Audio AI", "visual" to "Visual AI").forEach { (id, label) ->
+            listOf("all" to "All", "ai" to "Smart Features", "enhance" to "Enhance", "audio" to "Smart Audio", "visual" to "Smart Visual").forEach { (id, label) ->
                 val sel = selectedCategory == id
                 Box(Modifier.background(if (sel) SignatureOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { selectedCategory = id }.padding(horizontal = 8.dp, vertical = 4.dp)) {
                     Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) SignatureOrange else Color.White)
@@ -5097,32 +5097,32 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
             "🧹" to "AI BG Remove" to "ai_bg_remove",
             "💡" to "AI Relight" to "ai_relight",
             "🎞️" to "AI Frame Interp" to "ai_frame_interp",
-            "📐" to "AI Auto Reframe" to "ai_auto_reframe",
-            "🧽" to "AI Denoise" to "ai_denoise",
+            "📐" to "Auto Reframe" to "ai_auto_reframe",
+            "🧽" to "Smart Denoise" to "ai_denoise",
             "🌫️" to "AI Deblur" to "ai_deblur",
             "⚡" to "AI Deflicker" to "ai_deflicker",
             "🚫" to "AI Remove Watermark" to "ai_remove_watermark",
-            "🐌" to "AI Slow Motion" to "ai_slow_motion",
+            "🐌" to "Smart Slow Motion" to "ai_slow_motion",
             "🔬" to "AI Super Res" to "ai_super_res",
             "🔍" to "AI Auto Zoom" to "ai_auto_zoom",
             "🤖" to "AI Smart Crop" to "ai_smart_crop",
             "🌫️" to "AI BG Blur" to "ai_bg_blur",
             "🎨" to "AI Style Transfer" to "ai_style_transfer",
-            "💄" to "AI Glamour" to "ai_glamour",
-            "👁️" to "AI Eye Enhance" to "ai_eye_enhance",
-            "💋" to "AI Makeup" to "ai_makeup",
+            "💄" to "Smart Glamour" to "ai_glamour",
+            "👁️" to "Smart Eye Enhance" to "ai_eye_enhance",
+            "💋" to "Smart Makeup" to "ai_makeup",
             "🖥️" to "AI Deinterlace" to "ai_deinterlace",
-            "📐" to "AI Stabilize" to "ai_stabilize",
-            "🌈" to "AI HDR" to "ai_hdr",
-            "🎬" to "AI Cinematic" to "ai_cinematic",
-            "🪄" to "AI Magic Edit" to "ai_magic_edit",
+            "📐" to "Smart Stabilize" to "ai_stabilize",
+            "🌈" to "Smart HDR" to "ai_hdr",
+            "🎬" to "Smart Cinematic" to "ai_cinematic",
+            "🪄" to "Smart Magic Edit" to "ai_magic_edit",
             "📲" to "AI Shorts" to "ai_shorts",
             "🎵" to "AI TikTok" to "ai_tiktok",
             "▶️" to "AI YouTube" to "ai_youtube",
-            "🔀" to "AI Voice Changer" to "ai_voice_changer",
+            "🔀" to "Smart Voice Changer" to "ai_voice_changer",
             "🔇" to "AI Noise Removal" to "ai_noise_removal",
-            "🔊" to "AI Audio Enhance" to "ai_audio_enhance",
-            "🎵" to "AI Music Match" to "ai_music_match"
+            "🔊" to "Smart Audio Enhance" to "ai_audio_enhance",
+            "🎵" to "Smart Music Match" to "ai_music_match"
         )
 
         val filtered = aiTools.filter { tool ->
@@ -5130,7 +5130,7 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
             (selectedCategory == "all" || (selectedCategory == "ai" && tool.second.startsWith("ai_")))
         }
 
-        Text("${filtered.size} AI TOOLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        Text("${filtered.size} SMART TOOLS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             filtered.forEach { (emojiName, id) ->
                 val (emoji, name) = emojiName
@@ -5139,7 +5139,7 @@ private fun AiHubPanel(project: VideoProject, onUpdateAiFeature: (String) -> Uni
                     .border(if (sel) 1.dp else 0.dp, if (sel) SignatureOrange else Color.Transparent, RoundedCornerShape(6.dp))
                     .clickable {
                         onUpdateAiFeature(if (sel) "none" else id)
-                        android.widget.Toast.makeText(ctx, "AI: $name ${if (sel) "disabled" else "enabled"}", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(ctx, "Smart FX: $name ${if (sel) "disabled" else "enabled"}", android.widget.Toast.LENGTH_SHORT).show()
                     }.padding(horizontal = 5.dp, vertical = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(emoji, fontSize = 10.sp)
@@ -5291,7 +5291,7 @@ private fun ProPanel(project: VideoProject, onUpdateProTier: () -> Unit, onApply
             "🚫 No Watermark" to "Remove PowerCut watermark from all exports",
             "🎬 8K Export" to "Export up to 8K (7680×4320) resolution",
             "💎 Premium Looks" to "50+ cinematic LUTs and color grades",
-            "🤖 AI Tools" to "All 45+ AI features unlocked",
+            "🤖 Smart Tools" to "All 45+ smart features unlocked",
             "🎵 Royalty Music" to "Full royalty-free music library",
             "📱 All Presets" to "18+ social media export presets",
             "💎 4K HDR" to "HDR10+ export with wide gamut",

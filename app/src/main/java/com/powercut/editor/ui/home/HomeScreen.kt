@@ -516,7 +516,7 @@ fun DashboardView(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            android.widget.Toast.makeText(context, "Applying AI Edit…", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "Applying Smart Edit…", android.widget.Toast.LENGTH_SHORT).show()
             onApplyAiEdit(uri)
         }
     }
@@ -828,7 +828,7 @@ fun DashboardView(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "✦ No watermark • 4K/8K export • AI tools",
+                            text = "✦ No watermark • 4K/8K export • smart tools",
                             fontSize = 10.sp,
                             color = Color.White.copy(alpha = 0.7f),
                             fontWeight = FontWeight.Bold
@@ -884,9 +884,9 @@ fun DashboardView(
                     TemplatesBrowserDemoPreview(modifier = Modifier.fillMaxSize())
                 }
                 FeatureShowcaseCard(
-                    title = "AI Hub",
+                    title = "Smart Hub",
                     subtitle = "Auto-caption • BG remove",
-                    badge = "🤖 AI",
+                    badge = "✨ Smart",
                     accent = AccentTertiary,
                     modifier = Modifier.weight(1f),
                     onTemplateSelected = {}
@@ -2023,7 +2023,7 @@ fun SettingsView(
                     .padding(14.dp)
             ) {
                 Column {
-                    Text("AI CAPTION GENERATION MODEL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("CAPTION GENERATION MODEL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("Whisper Lite", "Whisper Base", "Whisper Pro").forEach { model ->

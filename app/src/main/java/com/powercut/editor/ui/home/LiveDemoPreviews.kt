@@ -494,7 +494,7 @@ fun QuickToolDemoPreview(toolId: String, modifier: Modifier = Modifier) {
 // Premium Feature Demo Previews (for the 4 top premium buttons)
 // ============================================================
 
-/** AI Hub: Neural network nodes pulsing with connections */
+/** Smart Hub: Neural network nodes pulsing with connections */
 @Composable
 fun AiHubDemoPreview(modifier: Modifier = Modifier) {
     val pulse = rememberPulse()
@@ -706,7 +706,7 @@ fun PremiumFeatureDemoPreview(featureId: String, modifier: Modifier = Modifier) 
 }
 
 // ============================================================
-// AI Feature Demo Previews (for AiFeatureHubScreen cards)
+// Smart Tools Demo Previews (for SmartToolsHubScreen cards)
 // ============================================================
 
 /** Generic AI feature preview based on feature id — animated visual */
@@ -1023,7 +1023,7 @@ fun AiToolsHubDemoPreview(modifier: Modifier = Modifier) {
         )
         // 3 AI feature icons — circles with pulse
         val icons = listOf(SignatureOrange, SignaturePurple, AccentCyan)
-        val labels = listOf("AI", "BG", "SYNC")
+        val labels = listOf("FX", "BG", "SYNC")
         for (i in icons.indices) {
             val cx = w * (0.22f + i * 0.28f)
             val cy = h * 0.45f
