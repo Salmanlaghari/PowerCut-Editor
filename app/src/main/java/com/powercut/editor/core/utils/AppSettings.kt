@@ -62,19 +62,19 @@ object AppSettings {
         e.apply()
     }
 
-    fun setCodecPreference(value: String) { codecPreference = value; edit { it.putString("codec_preference", value) } }
-    fun setBitratePreset(value: String) { bitratePreset = value; edit { it.putString("bitrate_preset", value) } }
-    fun setHdrMode(value: String) { hdrMode = value; edit { it.putString("hdr_mode", value) } }
-    fun setAudioSampleRateHz(value: Int) { audioSampleRateHz = value; edit { it.putInt("audio_sample_rate", value) } }
-    fun setAudioChannels(value: Int) { audioChannels = value; edit { it.putInt("audio_channels", value) } }
-    fun setMagneticSnap(value: Boolean) { magneticSnap = value; edit { it.putBoolean("magnetic_snap", value) } }
-    fun setDefaultAspectPreset(value: String) { defaultAspectPreset = value; edit { it.putString("default_aspect", value) } }
-    fun setCacheLimitBytes(value: Long) { cacheLimitBytes = value; edit { it.putLong("cache_limit", value) } }
+    fun updateCodecPreference(value: String) { codecPreference = value; edit { it.putString("codec_preference", value) } }
+    fun updateBitratePreset(value: String) { bitratePreset = value; edit { it.putString("bitrate_preset", value) } }
+    fun updateHdrMode(value: String) { hdrMode = value; edit { it.putString("hdr_mode", value) } }
+    fun updateAudioSampleRateHz(value: Int) { audioSampleRateHz = value; edit { it.putInt("audio_sample_rate", value) } }
+    fun updateAudioChannels(value: Int) { audioChannels = value; edit { it.putInt("audio_channels", value) } }
+    fun updateMagneticSnap(value: Boolean) { magneticSnap = value; edit { it.putBoolean("magnetic_snap", value) } }
+    fun updateDefaultAspectPreset(value: String) { defaultAspectPreset = value; edit { it.putString("default_aspect", value) } }
+    fun updateCacheLimitBytes(value: Long) { cacheLimitBytes = value; edit { it.putLong("cache_limit", value) } }
 
     /** Reset everything back to defaults (Factory Reset utility). */
     fun resetToDefaults() {
-        setCodecPreference("auto"); setBitratePreset("auto"); setHdrMode("sdr")
-        setAudioSampleRateHz(48000); setAudioChannels(2); setMagneticSnap(true)
-        setDefaultAspectPreset("16:9"); setCacheLimitBytes(1L * 1024 * 1024 * 1024)
+        updateCodecPreference("auto"); updateBitratePreset("auto"); updateHdrMode("sdr")
+        updateAudioSampleRateHz(48000); updateAudioChannels(2); updateMagneticSnap(true)
+        updateDefaultAspectPreset("16:9"); updateCacheLimitBytes(1L * 1024 * 1024 * 1024)
     }
 }

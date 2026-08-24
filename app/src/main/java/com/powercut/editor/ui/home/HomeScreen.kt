@@ -1924,7 +1924,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setCodecPreference(key) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateCodecPreference(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1954,7 +1954,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setBitratePreset(key) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateBitratePreset(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1984,7 +1984,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setHdrMode(key) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateHdrMode(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -2014,7 +2014,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setAudioSampleRateHz(hz) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateAudioSampleRateHz(hz) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -2044,7 +2044,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setAudioChannels(ch) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateAudioChannels(ch) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -2102,7 +2102,7 @@ fun SettingsView(
                         Text("Snap clips instantly to safe transition nodes", fontSize = 11.sp, color = Color.Gray)
                         Switch(
                             checked = magneticSnapEnabled,
-                            onCheckedChange = { com.powercut.editor.core.utils.AppSettings.setMagneticSnap(it) },
+                            onCheckedChange = { com.powercut.editor.core.utils.AppSettings.updateMagneticSnap(it) },
                             colors = SwitchDefaults.colors(checkedThumbColor = CyberCyan)
                         )
                     }
@@ -2128,7 +2128,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setDefaultAspectPreset(key) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateDefaultAspectPreset(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -2159,7 +2159,7 @@ fun SettingsView(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { com.powercut.editor.core.utils.AppSettings.setCacheLimitBytes(bytes) }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.updateCacheLimitBytes(bytes) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
