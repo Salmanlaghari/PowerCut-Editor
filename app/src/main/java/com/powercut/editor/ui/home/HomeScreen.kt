@@ -39,6 +39,8 @@ import com.powercut.editor.R
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class Template(
     val title: String,
