@@ -47,6 +47,7 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.OnUserEarnedRewardListener
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.AdConstants
+import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.ui.editor.NextGenEditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
