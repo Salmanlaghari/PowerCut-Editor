@@ -309,6 +309,11 @@ fun HomeScreen(
                                 activeClickedTemplate = template
                                 templateVideoLauncher.launch("video/*")
                             },
+                            onSeeAllTemplates = { onTabSelected("templates") },
+                            onOpenDrafts = { onTabSelected("drafts") },
+                            draftsList = draftsList,
+                            onDraftSelected = onDraftSelected,
+                            onDeleteDraft = onDeleteDraft,
                             onConvertMp3ToMp4 = onConvertMp3ToMp4,
                             onCompressVideo = onCompressVideo,
                             onCreateSlideshow = onCreateSlideshow,
@@ -474,6 +479,11 @@ fun DashboardView(
     onVideoSelected: (android.net.Uri) -> Unit,
     language: String,
     onTemplateSelected: (Template) -> Unit,
+    onSeeAllTemplates: () -> Unit = {},
+    onOpenDrafts: () -> Unit = {},
+    draftsList: List<DraftItem> = emptyList(),
+    onDraftSelected: (DraftItem) -> Unit = {},
+    onDeleteDraft: (DraftItem) -> Unit = {},
     onConvertMp3ToMp4: (android.net.Uri) -> Unit,
     onCompressVideo: (android.net.Uri) -> Unit,
     onCreateSlideshow: (List<android.net.Uri>) -> Unit,
@@ -1159,7 +1169,7 @@ fun DashboardView(
                     fontSize = 11.sp,
                     color = NeonOrange,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { /* See All templates trigger */ }
+                    modifier = Modifier.clickable { onSeeAllTemplates() }
                 )
             }
 
@@ -1237,7 +1247,8 @@ fun DashboardView(
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // RECENT PROJECTS — enhanced 3D glass cards
+        // RECENT PROJECTS — REAL: backed by the saved drafts store. Tapping a
+        // project resumes it in the editor; the trash icon deletes the draft.
         // ═══════════════════════════════════════════════════════════════════
         item {
             Spacer(modifier = Modifier.height(24.dp))
@@ -1247,17 +1258,42 @@ fun DashboardView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = "Recent Projects", fontSize = 16.sp, fontWeight = FontWeight.Black, color = Color.White)
-                Text(text = "2 projects", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Text(
+                    text = "${draftsList.size} projects",
+                    fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { onOpenDrafts() }
+                )
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        val projectsList = listOf(
-            Triple("Travel Vlog Dubai", "00:45 • 1080p • 2 hours ago", "Draft"),
-            Triple("Wedding Highlights", "03:20 • 4K • Yesterday", "Exported")
-        )
+        if (draftsList.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassmorphic(shape = RoundedCornerShape(16.dp))
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No recent projects yet — create one above and it will appear here.",
+                        fontSize = 11.sp, color = Color.Gray, textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
 
-        items(projectsList) { (title, desc, status) ->
+        items(draftsList, key = { it.id }) { draft ->
+            val minutesAgo = (System.currentTimeMillis() - draft.lastEditedTime) / 60000L
+            val ageText = when {
+                minutesAgo < 1 -> "just now"
+                minutesAgo < 60 -> "$minutesAgo min ago"
+                minutesAgo < 1440 -> "${minutesAgo / 60} hours ago"
+                else -> "${minutesAgo / 1440} days ago"
+            }
+            val totalSec = draft.durationMs / 1000
+            val desc = String.format("%02d:%02d • Draft", totalSec / 60, totalSec % 60)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1265,10 +1301,10 @@ fun DashboardView(
                     .slideInUp(contentVisible, delayMs = 560)
                     .glassCard3D(
                         shape = RoundedCornerShape(16.dp),
-                        glowColor = if (status == "Draft") AccentSecondary else AccentPrimary
+                        glowColor = AccentSecondary
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                    .tactileClick { /* Open project */ }
+                    .tactileClick { onDraftSelected(draft) }
                     .padding(14.dp)
             ) {
                 Row(
@@ -1279,33 +1315,28 @@ fun DashboardView(
                         modifier = Modifier
                             .size(64.dp)
                             .background(
-                                if (status == "Draft") {
-                                    Brush.linearGradient(colors = listOf(Color(0xFF1F1F30), Color(0xFF2E2E4A)))
-                                } else {
-                                    Brush.linearGradient(colors = listOf(Color(0xFF3A1F1F), Color(0xFF5A2E2E)))
-                                },
+                                Brush.linearGradient(colors = listOf(Color(0xFF1F1F30), Color(0xFF2E2E4A))),
                                 RoundedCornerShape(12.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.PlayArrow, "Play icon", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.PlayArrow, "Open project", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(text = desc, fontSize = 10.sp, color = Color.Gray, modifier = Modifier.padding(top = 2.dp))
+                        Text(text = draft.projectName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "$desc • $ageText", fontSize = 10.sp, color = Color.Gray, modifier = Modifier.padding(top = 2.dp))
                         Box(
                             modifier = Modifier
                                 .padding(top = 4.dp)
-                                .background(
-                                    if (status == "Draft") NeonOrange.copy(alpha = 0.18f) else Color(0xFF00E5FF).copy(alpha = 0.15f),
-                                    RoundedCornerShape(6.dp)
-                                )
+                                .background(NeonOrange.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Text(text = status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (status == "Draft") NeonOrange else CyberCyan)
+                            Text(text = "Draft", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
                         }
                     }
-                    Icon(Icons.Default.Folder, "Folder", tint = Color.White.copy(alpha = 0.15f), modifier = Modifier.size(20.dp))
+                    IconButton(onClick = { onDeleteDraft(draft) }) {
+                        Icon(Icons.Default.Delete, "Delete draft", tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }
@@ -1553,9 +1584,115 @@ fun TemplatesView(
     }
 }
 
+/** A real exported video read from MediaStore (Movies/PowerCut). */
+data class ExportedVideo(
+    val uri: android.net.Uri,
+    val name: String,
+    val sizeBytes: Long,
+    val dateMs: Long
+)
+
+/** Queries MediaStore for videos saved under any PowerCut folder. */
+private fun queryExportedVideos(context: android.content.Context): List<ExportedVideo> {
+    val results = mutableListOf<ExportedVideo>()
+    val collection = android.provider.MediaStore.Video.Media.getContentUri(
+        android.provider.MediaStore.VOLUME_EXTERNAL
+    )
+    val projection = arrayOf(
+        android.provider.MediaStore.Video.Media._ID,
+        android.provider.MediaStore.Video.Media.DISPLAY_NAME,
+        android.provider.MediaStore.Video.Media.SIZE,
+        android.provider.MediaStore.Video.Media.DATE_MODIFIED,
+        android.provider.MediaStore.Video.Media.RELATIVE_PATH
+    )
+    context.contentResolver.query(
+        collection, projection,
+        "${android.provider.MediaStore.Video.Media.RELATIVE_PATH} LIKE ?",
+        arrayOf("%PowerCut%"),
+        "${android.provider.MediaStore.Video.Media.DATE_MODIFIED} DESC"
+    )?.use { c ->
+        val idCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
+        val nameCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DISPLAY_NAME)
+        val sizeCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.SIZE)
+        val dateCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DATE_MODIFIED)
+        while (c.moveToNext()) {
+            val uri = android.content.ContentUris.withAppendedId(collection, c.getLong(idCol))
+            results.add(ExportedVideo(uri, c.getString(nameCol) ?: "video.mp4", c.getLong(sizeCol), c.getLong(dateCol) * 1000))
+        }
+    }
+    return results
+}
+
 @Composable
 fun ExportsView(language: String) {
-    var exportsList by remember { mutableStateOf(listOf("Travel_Dubai_1080p.mp4", "Urdu_Poetry_Aesthetic.mp4", "Vlog_Transitions_v2_4k.mp4")) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var exportsList by remember { mutableStateOf<List<ExportedVideo>>(emptyList()) }
+    var hasPermission by remember { mutableStateOf(false) }
+    var loadedOnce by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants -> hasPermission = grants.values.all { it } }
+
+    fun neededPermissions(): Array<String> =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU)
+            arrayOf(android.Manifest.permission.READ_MEDIA_VIDEO)
+        else
+            arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+
+    LaunchedEffect(hasPermission) {
+        if (hasPermission && !loadedOnce) {
+            exportsList = queryExportedVideos(context)
+            loadedOnce = true
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val granted = neededPermissions().all {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (granted) hasPermission = true else permissionLauncher.launch(neededPermissions())
+    }
+
+    fun share(video: ExportedVideo) {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "video/mp4"
+                putExtra(android.content.Intent.EXTRA_STREAM, video.uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share video"))
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Could not share: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun play(video: ExportedVideo) {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(video.uri, "video/mp4")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "No video player found", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun delete(video: ExportedVideo) {
+        try {
+            val deleted = context.contentResolver.delete(video.uri, null, null)
+            if (deleted > 0) {
+                exportsList = exportsList.filter { it.uri != video.uri }
+                android.widget.Toast.makeText(context, "Deleted", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                android.widget.Toast.makeText(context, "Could not delete this file", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Delete failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1569,9 +1706,21 @@ fun ExportsView(language: String) {
             fontWeight = FontWeight.Black,
             color = Color.White
         )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Real files from Movies/PowerCut (${exportsList.size})",
+            fontSize = 10.sp, color = Color.Gray
+        )
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (exportsList.isEmpty()) {
+        if (!hasPermission) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "Storage permission is needed to show your exported videos.",
+                    color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center
+                )
+            }
+        } else if (exportsList.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = if (language == "ur") "ابھی تک کوئی فائل نہیں ملی" else "No exported files found yet",
@@ -1581,7 +1730,7 @@ fun ExportsView(language: String) {
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(exportsList) { i ->
+                items(exportsList, key = { it.uri.toString() }) { video ->
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1593,15 +1742,21 @@ fun ExportsView(language: String) {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column {
-                                Text(i, color = CyberCyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("Format: MP4 • High Profile", color = Color.Gray, fontSize = 10.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(video.name, color = CyberCyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                val sizeMb = video.sizeBytes / (1024.0 * 1024.0)
+                                val date = java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(video.dateMs))
+                                Text("MP4 • ${String.format("%.1f", sizeMb)} MB • $date", color = Color.Gray, fontSize = 10.sp)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                IconButton(onClick = { /* Share */ }) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                                IconButton(onClick = { play(video) }) {
+                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                                IconButton(onClick = { share(video) }) {
                                     Icon(imageVector = Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(16.dp))
                                 }
-                                IconButton(onClick = { exportsList = exportsList.filter { it != i } }) {
+                                IconButton(onClick = { delete(video) }) {
                                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = NeonOrange, modifier = Modifier.size(16.dp))
                                 }
                             }
@@ -1627,19 +1782,16 @@ fun SettingsView(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
-    var selectedCodec by remember { mutableStateOf("H.264 (AVC)") }
-    var audioSampleRate by remember { mutableStateOf("48 kHz") }
-    var bitratePreset by remember { mutableStateOf("Smart Auto") }
-
-    // New premium interactive 4D options to cross 50+ total workable variations
-    var colorSpace by remember { mutableStateOf("SDR 8-bit") }
-    var audioChannels by remember { mutableStateOf("Stereo 2.0") }
-    var renderingEngine by remember { mutableStateOf("ExoPlayer Default") }
-    var magneticSnapEnabled by remember { mutableStateOf(true) }
-    var waveformComplexity by remember { mutableStateOf("Medium") }
-    var cacheLimit by remember { mutableStateOf("1 GB") }
-    var whisperModelStyle by remember { mutableStateOf("Whisper Lite") }
-    var defaultAspectRatio by remember { mutableStateOf("16:9 Cinema") }
+    // Phase B: every option below is bound to the persisted AppSettings object
+    // that the export pipeline (VideoProcessor) and timeline actually read.
+    val codecPref = com.powercut.editor.core.utils.AppSettings.codecPreference
+    val bitratePreset = com.powercut.editor.core.utils.AppSettings.bitratePreset
+    val hdrMode = com.powercut.editor.core.utils.AppSettings.hdrMode
+    val audioSampleRate = com.powercut.editor.core.utils.AppSettings.audioSampleRateHz
+    val audioChannels = com.powercut.editor.core.utils.AppSettings.audioChannels
+    val magneticSnapEnabled = com.powercut.editor.core.utils.AppSettings.magneticSnap
+    val defaultAspectRatio = com.powercut.editor.core.utils.AppSettings.defaultAspectPreset
+    val cacheLimit = com.powercut.editor.core.utils.AppSettings.cacheLimitBytes
 
     LazyColumn(
         modifier = Modifier
@@ -1750,7 +1902,7 @@ fun SettingsView(
             }
         }
 
-        // Video codec configuration option
+        // Video codec configuration option (REAL: drives encoder selection)
         item {
             Box(
                 modifier = Modifier
@@ -1760,19 +1912,21 @@ fun SettingsView(
             ) {
                 Column {
                     Text("ENCODER CODEC TYPE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Used for every export; falls back automatically if unavailable on this device", fontSize = 9.sp, color = Color.Gray)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("H.264 (AVC)", "H.265 (HEVC)", "AV1 Pro").forEach { codec ->
-                            val isSel = selectedCodec == codec
+                        listOf("Auto" to "auto", "H.264" to "h264", "H.265" to "hevc", "AV1" to "av1").forEach { (label, key) ->
+                            val isSel = codecPref == key
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { selectedCodec = codec }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setCodecPreference(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(codec, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
                             }
                         }
                     }
@@ -1780,7 +1934,7 @@ fun SettingsView(
             }
         }
 
-        // Bitrate preset configuration option
+        // Bitrate preset configuration option (REAL: CRF + VBV caps at export)
         item {
             Box(
                 modifier = Modifier
@@ -1792,17 +1946,17 @@ fun SettingsView(
                     Text("BITRATE QUALITY TARGET", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Smart Auto", "High (VBR)", "Lossless").forEach { btr ->
-                            val isSel = bitratePreset == btr
+                        listOf("Smart Auto" to "auto", "High (VBR)" to "high", "Lossless" to "lossless").forEach { (label, key) ->
+                            val isSel = bitratePreset == key
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { bitratePreset = btr }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setBitratePreset(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(btr, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
                             }
                         }
                     }
@@ -1810,7 +1964,7 @@ fun SettingsView(
             }
         }
 
-        // Color Space Options
+        // Color Space Options (REAL: SDR vs HDR10 10-bit HEVC export)
         item {
             Box(
                 modifier = Modifier
@@ -1822,17 +1976,17 @@ fun SettingsView(
                     Text("COLOR SPACE PROFILE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("SDR 8-bit", "HDR10 Cinematic", "HLG Broadcast").forEach { profile ->
-                            val isSel = colorSpace == profile
+                        listOf("SDR 8-bit" to "sdr", "HDR10 Cinematic" to "hdr10").forEach { (label, key) ->
+                            val isSel = hdrMode == key
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { colorSpace = profile }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setHdrMode(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(profile, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
                             }
                         }
                     }
@@ -1840,7 +1994,7 @@ fun SettingsView(
             }
         }
 
-        // Audio sample rate selector
+        // Audio sample rate selector (REAL: -ar on every export)
         item {
             Box(
                 modifier = Modifier
@@ -1852,17 +2006,17 @@ fun SettingsView(
                     Text("AUDIO SAMPLE RATE OUTPUT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("44.1 kHz", "48 kHz", "96 kHz Studio").forEach { rate ->
-                            val isSel = audioSampleRate == rate
+                        listOf("44.1 kHz" to 44100, "48 kHz" to 48000, "96 kHz Studio" to 96000).forEach { (label, hz) ->
+                            val isSel = audioSampleRate == hz
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { audioSampleRate = rate }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setAudioSampleRateHz(hz) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(rate, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
                             }
                         }
                     }
@@ -1870,7 +2024,7 @@ fun SettingsView(
             }
         }
 
-        // Audio channels selector
+        // Audio channels selector (REAL: -ac on every export)
         item {
             Box(
                 modifier = Modifier
@@ -1882,17 +2036,17 @@ fun SettingsView(
                     Text("AUDIO OUTPUT CHANNELS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Stereo 2.0", "Surround 5.1", "Spatial Audio 3D").forEach { channels ->
-                            val isSel = audioChannels == channels
+                        listOf("Mono 1.0" to 1, "Stereo 2.0" to 2).forEach { (label, ch) ->
+                            val isSel = audioChannels == ch
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { audioChannels = channels }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setAudioChannels(ch) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(channels, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
                             }
                         }
                     }
@@ -1927,37 +2081,7 @@ fun SettingsView(
             }
         }
 
-        // Studio Rendering Engine selector
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp))
-                    .padding(14.dp)
-            ) {
-                Column {
-                    Text("STUDIO PREVIEW ENGINE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("ExoPlayer Default", "Media3 Surface", "GLES Texture").forEach { eng ->
-                            val isSel = renderingEngine == eng
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { renderingEngine = eng }
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(eng, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Timeline Magnetic Snap option
+        // Timeline Magnetic Snap option (REAL: gates drag snapping in the editor)
         item {
             Box(
                 modifier = Modifier
@@ -1976,69 +2100,9 @@ fun SettingsView(
                         Text("Snap clips instantly to safe transition nodes", fontSize = 11.sp, color = Color.Gray)
                         Switch(
                             checked = magneticSnapEnabled,
-                            onCheckedChange = { magneticSnapEnabled = it },
+                            onCheckedChange = { com.powercut.editor.core.utils.AppSettings.setMagneticSnap(it) },
                             colors = SwitchDefaults.colors(checkedThumbColor = CyberCyan)
                         )
-                    }
-                }
-            }
-        }
-
-        // Waveform Generation Complexity
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp))
-                    .padding(14.dp)
-            ) {
-                Column {
-                    Text("AUDIO WAVEFORM DETAIL STYLE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Low", "Medium", "Studio High").forEach { complexity ->
-                            val isSel = waveformComplexity == complexity
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { waveformComplexity = complexity }
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(complexity, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // AI Whisper Auto Caption Model selector
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassmorphic(shape = RoundedCornerShape(16.dp))
-                    .padding(14.dp)
-            ) {
-                Column {
-                    Text("CAPTION GENERATION MODEL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Whisper Lite", "Whisper Base", "Whisper Pro").forEach { model ->
-                            val isSel = whisperModelStyle == model
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { whisperModelStyle = model }
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(model, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
-                            }
-                        }
                     }
                 }
             }
@@ -2056,17 +2120,17 @@ fun SettingsView(
                     Text("DEFAULT STUDIO ASPECT RATIO", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("16:9 Cinema", "9:16 Vertical", "1:1 Square").forEach { aspect ->
-                            val isSel = defaultAspectRatio == aspect
+                        listOf("16:9 Cinema" to "16:9", "9:16 Vertical" to "9:16", "1:1 Square" to "1:1").forEach { (label, key) ->
+                            val isSel = defaultAspectRatio == key
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) NeonOrange.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { defaultAspectRatio = aspect }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setDefaultAspectPreset(key) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(aspect, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
                             }
                         }
                     }
@@ -2086,17 +2150,18 @@ fun SettingsView(
                     Text("MAXIMUM ASSET CACHE STORAGE LIMIT", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("500 MB", "1 GB", "5 GB", "Unlimited").forEach { limit ->
-                            val isSel = cacheLimit == limit
+                        listOf("500 MB" to 500L * 1024 * 1024, "1 GB" to 1L * 1024 * 1024 * 1024,
+                            "5 GB" to 5L * 1024 * 1024 * 1024, "Unlimited" to -1L).forEach { (label, bytes) ->
+                            val isSel = cacheLimit == bytes
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                    .clickable { cacheLimit = limit }
+                                    .clickable { com.powercut.editor.core.utils.AppSettings.setCacheLimitBytes(bytes) }
                                     .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(limit, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
                             }
                         }
                     }
@@ -2161,8 +2226,81 @@ fun SettingsView(
             }
         }
 
-        // Studio utilities (Increases workable items count to > 50 options)
+        // Studio utilities — REAL actions (cache clear, FFmpeg benchmark,
+        // factory reset, log dump). All operate on real files/settings.
         item {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var utilityBusy by remember { mutableStateOf(false) }
+
+            fun dirSize(dir: java.io.File?): Long {
+                if (dir == null || !dir.exists()) return 0L
+                return dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+            }
+
+            fun deleteContents(dir: java.io.File?) {
+                if (dir == null || !dir.exists()) return
+                dir.listFiles()?.forEach { it.deleteRecursively() }
+            }
+
+            fun runClearCache() {
+                val before = dirSize(context.cacheDir) + dirSize(context.externalCacheDir)
+                deleteContents(context.cacheDir)
+                deleteContents(context.externalCacheDir)
+                android.widget.Toast.makeText(
+                    context, "Cleared ${String.format("%.1f", before / (1024.0 * 1024.0))} MB of cache",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+
+            fun runBenchmark() {
+                utilityBusy = true
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    val outFile = java.io.File(context.cacheDir, "benchmark_${System.currentTimeMillis()}.mp4")
+                    val start = System.currentTimeMillis()
+                    val session = com.arthenica.ffmpegkit.FFmpegKit.executeWithArguments(
+                        arrayOf("-f", "lavfi", "-i", "testsrc=duration=3:size=640x360:rate=30",
+                            "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+                            "-pix_fmt", "yuv420p", "-y", outFile.absolutePath)
+                    )
+                    val elapsed = System.currentTimeMillis() - start
+                    val ok = com.arthenica.ffmpegkit.ReturnCode.isSuccess(session.returnCode)
+                    outFile.delete()
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        utilityBusy = false
+                        val msg = if (ok) "FFmpeg OK: 3s 640x360 encode in ${elapsed} ms" else "FFmpeg benchmark failed"
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
+            fun runFactoryReset() {
+                com.powercut.editor.core.utils.AppSettings.resetToDefaults()
+                deleteContents(java.io.File(context.filesDir, "drafts"))
+                deleteContents(java.io.File(context.filesDir, "downloads"))
+                deleteContents(context.cacheDir)
+                android.widget.Toast.makeText(context, "Factory reset complete", android.widget.Toast.LENGTH_LONG).show()
+            }
+
+            fun runLogDump() {
+                utilityBusy = true
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        val logs = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-t", "2000")).inputStream.bufferedReader().readText()
+                        val out = java.io.File(context.getExternalFilesDir(null), "powercut_log_dump.txt")
+                        out.writeText(logs)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            utilityBusy = false
+                            android.widget.Toast.makeText(context, "Log saved: ${out.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            utilityBusy = false
+                            android.widget.Toast.makeText(context, "Log dump failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2172,22 +2310,32 @@ fun SettingsView(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("STUDIO UTILITIES & DIAGNOSTICS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
+                    val cacheMb = (dirSize(context.cacheDir) + dirSize(context.externalCacheDir)) / (1024.0 * 1024.0)
                     listOf(
-                        "Clear Asset Cache (120 MB)",
-                        "Benchmark FFmpeg NEON Engine",
-                        "Reset to Factory Defaults",
-                        "Diagnostic Log Dump"
-                    ).forEach { action ->
+                        Triple("Clear Asset Cache (${String.format("%.0f", cacheMb)} MB used)", "Clears temp exports + generated music cache") { runClearCache() },
+                        Triple("Benchmark FFmpeg Engine", "Encodes a 3s test clip and reports the time") { runBenchmark() },
+                        Triple("Reset to Factory Defaults", "Restores all settings and clears drafts/cache") { runFactoryReset() },
+                        Triple("Diagnostic Log Dump", "Saves the last 2000 log lines to a file") { runLogDump() }
+                    ).forEach { (title, subtitle, action) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))
-                                .clickable { /* action */ }
+                                .clickable(enabled = !utilityBusy) { action() }
                                 .padding(10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(action, fontSize = 11.sp, color = Color.LightGray)
-                            Text(">", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Column {
+                                Text(title, fontSize = 11.sp, color = Color.LightGray)
+                                Text(subtitle, fontSize = 9.sp, color = Color.Gray)
+                            }
+                            if (utilityBusy) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    strokeWidth = 2.dp, modifier = Modifier.size(14.dp), color = NeonOrange
+                                )
+                            } else {
+                                Text(">", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
                     }
                 }

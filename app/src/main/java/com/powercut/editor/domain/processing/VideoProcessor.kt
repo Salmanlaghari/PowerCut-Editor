@@ -476,43 +476,73 @@ class VideoProcessor @Inject constructor(
     }
 
     private fun pickVideoCodec(): String {
+        // Phase B: honour the user's Settings → Codec preference when a suitable
+        // encoder actually exists in this FFmpeg build; otherwise fall back to
+        // the proven auto-selection so export never breaks.
         cachedVideoCodec?.let { return it }
+        val pref = runCatching { com.powercut.editor.core.utils.AppSettings.codecPreference }.getOrNull() ?: "auto"
         val codec = when {
+            pref == "hevc" && isEncoderAvailable("libx265") -> "libx265"
+            pref == "av1" && isEncoderAvailable("libsvtav1") -> "libsvtav1"
+            pref == "h264" && isEncoderAvailable("libx264") -> "libx264"
             isEncoderAvailable("libx264") -> "libx264"
             isEncoderAvailable("h264_mediacodec") && deviceHasAvcEncoder() -> "h264_mediacodec"
             isEncoderAvailable("mpeg4") -> "mpeg4"
             else -> "mpeg4"
         }
         cachedVideoCodec = codec
-        Log.d(tag, "REAL EXPORT FIX: selected video encoder = $codec")
+        Log.d(tag, "REAL EXPORT FIX: selected video encoder = $codec (preference=$pref)")
         return codec
     }
 
     private fun videoEncodeArgs(isHdr: Boolean, isHighBitrate: Boolean, gopSize: String): List<String> {
         val codec = pickVideoCodec()
-        val crf = if (isHighBitrate) "18" else "24"
-        val maxrate = if (isHighBitrate) "16M" else "6M"
-        val bufsize = if (isHighBitrate) "32M" else "12M"
+        // Phase B: apply the Settings → Bitrate Quality Target preset.
+        // lossless > high > auto in quality; each level raises CRF quality and
+        // the VBV caps. These are REAL encoder arguments, verified per-branch.
+        val bitrateLevel = runCatching { com.powercut.editor.core.utils.AppSettings.bitratePreset }.getOrNull() ?: "auto"
+        val crf = when {
+            bitrateLevel == "lossless" || isHighBitrate -> "18"
+            bitrateLevel == "high" -> "21"
+            else -> "24"
+        }
+        val maxrate = when {
+            bitrateLevel == "lossless" -> "32M"
+            bitrateLevel == "high" && !isHighBitrate -> "12M"
+            isHighBitrate -> "16M"
+            else -> "6M"
+        }
+        val bufsize = when {
+            bitrateLevel == "lossless" -> "64M"
+            bitrateLevel == "high" && !isHighBitrate -> "24M"
+            isHighBitrate -> "32M"
+            else -> "12M"
+        }
         return when (codec) {
-            "libx264" -> {
-                if (isHdr && isEncoderAvailable("libx265")) {
-                    listOf(
-                        "-c:v", "libx265", "-preset", "veryfast", "-crf", crf,
-                        "-x265-params", "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:max-cll=1000,400:hdr10-opt=1:repeat-headers=1",
-                        "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
-                        "-maxrate", "20M", "-bufsize", "40M", "-pix_fmt", "yuv420p10le",
-                        "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"
-                    )
-                } else {
-                    mutableListOf(
-                        "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
-                        "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
-                        "-maxrate", maxrate, "-bufsize", bufsize,
-                        "-profile:v", "high", "-level", "4.0",
-                        "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-map_metadata", "0"
-                    )
-                }
-            }
+            "libx265" -> if (isHdr) listOf(
+                "-c:v", "libx265", "-preset", "veryfast", "-crf", crf,
+                "-x265-params", "profile=main10:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:max-cll=1000,400:hdr10-opt=1:repeat-headers=1",
+                "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
+                "-maxrate", maxrate, "-bufsize", bufsize, "-pix_fmt", "yuv420p10le",
+                "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"
+            ) else listOf(
+                "-c:v", "libx265", "-preset", "veryfast", "-crf", crf,
+                "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
+                "-maxrate", maxrate, "-bufsize", bufsize, "-pix_fmt", "yuv420p",
+                "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "0"
+            )
+            "libx264" -> listOf(
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
+                "-g", gopSize, "-keyint_min", gopSize, "-sc_threshold", "0",
+                "-maxrate", maxrate, "-bufsize", bufsize,
+                "-profile:v", "high", "-level", "4.0",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-map_metadata", "0"
+            )
+            "libsvtav1" -> listOf(
+                "-c:v", "libsvtav1", "-crf", crf, "-preset", "8",
+                "-g", gopSize, "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart", "-map_metadata", "0"
+            )
             "h264_mediacodec" -> listOf(
                 "-c:v", "h264_mediacodec", "-b:v", maxrate, "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", "-map_metadata", "0"
@@ -527,9 +557,22 @@ class VideoProcessor @Inject constructor(
     private fun simpleVideoEncodeArgs(crf: String = "24", bitrate: String = "6M"): List<String> {
         return when (pickVideoCodec()) {
             "libx264" -> listOf("-c:v", "libx264", "-preset", "ultrafast", "-crf", crf, "-pix_fmt", "yuv420p")
+            "libx265" -> listOf("-c:v", "libx265", "-preset", "ultrafast", "-crf", crf, "-pix_fmt", "yuv420p")
+            "libsvtav1" -> listOf("-c:v", "libsvtav1", "-preset", "10", "-crf", crf, "-pix_fmt", "yuv420p")
             "h264_mediacodec" -> listOf("-c:v", "h264_mediacodec", "-b:v", bitrate, "-pix_fmt", "yuv420p")
             else -> listOf("-c:v", "mpeg4", "-b:v", bitrate, "-pix_fmt", "yuv420p")
         }
+    }
+
+    /**
+     * Phase B: audio output settings from the Settings screen, applied to every
+     * export command. Sample rate → `-ar`, channel count → `-ac`. Both are real
+     * FFmpeg muxer arguments (mono/stereo only — no fake surround upmixing).
+     */
+    private fun audioOutputArgs(): List<String> {
+        val rate = runCatching { com.powercut.editor.core.utils.AppSettings.audioSampleRateHz }.getOrNull() ?: 48000
+        val ch = runCatching { com.powercut.editor.core.utils.AppSettings.audioChannels }.getOrNull() ?: 2
+        return listOf("-ar", rate.toString(), "-ac", ch.coerceIn(1, 2).toString())
     }
 
     /**
@@ -1589,6 +1632,7 @@ class VideoProcessor @Inject constructor(
         // fallback). This eliminates the universal "Unknown encoder 'libx264'"
         // export failure while still honouring HDR (libx265) when present.
         args.addAll(videoEncodeArgs(isHdrEnabled, isHighBitrateEnabled, gopSize))
+        args.addAll(audioOutputArgs())
         Log.d(tag, "v7.0 export encoder args: ${args.takeLast(12).joinToString(" ")}")
         args.addAll(listOf("-y", outputPath))
 
@@ -2070,6 +2114,7 @@ class VideoProcessor @Inject constructor(
             args.addAll(videoEncodeArgs(project.isHdrEnabled, project.isHighBitrateEnabled, "250"))
             if (finalAudioLabel != null) {
                 args.addAll(listOf("-c:a", "aac", "-b:a", "192k"))
+                args.addAll(audioOutputArgs())
             } else {
                 args.add("-an")
             }

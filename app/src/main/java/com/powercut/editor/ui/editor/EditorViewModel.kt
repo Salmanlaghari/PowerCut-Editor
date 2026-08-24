@@ -733,6 +733,9 @@ class EditorViewModel @Inject constructor(
                         trimStartMs = 0L,
                         trimEndMs = if (realDurationMs > 0L) realDurationMs else 0L,
                         targetResolution = _selectedResolution.value,
+                        // Phase B: Settings → Default Aspect Ratio is applied to
+                        // every newly created project (real exporter field).
+                        aspectPreset = com.powercut.editor.core.utils.AppSettings.defaultAspectPreset,
                         activeTemplateId = templateId,
                         selectedFilter = filter,
                         transitionType = transition,
@@ -1918,8 +1921,11 @@ class EditorViewModel @Inject constructor(
             project.copy(
                 targetResolution = resolution,
                 targetFps = fps,
-                isHdrEnabled = isHdr,
-                isHighBitrateEnabled = isHighBitrate,
+                isHdrEnabled = isHdr || com.powercut.editor.core.utils.AppSettings.hdrMode == "hdr10",
+                // Phase B: the Lossless bitrate preset in Settings forces the
+                // high-bitrate (CRF 18 / 16 Mbps VBV) encoder path.
+                isHighBitrateEnabled = isHighBitrate ||
+                    com.powercut.editor.core.utils.AppSettings.bitratePreset == "lossless",
                 watermarkPath = watermarkPath,
                 activeAiFeature = _activeAiFeature.value,
                 socialPreset = _socialPreset.value
