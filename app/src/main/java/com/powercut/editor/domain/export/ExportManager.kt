@@ -648,6 +648,15 @@ class ExportManager @Inject constructor(
                     socialPreset = project.socialPreset,
                     // v7.1 Keyframe animation
                     keyframeTracks = project.keyframeTracks,
+                    // ── Phase C: real eraser / auto-reframe / manual crop / layers ──
+                    eraserMode = project.eraserMode,
+                    eraserTolerance = project.eraserTolerance,
+                    autoReframeEnabled = project.autoReframeEnabled,
+                    cropLeftF = project.cropLeftF,
+                    cropTopF = project.cropTopF,
+                    cropRightF = project.cropRightF,
+                    cropBottomF = project.cropBottomF,
+                    activeLayers = project.activeLayers,
                     keyframeClipId = "",
                     onProgress = { pct -> updateProgress(pct) }
             )
@@ -758,8 +767,17 @@ class ExportManager @Inject constructor(
                         socialPreset = project.socialPreset,
                         // v7.1 Keyframe animation
                         keyframeTracks = project.keyframeTracks,
+                        // ── Phase C: real eraser / auto-reframe / manual crop / layers ──
+                        eraserMode = project.eraserMode,
+                        eraserTolerance = project.eraserTolerance,
+                        autoReframeEnabled = project.autoReframeEnabled,
+                        cropLeftF = project.cropLeftF,
+                        cropTopF = project.cropTopF,
+                        cropRightF = project.cropRightF,
+                        cropBottomF = project.cropBottomF,
+                        activeLayers = project.activeLayers,
                         keyframeClipId = "",
-onProgress = { pct -> updateProgress(pct) }
+                        onProgress = { pct -> updateProgress(pct) }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
                         val galleryPath = saveToPublicGallery(context, tempOutputFile)

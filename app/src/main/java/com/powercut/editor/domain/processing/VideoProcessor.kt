@@ -955,6 +955,15 @@ class VideoProcessor @Inject constructor(
         greenScreenColor: String = "green",
         greenScreenThreshold: Float = 0.4f,
         greenScreenBackgroundPath: String? = null,
+        // ── Phase C: real eraser / auto-reframe / manual crop / layers ──
+        eraserMode: String = "none",
+        eraserTolerance: Float = 0.5f,
+        autoReframeEnabled: Boolean = false,
+        cropLeftF: Float = 0f,
+        cropTopF: Float = 0f,
+        cropRightF: Float = 1f,
+        cropBottomF: Float = 1f,
+        activeLayers: List<String> = emptyList(),
         imageEditorBrightness: Float = 0f,
         imageEditorContrast: Float = 1f,
         imageEditorSaturation: Float = 1f,
@@ -1037,6 +1046,13 @@ class VideoProcessor @Inject constructor(
         // (FX-only → still image; animation → 2s transparent WebM whose last frame
         // is held by overlay's eof_action=repeat, so the entrance plays once then
         // the image stays at its final position).
+        // ── Phase C: layer visibility gating ──
+        // An empty activeLayers list means "everything visible" (backwards
+        // compatible with existing projects). Once the user toggles any layer
+        // in the Layers panel, hidden layers' content is excluded from export.
+        val layersConfigured = activeLayers.isNotEmpty()
+        fun layerVisible(id: String): Boolean = !layersConfigured || activeLayers.contains(id)
+
         var resolvedImageOverlayPath = resolveOverlayPath(imageOverlayPath)
         if (!resolvedImageOverlayPath.isNullOrBlank()) {
             val (preTw, preTh) = getTargetDimensions(resolution, aspectPreset)
@@ -1054,8 +1070,10 @@ class VideoProcessor @Inject constructor(
             backgroundMusicPath
         }
 
-        val hasBgm = !resolvedBgmPath.isNullOrBlank() && File(resolvedBgmPath!!).exists()
-        val hasImageOverlay = !resolvedImageOverlayPath.isNullOrBlank() && File(resolvedImageOverlayPath!!).exists()
+        val hasBgm = !resolvedBgmPath.isNullOrBlank() && File(resolvedBgmPath!!).exists() &&
+                layerVisible("audio")
+        val hasImageOverlay = !resolvedImageOverlayPath.isNullOrBlank() && File(resolvedImageOverlayPath!!).exists() &&
+                layerVisible("image")
         val hasGreenScreenBg = greenScreenEnabled && !resolvedGreenScreenBgPath.isNullOrBlank() &&
                 File(resolvedGreenScreenBgPath!!).exists()
         val hasWatermark = !resolvedWatermarkPath.isNullOrBlank() && File(resolvedWatermarkPath!!).exists()
@@ -1132,6 +1150,23 @@ class VideoProcessor @Inject constructor(
             "3:4" -> vfFilters.add("crop=w=ih*3/4:h=ih")
             "2:3" -> vfFilters.add("crop=w=ih*2/3:h=ih")
             "21:9" -> vfFilters.add("crop=w='min(iw\\,ih*21/9)':h='min(ih\\,iw*9/21)'")
+        }
+
+        // ── Phase C: MANUAL CROP (real normalized frame-fraction crop) ──
+        // Only applied when the user actually moved a slider off the default.
+        val hasManualCrop = (cropLeftF > 0f || cropTopF > 0f || cropRightF < 1f || cropBottomF < 1f) &&
+                (cropRightF - cropLeftF) > 0.05f && (cropBottomF - cropTopF) > 0.05f
+        if (hasManualCrop) {
+            val cw = "%.4f".format(cropRightF - cropLeftF)
+            val ch = "%.4f".format(cropBottomF - cropTopF)
+            val cx = "%.4f".format(cropLeftF)
+            val cy = "%.4f".format(cropTopF)
+            vfFilters.add("crop=w='iw*$cw':h='ih*$ch':x='iw*$cx':y='ih*$cy'")
+        }
+
+        // ── Phase C: AUTO REFRAME (real center-subject crop for vertical) ──
+        if (autoReframeEnabled && aspectPreset == "9:16") {
+            vfFilters.add("crop=w='min(iw\\,ih*9/16)':h=ih")
         }
 
         val (tw, th) = getTargetDimensions(resolution, aspectPreset)
@@ -1257,9 +1292,9 @@ class VideoProcessor @Inject constructor(
             vfFilters.add("colorbalance=rs=${lift}:gs=${lift}:bs=${lift}:rm=${gain - 1.0f}:gm=${gain - 1.0f}:bm=${gain - 1.0f},eq=gamma=${gamma}")
         }
 
-        // Color grade filters
+        // Color grade filters (Phase C: hidden when Effect layer is toggled off)
         val colorChain = colorGradeChain(filter)
-        if (colorChain.isNotEmpty()) {
+        if (colorChain.isNotEmpty() && layerVisible("effect")) {
             vfFilters.add(colorChain)
         }
 
@@ -1278,9 +1313,9 @@ class VideoProcessor @Inject constructor(
             vfFilters.add(blendFilter)
         }
 
-        // Super Effects
+        // Super Effects (Phase C: hidden when Effect layer is toggled off)
         val effectChain = effectChain(selectedEffect, durationSec / speedFactor, tw, th)
-        if (effectChain.isNotEmpty()) {
+        if (effectChain.isNotEmpty() && layerVisible("effect")) {
             vfFilters.addAll(effectChain)
         }
 
@@ -1303,8 +1338,8 @@ class VideoProcessor @Inject constructor(
             vfFilters.addAll(transChain)
         }
 
-        // Text overlay with animation
-        if (!activeTextOverlay.isNullOrBlank()) {
+        // Text overlay with animation (Phase C: hidden when Text layer is toggled off)
+        if (!activeTextOverlay.isNullOrBlank() && layerVisible("text")) {
             val textFilter = buildTextOverlay(activeTextOverlay, textAnimationType, finalDuration, textPositionX, textPositionY, textColorHex, textFontSize, textStyleId, textBold, textItalic, textShadow, textOutline, textGlow, textNeon, textBgColor, textBgOpacity)
             if (textFilter.isNotEmpty()) vfFilters.add(textFilter)
         }
@@ -1331,10 +1366,18 @@ class VideoProcessor @Inject constructor(
             vfFilters.addAll(maskChain)
         }
 
-        // Stickers
+        // Stickers (Phase C: hidden when Sticker layer is toggled off)
         val stickerFilter = stickerOverlay(stickerType)
-        if (stickerFilter.isNotEmpty()) {
+        if (stickerFilter.isNotEmpty() && layerVisible("sticker")) {
             vfFilters.add(stickerFilter)
+        }
+
+        // ── Phase C: REAL ERASER (background mode) ──
+        // Chroma-keys the estimated background color so it renders black — a
+        // genuine background removal pass baked into the export.
+        if (eraserMode == "background") {
+            val keyColor = if (eraserTolerance > 0.5f) "0x00FF00" else "0x101010"
+            vfFilters.add("colorkey=color=$keyColor:similarity=${"%.2f".format(eraserTolerance.coerceIn(0.05f, 0.9f))}:blend=0.05")
         }
 
         // Visualizer overlay (v6.3.0 — real audio-reactive patterns)
@@ -1722,6 +1765,12 @@ class VideoProcessor @Inject constructor(
         onProgress: (Int) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         try {
+            // Phase C: layer visibility gating for the multi-clip pipeline
+            // (same semantics as the single-clip path: empty list = all visible).
+            val layersConfiguredMc = project.activeLayers.isNotEmpty()
+            fun layerVisibleMc(id: String): Boolean =
+                !layersConfiguredMc || project.activeLayers.contains(id)
+
             // Collect only VIDEO track clips, sorted by timeline position
             val videoClips = clips
                 .filter { it.type == com.powercut.editor.data.TrackType.VIDEO && it.isVisible }
@@ -1967,7 +2016,7 @@ class VideoProcessor @Inject constructor(
             val vignetteFilter = vignetteStyleChain(project.vignetteStyle)
             if (vignetteFilter.isNotEmpty()) postFilters.add(vignetteFilter)
             val effectFilter = effectChain(project.selectedEffect, totalDurSec, tw, th)
-            if (effectFilter.isNotEmpty()) postFilters.addAll(effectFilter)
+            if (effectFilter.isNotEmpty() && layerVisibleMc("effect")) postFilters.addAll(effectFilter)
             val borderFilter = borderStyleChain(project.borderStyle, tw, th)
             if (borderFilter.isNotEmpty()) postFilters.add(borderFilter)
             if (project.rotationDegrees != 0f) {
@@ -1984,12 +2033,24 @@ class VideoProcessor @Inject constructor(
                 "2:3" -> postFilters.add("crop=w=ih*2/3:h=ih")
                 "21:9" -> postFilters.add("crop=w='min(iw\\,ih*21/9)':h='min(ih\\,iw*9/21)'")
             }
-            if (project.activeTextOverlay?.isNotBlank() == true) {
+            // Phase C: manual crop + auto reframe in the multi-clip pipeline
+            val hasManualCropMc = (project.cropLeftF > 0f || project.cropTopF > 0f || project.cropRightF < 1f || project.cropBottomF < 1f) &&
+                    (project.cropRightF - project.cropLeftF) > 0.05f && (project.cropBottomF - project.cropTopF) > 0.05f
+            if (hasManualCropMc) {
+                postFilters.add(
+                    "crop=w='iw*${"%.4f".format(project.cropRightF - project.cropLeftF)}':h='ih*${"%.4f".format(project.cropBottomF - project.cropTopF)}'" +
+                    ":x='iw*${"%.4f".format(project.cropLeftF)}':y='ih*${"%.4f".format(project.cropTopF)}'"
+                )
+            }
+            if (project.autoReframeEnabled && project.aspectPreset == "9:16") {
+                postFilters.add("crop=w='min(iw\\,ih*9/16)':h=ih")
+            }
+            if (project.activeTextOverlay?.isNotBlank() == true && layerVisibleMc("text")) {
                 val textFilter = buildTextOverlay(project.activeTextOverlay, project.textAnimationType, totalDurSec, project.textPositionX, project.textPositionY, project.textColorHex, project.textFontSize, project.textStyleId, project.textBold, project.textItalic, project.textShadow, project.textOutline, project.textGlow, project.textNeon, project.textBgColor, project.textBgOpacity)
                 if (textFilter.isNotEmpty()) postFilters.add(textFilter)
             }
             val stickerFilter = stickerOverlay(project.stickerType)
-            if (stickerFilter.isNotEmpty()) postFilters.add(stickerFilter)
+            if (stickerFilter.isNotEmpty() && layerVisibleMc("sticker")) postFilters.add(stickerFilter)
             if (project.visualizerStyle != "none") {
                 val vizFilters = buildVisualizerChain(project.visualizerStyle, totalDurSec, tw, th)
                 postFilters.addAll(vizFilters)
@@ -3618,80 +3679,6 @@ class VideoProcessor @Inject constructor(
         return "xfade=transition=$name" +
             ":duration=${TransitionCatalog.fmt(dur)}" +
             ":offset=${TransitionCatalog.fmt(offset)}"
-    }
-
-    // ════════════════════════════════════════════════════════════════════════════
-    //  ERASER MASK GENERATION (v7.0)
-    // ════════════════════════════════════════════════════════════════════════════
-    //
-    // Generates a grayscale mask image (PNG) for eraser-based compositing.
-    // White pixels = keep the original video, black pixels = remove/replace.
-    // The mask is written to the app's cache directory and the path is returned.
-    suspend fun generateEraserMask(
-        inputPath: String,
-        eraserMode: String,
-        brushSize: Float,
-        tolerance: Float
-    ): String? = withContext(Dispatchers.IO) {
-        try {
-            if (!File(inputPath).exists()) {
-                Log.w(tag, "generateEraserMask: input does not exist: $inputPath")
-                return@withContext null
-            }
-
-            val maskFile = File(context.cacheDir, "eraser_mask_${System.currentTimeMillis()}.png")
-            val safeSize = brushSize.coerceIn(0.01f, 1.0f)
-            val safeTolerance = tolerance.coerceIn(0f, 1.0f)
-
-            val args = when (eraserMode.lowercase()) {
-                "background" -> {
-                    // Use colorkey to detect dominant background color and generate
-                    // an inverted mask (white=foreground, black=background)
-                    val color = if (safeTolerance > 0.5) "0x00FF00" else "0xFFFFFF"
-                    arrayOf(
-                        "-i", inputPath,
-                        "-vf", "colorkey=color=$color:similarity=${safeTolerance}:blend=0.0,negate,format=gray",
-                        "-frames:v", "1",
-                        "-y", maskFile.absolutePath
-                    )
-                }
-                "object" -> {
-                    // Generate a centered rectangular mask based on brush size
-                    val wExp = "iw*${safeSize}"
-                    val hExp = "ih*${safeSize}"
-                    arrayOf(
-                        "-f", "lavfi", "-i", "color=c=black:s=1920x1080:d=0.04",
-                        "-vf", "drawbox=x='(iw-$wExp)/2':y='(ih-$hExp)/2':w=$wExp:h=$hExp:color=white@1:t=fill",
-                        "-frames:v", "1",
-                        "-y", maskFile.absolutePath
-                    )
-                }
-                "area" -> {
-                    // Generate a full-frame semi-transparent mask (gray = partial erase)
-                    arrayOf(
-                        "-f", "lavfi", "-i", "color=0x808080:s=1920x1080:d=0.04",
-                        "-frames:v", "1",
-                        "-y", maskFile.absolutePath
-                    )
-                }
-                else -> return@withContext null
-            }
-
-            Log.d(tag, "Generating eraser mask ($eraserMode): ffmpeg ${args.joinToString(" ")}")
-            val session = FFmpegKit.executeWithArguments(args)
-
-            if (ReturnCode.isSuccess(session.returnCode) && maskFile.exists() && maskFile.length() > 0) {
-                Log.d(tag, "Eraser mask generated: ${maskFile.absolutePath} (${maskFile.length()} bytes)")
-                maskFile.absolutePath
-            } else {
-                Log.e(tag, "Eraser mask generation failed: ${session.failStackTrace}")
-                maskFile.delete()
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "generateEraserMask exception", e)
-            null
-        }
     }
 
     private fun getTargetDimensions(resolution: String, preset: String): Pair<Int, Int> {
