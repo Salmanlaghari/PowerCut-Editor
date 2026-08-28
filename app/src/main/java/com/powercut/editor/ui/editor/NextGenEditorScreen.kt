@@ -576,12 +576,16 @@ fun NextGenEditorScreen(
     // on the active curve and current playback time. "Normal" = constant speed.
     // "Montage" / "Hero" / "Flash" / "Bullet" each modulate the speed over time
     // (start slow, ramp, snap, bullet-time freeze-frame ramp). Export uses the
-    // real FFmpeg setpts filter for pixel accuracy.
-    LaunchedEffect(project.speedFactor, project.speedCurve, isPlaying) {
+    // real FFmpeg setpts filter for pixel accuracy. Voice-changer pitch is
+    // applied here too via the second PlaybackParameters arg (independent of
+    // speed). Real audio effects (robot/phone/reverb/...) need FFmpeg's
+    // affilter chain at export time.
+    LaunchedEffect(project.speedFactor, project.speedCurve, project.voiceChangerPitch, isPlaying) {
         val base = project.speedFactor.coerceIn(0.1f, 16f)
+        val pitch = kotlin.math.pow(2.0, (project.voiceChangerPitch / 12.0).toDouble()).toFloat().coerceIn(0.25f, 4f)
         val curve = project.speedCurve.lowercase()
         if (curve == "normal" || curve == "constant") {
-            exoPlayer.playbackParameters = PlaybackParameters(base)
+            exoPlayer.playbackParameters = PlaybackParameters(base, pitch)
             playbackSpeed = base
             return@LaunchedEffect
         }
@@ -597,10 +601,18 @@ fun NextGenEditorScreen(
                 else -> 1.0f
             }
             val effective = (base * mult).coerceIn(0.1f, 16f)
-            exoPlayer.playbackParameters = PlaybackParameters(effective)
+            exoPlayer.playbackParameters = PlaybackParameters(effective, pitch)
             playbackSpeed = effective
             kotlinx.coroutines.delay(50)
         }
+    }
+    // Audio ducking — when enabled, BGM volume auto-drops while video is
+    // audible (i.e. not muted) and rises while muted. Cheap real-time
+    // approximation of FFmpeg sidechaincompress at export.
+    LaunchedEffect(project.isAudioDuckingEnabled, project.backgroundMusicVolume, project.isMuted, bgmPrepared) {
+        if (!project.isAudioDuckingEnabled || !bgmPrepared) return@LaunchedEffect
+        val target = if (project.isMuted) project.backgroundMusicVolume else project.backgroundMusicVolume * 0.35f
+        bgmPlayer.volume = target
     }
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
@@ -1791,6 +1803,80 @@ fun NextGenEditorScreen(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
+                }
+
+                // Audio status badges (v6.5.0) — surface what's currently
+                // applied to the audio chain in a single bottom-right row.
+                // Real audio effects beyond pitch (robot/phone/reverb/...)
+                // require FFmpeg's affilter chain at export time.
+                Row(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (project.audioEffect != "none") {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🔊 ${project.audioEffect}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.voiceChangerPitch != 0f) {
+                        val semis = project.voiceChangerPitch
+                        val dir = if (semis > 0) "↑" else "↓"
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFF6B6B).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🎤 $dir${kotlin.math.abs(semis).toInt()}st", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.isAudioDuckingEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFFAA00).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🦆 DUCK", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.isSilenceRemoverEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🔇 REMOVE SILENCE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                // Beat sync — pulsing border (v6.5.0)
+                if (project.isBeatSyncEnabled) {
+                    val beat = rememberInfiniteTransition(label = "beat")
+                    val pulse by beat.animateFloat(
+                        initialValue = 0.3f, targetValue = 0.85f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 500, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "pulse"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(6.dp, Color(0xFF00E5FF).copy(alpha = pulse))
+                    )
+                    Box(
+                        modifier = Modifier.align(Alignment.BottomEnd).let {
+                            if (project.audioEffect == "none" && project.voiceChangerPitch == 0f && !project.isAudioDuckingEnabled && !project.isSilenceRemoverEnabled) it else it.padding(bottom = 28.dp)
+                        }
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("🥁 BEAT SYNC", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 // Visualizer — LIVE PREVIEW (v6.4.0)
