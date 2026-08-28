@@ -561,6 +561,7 @@ class ExportManager @Inject constructor(
             //  -vf/-af filters. This ensures 100% of edits appear in export.
             // ═══════════════════════════════════════════════════════════════════════
             Log.d(tag, "Using transcode pipeline for full filter chain")
+            var exportWarning: String? = null
             val success = videoProcessor.processAndExport(
                     inputPath = videoPath,
                     outputPath = tempOutputPath,
@@ -658,7 +659,8 @@ class ExportManager @Inject constructor(
                     cropBottomF = project.cropBottomF,
                     activeLayers = project.activeLayers,
                     keyframeClipId = "",
-                    onProgress = { pct -> updateProgress(pct) }
+                    onProgress = { pct -> updateProgress(pct) },
+                    onWarning = { msg -> exportWarning = msg }
             )
 
             if (success && tempOutputFile.exists() && tempOutputFile.length() > 0) {
@@ -666,15 +668,18 @@ class ExportManager @Inject constructor(
                 _progress.value = 95 // encoding done, saving to gallery
 
                 val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                val finalPath = galleryPath ?: tempOutputPath
 
+                _progress.value = 100
                 if (galleryPath != null) {
                     Log.d(tag, "Successfully registered output in system gallery: $galleryPath")
-                    _progress.value = 100
-                    _exportState.value = Resource.Success(galleryPath)
                 } else {
                     Log.w(tag, "Could not insert in MediaStore, falling back to secure sandbox path")
-                    _progress.value = 100
-                    _exportState.value = Resource.Success(tempOutputPath)
+                }
+                _exportState.value = if (exportWarning != null) {
+                    Resource.SuccessWithWarning(finalPath, exportWarning!!)
+                } else {
+                    Resource.Success(finalPath)
                 }
             } else {
                 Log.e(tag, "Export failed during video processing")
@@ -777,12 +782,17 @@ class ExportManager @Inject constructor(
                         cropBottomF = project.cropBottomF,
                         activeLayers = project.activeLayers,
                         keyframeClipId = "",
-                        onProgress = { pct -> updateProgress(pct) }
+                        onProgress = { pct -> updateProgress(pct) },
+                        onWarning = { msg -> exportWarning = msg }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
-                        val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                        val finalPath = saveToPublicGallery(context, tempOutputFile) ?: tempOutputPath
                         _progress.value = 100
-                        _exportState.value = Resource.Success(galleryPath ?: tempOutputPath)
+                        _exportState.value = if (exportWarning != null) {
+                            Resource.SuccessWithWarning(finalPath, exportWarning!!)
+                        } else {
+                            Resource.Success(finalPath)
+                        }
                         return
                     }
                 }
