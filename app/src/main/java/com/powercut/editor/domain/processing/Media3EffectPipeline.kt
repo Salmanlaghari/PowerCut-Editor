@@ -40,7 +40,9 @@ class Media3EffectPipeline @Inject constructor() {
         colorGain: Float = 0f,
         imageEditorSharpen: Float = 0f,
         greenScreenEnabled: Boolean = false,
-        greenScreenColor: String = "green"
+        greenScreenColor: String = "green",
+        imageEditorHighlights: Float = 0f,
+        imageEditorShadows: Float = 0f
     ): List<ColorEffect> {
         val effects = mutableListOf<ColorEffect>()
         if (filterId != "none" && filterId.isNotBlank()) buildFilterEffect(filterId)?.let(effects::add)
@@ -49,7 +51,8 @@ class Media3EffectPipeline @Inject constructor() {
         buildColorCurvesEffect(colorLift, colorGamma, colorGain)?.let(effects::add)
         buildSharpenEffect(imageEditorSharpen)?.let(effects::add)
         if (greenScreenEnabled) buildChromaDesaturateEffect(greenScreenColor)?.let(effects::add)
-        Log.d(TAG, "Built ${effects.size} Media3 color effects for filter=$filterId, look=$premiumLookId, sharpen=$imageEditorSharpen, chroma=$greenScreenEnabled")
+        buildHighlightsShadowsEffect(imageEditorHighlights, imageEditorShadows)?.let(effects::add)
+        Log.d(TAG, "Built ${effects.size} Media3 color effects (filter=$filterId, look=$premiumLookId, sharpen=$imageEditorSharpen, chroma=$greenScreenEnabled, hi=$imageEditorHighlights, sh=$imageEditorShadows)")
         return effects
     }
 
@@ -156,6 +159,28 @@ class Media3EffectPipeline @Inject constructor() {
         )
     }
 
+    /**
+     * Approximate highlights / shadows tone-curve for live preview. A real
+     * highlights/shadows slider needs a per-pixel tone curve (FFmpeg `curves`
+     * or `eq=brightness=…:contrast=…` per region), which an RgbMatrix cannot
+     * express. The closest matrix approximation: split the signal into a
+     * brightness component (shadows) and a contrast component (highlights).
+     * Highlights (range -1..1) push the upper range via contrast; shadows
+     * (range -1..1) lift/lower the overall brightness floor. Perceptually
+     * close to the slider's intent at moderate values. Export uses the real
+     * FFmpeg curves filter for pixel accuracy.
+     */
+    private fun buildHighlightsShadowsEffect(highlights: Float, shadows: Float): ColorEffect? {
+        if (highlights == 0f && shadows == 0f) return null
+        val hi = highlights.coerceIn(-1f, 1f)
+        val sh = shadows.coerceIn(-1f, 1f)
+        val contrast = (1f + hi * 0.35f).coerceIn(0.5f, 2f)
+        val brightness = (sh * 0.12f).coerceIn(-0.2f, 0.2f)
+        return createRgbAdjustment(
+            brightness = brightness, contrast = contrast, saturation = 1f, temperature = 0f, tint = 0f
+        )
+    }
+
     private fun createRgbAdjustment(brightness: Float, contrast: Float, saturation: Float, temperature: Float, tint: Float): ColorEffect {
         val brightnessM = GlUtil.create4x4IdentityMatrix().also { if (brightness != 0f) Matrix.translateM(it, 0, brightness, brightness, brightness) }
         val contrastM = GlUtil.create4x4IdentityMatrix().also {
@@ -193,7 +218,9 @@ class Media3EffectPipeline @Inject constructor() {
         colorGamma = project.colorGamma, colorGain = project.colorGain,
         imageEditorSharpen = project.imageEditorSharpen,
         greenScreenEnabled = project.greenScreenEnabled,
-        greenScreenColor = project.greenScreenColor
+        greenScreenColor = project.greenScreenColor,
+        imageEditorHighlights = project.imageEditorHighlights,
+        imageEditorShadows = project.imageEditorShadows
     )
 
     /** Builds color effects plus the aspect-aware Crop effect for live preview. */

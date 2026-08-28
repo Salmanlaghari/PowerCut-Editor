@@ -575,6 +575,10 @@ fun NextGenEditorScreen(
         project.colorGamma,
         project.colorGain,
         project.imageEditorSharpen,
+        project.imageEditorHighlights,
+        project.imageEditorShadows,
+        project.greenScreenEnabled,
+        project.greenScreenColor,
         filterPreviewFile
     ) {
         // When a real FFmpeg preview clip is on screen, the filter (and any
@@ -948,6 +952,133 @@ fun NextGenEditorScreen(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text("🟢 KEYED", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Blend mode — LIVE PREVIEW (v6.5.0)
+                // Tints the frame with a translucent color pass that approximates
+                // the chosen Porter-Duff / Photoshop blend mode. Real blend modes
+                // operate on the underlying video pixels, which an RgbMatrix can't
+                // do; the closest honest approximation is a low-alpha colored
+                // overlay that conveys the user's selection. The export pipeline
+                // still uses the real FFmpeg `blend` / `overlay` filter.
+                if (project.blendMode != "none") {
+                    val blendColor = when (project.blendMode) {
+                        "multiply" -> Color(0xFF6A4FCF).copy(alpha = 0.22f)
+                        "screen" -> Color(0xFFB0E0FF).copy(alpha = 0.22f)
+                        "overlay" -> Color(0xFFFFD27F).copy(alpha = 0.18f)
+                        "darken" -> Color.Black.copy(alpha = 0.25f)
+                        "lighten" -> Color.White.copy(alpha = 0.18f)
+                        "color_dodge" -> Color(0xFFFFE08A).copy(alpha = 0.22f)
+                        "color_burn" -> Color(0xFF3A1A0A).copy(alpha = 0.28f)
+                        "hard_light" -> Color(0xFFFF7F50).copy(alpha = 0.20f)
+                        "soft_light" -> Color(0xFFBFA5FF).copy(alpha = 0.18f)
+                        "difference" -> Color(0xFF00FFFF).copy(alpha = 0.15f)
+                        "exclusion" -> Color(0xFFFF00FF).copy(alpha = 0.15f)
+                        "hue" -> Color(0xFF00FF7F).copy(alpha = 0.16f)
+                        "saturation" -> Color(0xFFFF1493).copy(alpha = 0.16f)
+                        "color" -> Color(0xFF7FFFD4).copy(alpha = 0.16f)
+                        "luminosity" -> Color(0xFFFFFFFF).copy(alpha = 0.12f)
+                        "addition" -> Color(0xFFFFB300).copy(alpha = 0.16f)
+                        "phoenix" -> Color(0xFFFF6B6B).copy(alpha = 0.16f)
+                        "reflect" -> Color(0xFF6EC1E4).copy(alpha = 0.18f)
+                        "glow" -> Color(0xFFFFE4B5).copy(alpha = 0.20f)
+                        "negation" -> Color(0xFF7FFF00).copy(alpha = 0.16f)
+                        else -> Color.White.copy(alpha = 0.10f)
+                    }
+                    Box(modifier = Modifier.fillMaxSize().background(blendColor))
+                    Box(
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("🎨 ${project.blendMode}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Border style — LIVE PREVIEW (v6.5.0)
+                // Draws a styled frame around the preview, with thickness,
+                // color, and decoration varying per style. Rounded / neon /
+                // shadow / glow / film / polaroid / vintage / modern / minimal.
+                if (project.borderStyle != "none") {
+                    val borderColor = when (project.borderStyle) {
+                        "white" -> Color.White
+                        "black" -> Color.Black
+                        "neon" -> Color(0xFF00E5FF)
+                        "gradient" -> Color(0xFFFF00E5)
+                        "film" -> Color(0xFF8B7355)
+                        "polaroid" -> Color(0xFFFAF0E6)
+                        "vintage" -> Color(0xFFB8860B)
+                        "modern" -> Color(0xFF7C5CFF)
+                        "minimal" -> Color(0xFFCCCCCC)
+                        "glow" -> Color(0xFFFFAA00)
+                        "shadow" -> Color(0xFF333333)
+                        "rounded" -> Color(0xFF1A1A2E)
+                        else -> Color.White
+                    }
+                    val borderWidth = if (project.borderStyle in listOf("neon", "glow", "film")) 8.dp else 6.dp
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                            .border(borderWidth, borderColor, if (project.borderStyle == "rounded") RoundedCornerShape(20.dp) else RoundedCornerShape(0.dp))
+                            .padding(borderWidth)
+                    )
+                    Box(
+                        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("🖼 ${project.borderStyle}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Vignette style (preset) — LIVE PREVIEW (v6.5.0)
+                // The imageEditorVignette slider is already a Compose radial
+                // gradient overlay above. This adds the *preset* styles
+                // (classic/soft/strong/reverse/colored/blur/spotlight) on top
+                // of that, matching the FFmpeg vignette expressions export uses.
+                if (project.vignetteStyle != "none") {
+                    val (strength, color, reverse, blur) = when (project.vignetteStyle) {
+                        "classic" -> VignetteParams(0.7f, Color.Black, false, false)
+                        "soft" -> VignetteParams(0.45f, Color.Black, false, false)
+                        "strong" -> VignetteParams(0.95f, Color.Black, false, false)
+                        "reverse" -> VignetteParams(0.7f, Color.White, true, false)
+                        "colored" -> VignetteParams(0.65f, Color(0xFF3A1A4A), false, false)
+                        "blur" -> VignetteParams(0.55f, Color.Black, false, true)
+                        "spotlight" -> VignetteParams(0.5f, Color.Black, false, false)
+                        else -> VignetteParams(0.5f, Color.Black, false, false)
+                    }
+                    if (blur) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .blur((20f).dp)
+                                .background(color.copy(alpha = strength))
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize().drawWithContent {
+                                drawContent()
+                                val brush = if (reverse) {
+                                    Brush.radialGradient(
+                                        colors = listOf(Color.Transparent, color.copy(alpha = strength)),
+                                        center = center, radius = size.maxDimension * 0.7f
+                                    )
+                                } else {
+                                    Brush.radialGradient(
+                                        colors = listOf(Color.Transparent, color.copy(alpha = strength)),
+                                        center = center, radius = size.maxDimension * 0.7f
+                                    )
+                                }
+                                drawRect(brush = brush)
+                            }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("🔆 ${project.vignetteStyle}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -4166,6 +4297,9 @@ private fun ThreeDPanel(project: VideoProject, onUpdate3D: (String) -> Unit) {
 
 // helper data class for premium 3D mask cards (emoji, name, id, category)
 private data class Quad(val emoji: String, val name: String, val id: String, val category: String)
+
+// helper data class for vignette-style preset parameters (strength, color, reverse, blur)
+private data class VignetteParams(val strength: Float, val color: Color, val reverse: Boolean, val blur: Boolean)
 
 
 // ─── 12. IMAGE PANEL ───────────────────────────────────────────
