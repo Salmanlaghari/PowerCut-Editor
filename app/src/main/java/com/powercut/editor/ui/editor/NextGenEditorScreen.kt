@@ -149,6 +149,25 @@ private fun formatTime(ms: Long): String {
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
 
+/**
+ * True when a FilterCatalog filter's FFmpeg chain is composed entirely of
+ * GPU-representable ops (eq, colorbalance, colorchannelmixer, hue, vignette,
+ * curves, negate). When this is true the Media3 RgbAdjustment pipeline already
+ * applies the filter live on every frame, so an FFmpeg bake is redundant —
+ * skipping it avoids the "Filter / effect preview unavailable" banner that
+ * otherwise appears on real devices when the FFmpeg render fails (e.g. for
+ * content:// sources or under memory pressure).
+ */
+private fun isGpuRepresentableFilter(filterId: String): Boolean {
+    val chain = com.powercut.editor.domain.filter.FilterCatalog.ffmpeg(filterId)
+    if (chain.isBlank()) return true
+    val gpuOps = setOf("eq", "colorbalance", "colorchannelmixer", "hue", "vignette", "curves", "negate")
+    return chain.split(",").all { sub ->
+        val name = sub.trim().substringBefore("=").trim()
+        name in gpuOps
+    }
+}
+
 /** Parses #RRGGBB / RRGGBB / named-color strings into a Compose Color (best-effort). */
 private fun parseHexColor(value: String?): Color? {
     if (value.isNullOrBlank()) return null
