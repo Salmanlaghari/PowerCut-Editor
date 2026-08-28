@@ -1408,12 +1408,6 @@ class VideoProcessor @Inject constructor(
                 clipSpeedFactor = speedFactor
             )
             vfFilters.addAll(kfFilters)
-            // REAL EXPORT FIX: prune any effect/transition/keyframe segment whose
-            // FFmpeg chain this build cannot parse, so one bad filter can never
-            // abort the whole single-clip export. Each dropped segment is logged.
-            val prunedVf = pruneInvalidFilters(inputPath, vfFilters)
-            vfFilters.clear()
-            vfFilters.addAll(prunedVf)
             // v7.3 audit fix: keyframe crop/scale/rotate run AFTER the target
             // scale+pad, so without this they changed the final output
             // resolution (a zoom-in preset exported at 1.5x, a pan at 0.7x).
@@ -1424,6 +1418,14 @@ class VideoProcessor @Inject constructor(
                 vfFilters.add("scale=$tw:$th:force_original_aspect_ratio=decrease,pad=$tw:$th:(ow-iw)/2:(oh-ih)/2:black")
             }
         }
+
+        // REAL EXPORT FIX: prune any effect/transition/keyframe segment whose
+        // FFmpeg chain this build cannot parse, so one bad filter can never
+        // abort the whole export. Runs on EVERY export (not just keyframe
+        // exports) so single-effect exports get the same protection.
+        val prunedVf = pruneInvalidFilters(inputPath, vfFilters)
+        vfFilters.clear()
+        vfFilters.addAll(prunedVf)
 
         // ═══════════════════════════════════════════════════════════════════════
         //  v4.3 UNIFIED FILTER_COMPLEX BUILDER
