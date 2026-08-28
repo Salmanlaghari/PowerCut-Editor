@@ -40,7 +40,10 @@ class Media3EffectPipeline @Inject constructor() {
         colorGain: Float = 0f,
         imageEditorSharpen: Float = 0f,
         greenScreenEnabled: Boolean = false,
-        greenScreenColor: String = "green"
+        greenScreenColor: String = "green",
+        imageEditorHighlights: Float = 0f,
+        imageEditorShadows: Float = 0f,
+        activeTemplateId: String = "none"
     ): List<ColorEffect> {
         val effects = mutableListOf<ColorEffect>()
         if (filterId != "none" && filterId.isNotBlank()) buildFilterEffect(filterId)?.let(effects::add)
@@ -49,7 +52,9 @@ class Media3EffectPipeline @Inject constructor() {
         buildColorCurvesEffect(colorLift, colorGamma, colorGain)?.let(effects::add)
         buildSharpenEffect(imageEditorSharpen)?.let(effects::add)
         if (greenScreenEnabled) buildChromaDesaturateEffect(greenScreenColor)?.let(effects::add)
-        Log.d(TAG, "Built ${effects.size} Media3 color effects for filter=$filterId, look=$premiumLookId, sharpen=$imageEditorSharpen, chroma=$greenScreenEnabled")
+        buildHighlightsShadowsEffect(imageEditorHighlights, imageEditorShadows)?.let(effects::add)
+        buildTemplateEffect(activeTemplateId)?.let(effects::add)
+        Log.d(TAG, "Built ${effects.size} Media3 color effects (filter=$filterId, look=$premiumLookId, tpl=$activeTemplateId)")
         return effects
     }
 
@@ -156,6 +161,70 @@ class Media3EffectPipeline @Inject constructor() {
         )
     }
 
+    /**
+     * Approximate highlights / shadows tone-curve for live preview. A real
+     * highlights/shadows slider needs a per-pixel tone curve (FFmpeg `curves`
+     * or `eq=brightness=…:contrast=…` per region), which an RgbMatrix cannot
+     * express. The closest matrix approximation: split the signal into a
+     * brightness component (shadows) and a contrast component (highlights).
+     * Highlights (range -1..1) push the upper range via contrast; shadows
+     * (range -1..1) lift/lower the overall brightness floor. Perceptually
+     * close to the slider's intent at moderate values. Export uses the real
+     * FFmpeg curves filter for pixel accuracy.
+     */
+    private fun buildHighlightsShadowsEffect(highlights: Float, shadows: Float): ColorEffect? {
+        if (highlights == 0f && shadows == 0f) return null
+        val hi = highlights.coerceIn(-1f, 1f)
+        val sh = shadows.coerceIn(-1f, 1f)
+        val contrast = (1f + hi * 0.35f).coerceIn(0.5f, 2f)
+        val brightness = (sh * 0.12f).coerceIn(-0.2f, 0.2f)
+        return createRgbAdjustment(
+            brightness = brightness, contrast = contrast, saturation = 1f, temperature = 0f, tint = 0f
+        )
+    }
+
+    /**
+     * Approximate template grade for live preview. Each template is a
+     * distinct FFmpeg chain in export (cinema = warm grade + black bars,
+     * wedding = warm + soft blur, etc.). The closest matrix approximation:
+     * a per-template (brightness, contrast, saturation, temperature) tuple
+     * applied via RgbMatrix. The cinema template's black bars are also
+     * drawn as a Compose overlay. Real chains like boxblur/curves are
+     * skipped in preview (still baked at export).
+     */
+    private fun buildTemplateEffect(templateId: String): ColorEffect? {
+        if (templateId.isBlank() || templateId == "none" || templateId == "free") return null
+        val t = templateId.lowercase().replace(" ", "_")
+        val params = when (t) {
+            "cinema" -> Tuple4(0.0f, 1.15f, 1.05f, 15f)
+            "wedding" -> Tuple4(0.04f, 0.95f, 1.1f, 25f)
+            "travel" -> Tuple4(0.03f, 1.2f, 1.35f, 0f)
+            "vlog" -> Tuple4(0.06f, 1.08f, 1.1f, 5f)
+            "poetry" -> Tuple4(0.05f, 0.9f, 0.85f, 10f)
+            "beats" -> Tuple4(0.0f, 1.3f, 1.2f, 0f)
+            "portrait" -> Tuple4(0.03f, 1.05f, 1.05f, 20f)
+            "night" -> Tuple4(-0.05f, 1.15f, 0.95f, -30f)
+            "food" -> Tuple4(0.05f, 1.1f, 1.3f, 30f)
+            "retro" -> Tuple4(0.04f, 1.0f, 0.7f, 35f)
+            "noir" -> Tuple4(0.0f, 1.25f, 0.0f, 0f)
+            "summer" -> Tuple4(0.06f, 1.1f, 1.2f, 25f)
+            "winter" -> Tuple4(0.04f, 1.05f, 0.95f, -25f)
+            "autumn" -> Tuple4(0.04f, 1.1f, 1.2f, 40f)
+            "spring" -> Tuple4(0.05f, 1.05f, 1.15f, -5f)
+            "sunset" -> Tuple4(0.06f, 1.1f, 1.2f, 50f)
+            else -> null
+        } ?: return null
+        return createRgbAdjustment(
+            brightness = params.brightness.coerceIn(-1f, 1f),
+            contrast = params.contrast.coerceIn(0f, 4f),
+            saturation = params.saturation.coerceIn(0f, 4f),
+            temperature = params.temperature.coerceIn(-100f, 100f),
+            tint = 0f
+        )
+    }
+
+    private data class Tuple4(val brightness: Float, val contrast: Float, val saturation: Float, val temperature: Float)
+
     private fun createRgbAdjustment(brightness: Float, contrast: Float, saturation: Float, temperature: Float, tint: Float): ColorEffect {
         val brightnessM = GlUtil.create4x4IdentityMatrix().also { if (brightness != 0f) Matrix.translateM(it, 0, brightness, brightness, brightness) }
         val contrastM = GlUtil.create4x4IdentityMatrix().also {
@@ -193,7 +262,10 @@ class Media3EffectPipeline @Inject constructor() {
         colorGamma = project.colorGamma, colorGain = project.colorGain,
         imageEditorSharpen = project.imageEditorSharpen,
         greenScreenEnabled = project.greenScreenEnabled,
-        greenScreenColor = project.greenScreenColor
+        greenScreenColor = project.greenScreenColor,
+        imageEditorHighlights = project.imageEditorHighlights,
+        imageEditorShadows = project.imageEditorShadows,
+        activeTemplateId = project.activeTemplateId
     )
 
     /** Builds color effects plus the aspect-aware Crop effect for live preview. */
@@ -202,6 +274,7 @@ class Media3EffectPipeline @Inject constructor() {
         allEffects.addAll(buildEffectsFromProject(project))
         if (selectedEffect != "none" && selectedEffect.isNotBlank()) allEffects.addAll(buildVisualEffect(selectedEffect))
         Media3CropEffect.forProject(project)?.let(allEffects::add)
+        Media3CropEffect.forManualCrop(project)?.let(allEffects::add)
         Log.d(TAG, "Built ${allEffects.size} total live effects (visual=$selectedEffect, crop=${project.cropPreset})")
         return allEffects
     }
