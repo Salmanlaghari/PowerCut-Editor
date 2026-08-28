@@ -1004,7 +1004,9 @@ class VideoProcessor @Inject constructor(
         keyframeTracks: List<KeyframeTrack> = emptyList(),
         keyframeClipId: String = "",
         // ── Progress callback ──
-        onProgress: (Int) -> Unit = {}
+        onProgress: (Int) -> Unit = {},
+        // ── Non-fatal warning callback (e.g. fallbacks that strip filters) ──
+        onWarning: (String) -> Unit = {}
     ): Boolean = withContext(Dispatchers.IO) {
         if (isAudioFile(inputPath)) {
             Log.d(tag, "Input is audio file, converting to video with background")
@@ -1727,6 +1729,7 @@ class VideoProcessor @Inject constructor(
                 if (rec2Success) {
                     Log.d(tag, "Recovery 2 (minimal re-encode) succeeded — overlays were lost")
                     cleanupOverlayTempFiles()
+                    onWarning("Exported without effects — filter not supported.")
                     true
                 } else {
                     Log.e(tag, "Recovery 2 failed — attempting stream copy...")
@@ -1740,6 +1743,7 @@ class VideoProcessor @Inject constructor(
                     if (rec3Success) {
                         Log.d(tag, "Recovery 3 (stream copy) succeeded")
                         cleanupOverlayTempFiles()
+                        onWarning("Exported without effects — filter not supported.")
                         true
                     } else {
                         Log.e(tag, "All recovery attempts failed")

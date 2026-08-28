@@ -658,6 +658,30 @@ fun DashboardView(
                         }
                     }
                 }
+                is com.powercut.editor.core.base.Resource.SuccessWithWarning<*> -> {
+                    val wCtx = androidx.compose.ui.platform.LocalContext.current
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        android.widget.Toast.makeText(wCtx, s.message, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .glassCard3D(shape = RoundedCornerShape(14.dp), glowColor = Color(0xFFFFB300), backColor = GlassBackground)
+                            .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚠️", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Exported with warning", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB300))
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(s.message, fontSize = 9.sp, color = Color.White.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
+                }
                 is com.powercut.editor.core.base.Resource.Error -> {
                     Box(
                         modifier = Modifier
