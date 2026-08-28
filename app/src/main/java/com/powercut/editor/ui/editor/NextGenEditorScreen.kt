@@ -149,6 +149,25 @@ private fun formatTime(ms: Long): String {
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
 
+/**
+ * True when a FilterCatalog filter's FFmpeg chain is composed entirely of
+ * GPU-representable ops (eq, colorbalance, colorchannelmixer, hue, vignette,
+ * curves, negate). When this is true the Media3 RgbAdjustment pipeline already
+ * applies the filter live on every frame, so an FFmpeg bake is redundant —
+ * skipping it avoids the "Filter / effect preview unavailable" banner that
+ * otherwise appears on real devices when the FFmpeg render fails (e.g. for
+ * content:// sources or under memory pressure).
+ */
+private fun isGpuRepresentableFilter(filterId: String): Boolean {
+    val chain = com.powercut.editor.domain.filter.FilterCatalog.ffmpeg(filterId)
+    if (chain.isBlank()) return true
+    val gpuOps = setOf("eq", "colorbalance", "colorchannelmixer", "hue", "vignette", "curves", "negate")
+    return chain.split(",").all { sub ->
+        val name = sub.trim().substringBefore("=").trim()
+        name in gpuOps
+    }
+}
+
 /** Parses #RRGGBB / RRGGBB / named-color strings into a Compose Color (best-effort). */
 private fun parseHexColor(value: String?): Color? {
     if (value.isNullOrBlank()) return null
@@ -879,6 +898,20 @@ fun NextGenEditorScreen(
             filterPreviewError = false
             return@LaunchedEffect
         }
+        // If the selected filter is fully GPU-representable (only eq,
+        // colorbalance, colorchannelmixer, hue, vignette, curves, negate ops),
+        // the Media3 RgbAdjustment pipeline already applies it live on every
+        // frame. Baking it again with FFmpeg is redundant AND on real devices
+        // it can fail (content:// sources, codec issues, memory pressure),
+        // which would set filterPreviewError=true and permanently show the
+        // "Filter / effect preview unavailable" banner even though the live
+        // preview is actually working. Skip the FFmpeg bake in that case.
+        if (isGpuRepresentableFilter(fid) && eid == "none") {
+            filterPreviewFile = null
+            filterPreviewBusy = false
+            filterPreviewError = false
+            return@LaunchedEffect
+        }
         val token = ++filterPreviewToken
         filterPreviewBusy = true
         filterPreviewError = false
@@ -944,8 +977,17 @@ fun NextGenEditorScreen(
         onDispose { exoPlayer.removeListener(listener) }
     }
     LaunchedEffect(isPlaying) {
-        if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(16) } }
-        else { exoPlayer.pause(); kotlinx.coroutines.delay(3000); if (!isPlaying) onSaveDraft() }
+        if (isPlaying) {
+            exoPlayer.play()
+            while (isPlaying) {
+                currentPlaybackTime = exoPlayer.currentPosition
+                kotlinx.coroutines.delay(100)
+            }
+        } else {
+            exoPlayer.pause()
+            kotlinx.coroutines.delay(3000)
+            if (!isPlaying) onSaveDraft()
+        }
     }
     LaunchedEffect(project.isMuted, project.videoVolume) { exoPlayer.volume = if (project.isMuted) 0f else project.videoVolume }
     // Speed / pitch — apply PlaybackParameters ONCE per config change, do NOT
