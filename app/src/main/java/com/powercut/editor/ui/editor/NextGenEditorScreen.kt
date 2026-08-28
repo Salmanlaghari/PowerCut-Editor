@@ -233,7 +233,7 @@ private data class KeyframeState(
 
 /** Cinematic bars, vertical safe-zone, horizontal letterbox, drawing strokes. */
 @Composable
-private fun PreviewTemplateOverlays(project: VideoProject) {
+private fun BoxScope.PreviewTemplateOverlays(project: VideoProject) {
     if (project.activeTemplateId.equals("cinema", ignoreCase = true)) {
         Box(modifier = Modifier.fillMaxSize().drawWithContent {
             drawContent()
@@ -300,7 +300,7 @@ private fun PreviewTemplateOverlays(project: VideoProject) {
 
 /** Blend mode tint, border style frame, vignette-style preset gradient. */
 @Composable
-private fun PreviewStyleOverlays(project: VideoProject) {
+private fun BoxScope.PreviewStyleOverlays(project: VideoProject) {
     if (project.blendMode != "none") {
         val blendColor = when (project.blendMode) {
             "multiply" -> Color(0xFF6A4FCF).copy(alpha = 0.22f)
@@ -402,7 +402,7 @@ private fun PreviewStyleOverlays(project: VideoProject) {
  * the bottom edge of the preview.
  */
 @Composable
-private fun PreviewBadgesAndIndicators(project: VideoProject, playbackSpeed: Float) {
+private fun BoxScope.PreviewBadgesAndIndicators(project: VideoProject, playbackSpeed: Float) {
     // Speed badge top-left
     if (playbackSpeed != 1.0f) {
         Box(
