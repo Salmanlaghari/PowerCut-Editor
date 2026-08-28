@@ -579,6 +579,7 @@ fun NextGenEditorScreen(
         project.imageEditorShadows,
         project.greenScreenEnabled,
         project.greenScreenColor,
+        project.activeTemplateId,
         filterPreviewFile
     ) {
         // When a real FFmpeg preview clip is on screen, the filter (and any
@@ -1083,6 +1084,10 @@ fun NextGenEditorScreen(
                 }
 
                 // Image overlay — show actual image with position/scale/opacity
+                // + entrance animation (v6.5.0). The animatable re-triggers on
+                // every change to project.imageOverlayAnim so the user sees the
+                // animation play in the preview. Export still uses the real
+                // FFmpeg chain from OverlayDrawingStudio.preprocessOverlayImage.
                 if (project.imageOverlayPath != null && layerImageVisible) {
                     val overlayBitmap = remember(project.imageOverlayPath) {
                         try {
@@ -1096,6 +1101,36 @@ fun NextGenEditorScreen(
                             }
                         } catch (e: Exception) { null }
                     }
+                    val anim = project.imageOverlayAnim.lowercase()
+                    val animProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+                    androidx.compose.runtime.LaunchedEffect(project.imageOverlayAnim, project.imageOverlayPath) {
+                        animProgress.snapTo(0f)
+                        animProgress.animateTo(
+                            targetValue = 1f,
+                            animationSpec = tween(durationMillis = 900, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                        )
+                    }
+                    val p = animProgress.value
+                    val (aAlpha, aDx, aDy, aScale) = when (anim) {
+                        "fade_in" -> QuadF(p, 0f, 0f, 1f)
+                        "slide_left" -> QuadF(1f, -1f + p, 0f, 1f)
+                        "slide_right" -> QuadF(1f, 1f - p, 0f, 1f)
+                        "slide_up" -> QuadF(1f, 0f, 1f - p, 1f)
+                        "slide_down" -> QuadF(1f, 0f, -1f + p, 1f)
+                        "zoom_in" -> QuadF(1f, 0f, 0f, 0.2f + 0.8f * p)
+                        "zoom_out" -> QuadF(1f, 0f, 0f, 1.4f - 0.4f * p)
+                        "pop" -> QuadF(1f, 0f, 0f, if (p < 0.7f) 0.5f + p * 1.2f else 1.3f - (p - 0.7f) * 1.0f)
+                        "bounce" -> QuadF(1f, 0f, 0f, 0.5f + p * 0.7f)
+                        "flip" -> QuadF(1f, 0f, 0f, 1f)
+                        "rotate" -> QuadF(1f, 0f, 0f, 0.3f + 0.7f * p)
+                        "elastic" -> QuadF(1f, 0f, 0f, 0.2f + 0.8f * p)
+                        else -> QuadF(1f, 0f, 0f, 1f)
+                    }
+                    val rotZ = if (anim == "rotate") (1f - p) * 180f else if (anim == "flip") {
+                        val t = if (p < 0.5f) p * 2f else (1f - p) * 2f
+                        t * 180f
+                    } else 0f
+                    val flipX = if (anim == "flip" && p >= 0.5f) -1f else 1f
                     if (overlayBitmap != null) {
                         val painter = androidx.compose.ui.graphics.painter.BitmapPainter(
                             overlayBitmap.asImageBitmap()
@@ -1111,7 +1146,14 @@ fun NextGenEditorScreen(
                                         verticalBias = (project.imageOverlayY * 2f - 1f).coerceIn(-1f, 1f)
                                     )
                                 )
-                                .graphicsLayer { alpha = project.imageOverlayOpacity }
+                                .graphicsLayer {
+                                    alpha = aAlpha * project.imageOverlayOpacity
+                                    translationX = aDx * 200f
+                                    translationY = aDy * 200f
+                                    scaleX = aScale * flipX
+                                    scaleY = aScale
+                                    rotationZ = rotZ
+                                }
                         )
                     } else {
                         Box(
@@ -1120,11 +1162,115 @@ fun NextGenEditorScreen(
                                     horizontalBias = (project.imageOverlayX * 2f - 1f).coerceIn(-1f, 1f),
                                     verticalBias = (project.imageOverlayY * 2f - 1f).coerceIn(-1f, 1f)
                                 )
-                            ),
+                            ).graphicsLayer {
+                                alpha = aAlpha * project.imageOverlayOpacity
+                                translationX = aDx * 200f
+                                translationY = aDy * 200f
+                                scaleX = aScale * flipX
+                                scaleY = aScale
+                                rotationZ = rotZ
+                            },
                             contentAlignment = Alignment.Center
                         ) {
                             Text("🖼️", fontSize = 32.sp)
                         }
+                    }
+                }
+
+                // Cinematic bars for cinema template (v6.5.0)
+                // The template's color grade is applied via Media3. The black
+                // bars are overlay-only because they're a drawbox in the FFmpeg
+                // chain. Export draws them via FFmpeg drawbox for pixel-accuracy.
+                if (project.activeTemplateId.equals("cinema", ignoreCase = true)) {
+                    Box(modifier = Modifier.fillMaxSize().drawWithContent {
+                        drawContent()
+                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.13f))
+                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height * 0.87f), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.13f))
+                    })
+                }
+
+                // Vertical safe-zone guide (v6.5.0)
+                // Draws a centered safe-area rectangle for 9:16 vertical exports.
+                if (project.verticalSafeZone) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().drawWithContent {
+                            drawContent()
+                            val sw = size.width * 0.85f
+                            val sh = size.height
+                            val sx = (size.width - sw) / 2f
+                            val sy = 0f
+                            drawRect(
+                                color = Color(0xFF00E5FF).copy(alpha = 0.6f),
+                                topLeft = androidx.compose.ui.geometry.Offset(sx, sy),
+                                size = androidx.compose.ui.geometry.Size(sw, sh),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+                            )
+                            drawRect(
+                                color = Color(0xFF00E5FF).copy(alpha = 0.18f),
+                                topLeft = androidx.compose.ui.geometry.Offset(sx, sy),
+                                size = androidx.compose.ui.geometry.Size(sw, sh)
+                            )
+                        }
+                    )
+                    Box(
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("📱 SAFE ZONE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Horizontal letterbox (v6.5.0)
+                // Renders a black bar across the top + bottom of the frame for
+                // 2.35:1 / 2.39:1 cinematic letterbox compositions. The aspect
+                // ratio itself is already applied via Media3 Crop effect.
+                if (project.horizontalLetterbox) {
+                    Box(modifier = Modifier.fillMaxSize().drawWithContent {
+                        drawContent()
+                        val h = size.height * 0.12f
+                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, h))
+                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - h), size = androidx.compose.ui.geometry.Size(size.width, h))
+                    })
+                    Box(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("📽 LETTERBOX", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Drawing / canvas annotations (v6.5.0)
+                // Renders the user-drawn strokes from project.drawingJson on
+                // top of the preview frame. The points are normalized (0..1)
+                // and scaled to the frame size; color/size/opacity come from
+                // the stored stroke data. Export uses the real FFmpeg chain
+                // (OverlayDrawingStudio.drawingChain) for pixel accuracy.
+                if (project.drawingJson.isNotBlank()) {
+                    val drawingStrokes = remember(project.drawingJson) { canvasParseStrokes(project.drawingJson) }
+                    if (drawingStrokes.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize()
+                                .drawWithContent {
+                                    drawContent()
+                                    for (s in drawingStrokes) {
+                                        if (s.points.size < 2) continue
+                                        val c = parseHexColor(s.color) ?: Color.White
+                                        val w = (s.size.coerceAtLeast(0.002f)) * size.width
+                                        for (i in 0 until s.points.size - 1) {
+                                            val (x1, y1) = s.points[i]
+                                            val (x2, y2) = s.points[i + 1]
+                                            drawLine(
+                                                color = c.copy(alpha = s.opacity),
+                                                start = androidx.compose.ui.geometry.Offset(x1 * size.width, y1 * size.height),
+                                                end = androidx.compose.ui.geometry.Offset(x2 * size.width, y2 * size.height),
+                                                strokeWidth = w
+                                            )
+                                        }
+                                    }
+                                }
+                        )
                     }
                 }
 
@@ -4300,6 +4446,9 @@ private data class Quad(val emoji: String, val name: String, val id: String, val
 
 // helper data class for vignette-style preset parameters (strength, color, reverse, blur)
 private data class VignetteParams(val strength: Float, val color: Color, val reverse: Boolean, val blur: Boolean)
+
+// helper data class for image-overlay entrance animation params (alpha, dx, dy, scale)
+private data class QuadF(val alpha: Float, val dx: Float, val dy: Float, val scale: Float)
 
 
 // ─── 12. IMAGE PANEL ───────────────────────────────────────────

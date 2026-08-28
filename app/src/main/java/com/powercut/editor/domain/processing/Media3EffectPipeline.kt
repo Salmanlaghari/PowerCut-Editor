@@ -42,7 +42,8 @@ class Media3EffectPipeline @Inject constructor() {
         greenScreenEnabled: Boolean = false,
         greenScreenColor: String = "green",
         imageEditorHighlights: Float = 0f,
-        imageEditorShadows: Float = 0f
+        imageEditorShadows: Float = 0f,
+        activeTemplateId: String = "none"
     ): List<ColorEffect> {
         val effects = mutableListOf<ColorEffect>()
         if (filterId != "none" && filterId.isNotBlank()) buildFilterEffect(filterId)?.let(effects::add)
@@ -52,7 +53,8 @@ class Media3EffectPipeline @Inject constructor() {
         buildSharpenEffect(imageEditorSharpen)?.let(effects::add)
         if (greenScreenEnabled) buildChromaDesaturateEffect(greenScreenColor)?.let(effects::add)
         buildHighlightsShadowsEffect(imageEditorHighlights, imageEditorShadows)?.let(effects::add)
-        Log.d(TAG, "Built ${effects.size} Media3 color effects (filter=$filterId, look=$premiumLookId, sharpen=$imageEditorSharpen, chroma=$greenScreenEnabled, hi=$imageEditorHighlights, sh=$imageEditorShadows)")
+        buildTemplateEffect(activeTemplateId)?.let(effects::add)
+        Log.d(TAG, "Built ${effects.size} Media3 color effects (filter=$filterId, look=$premiumLookId, tpl=$activeTemplateId)")
         return effects
     }
 
@@ -181,6 +183,48 @@ class Media3EffectPipeline @Inject constructor() {
         )
     }
 
+    /**
+     * Approximate template grade for live preview. Each template is a
+     * distinct FFmpeg chain in export (cinema = warm grade + black bars,
+     * wedding = warm + soft blur, etc.). The closest matrix approximation:
+     * a per-template (brightness, contrast, saturation, temperature) tuple
+     * applied via RgbMatrix. The cinema template's black bars are also
+     * drawn as a Compose overlay. Real chains like boxblur/curves are
+     * skipped in preview (still baked at export).
+     */
+    private fun buildTemplateEffect(templateId: String): ColorEffect? {
+        if (templateId.isBlank() || templateId == "none" || templateId == "free") return null
+        val t = templateId.lowercase().replace(" ", "_")
+        val params = when (t) {
+            "cinema" -> Tuple4(0.0f, 1.15f, 1.05f, 15f)
+            "wedding" -> Tuple4(0.04f, 0.95f, 1.1f, 25f)
+            "travel" -> Tuple4(0.03f, 1.2f, 1.35f, 0f)
+            "vlog" -> Tuple4(0.06f, 1.08f, 1.1f, 5f)
+            "poetry" -> Tuple4(0.05f, 0.9f, 0.85f, 10f)
+            "beats" -> Tuple4(0.0f, 1.3f, 1.2f, 0f)
+            "portrait" -> Tuple4(0.03f, 1.05f, 1.05f, 20f)
+            "night" -> Tuple4(-0.05f, 1.15f, 0.95f, -30f)
+            "food" -> Tuple4(0.05f, 1.1f, 1.3f, 30f)
+            "retro" -> Tuple4(0.04f, 1.0f, 0.7f, 35f)
+            "noir" -> Tuple4(0.0f, 1.25f, 0.0f, 0f)
+            "summer" -> Tuple4(0.06f, 1.1f, 1.2f, 25f)
+            "winter" -> Tuple4(0.04f, 1.05f, 0.95f, -25f)
+            "autumn" -> Tuple4(0.04f, 1.1f, 1.2f, 40f)
+            "spring" -> Tuple4(0.05f, 1.05f, 1.15f, -5f)
+            "sunset" -> Tuple4(0.06f, 1.1f, 1.2f, 50f)
+            else -> null
+        } ?: return null
+        return createRgbAdjustment(
+            brightness = params.brightness.coerceIn(-1f, 1f),
+            contrast = params.contrast.coerceIn(0f, 4f),
+            saturation = params.saturation.coerceIn(0f, 4f),
+            temperature = params.temperature.coerceIn(-100f, 100f),
+            tint = 0f
+        )
+    }
+
+    private data class Tuple4(val brightness: Float, val contrast: Float, val saturation: Float, val temperature: Float)
+
     private fun createRgbAdjustment(brightness: Float, contrast: Float, saturation: Float, temperature: Float, tint: Float): ColorEffect {
         val brightnessM = GlUtil.create4x4IdentityMatrix().also { if (brightness != 0f) Matrix.translateM(it, 0, brightness, brightness, brightness) }
         val contrastM = GlUtil.create4x4IdentityMatrix().also {
@@ -220,7 +264,8 @@ class Media3EffectPipeline @Inject constructor() {
         greenScreenEnabled = project.greenScreenEnabled,
         greenScreenColor = project.greenScreenColor,
         imageEditorHighlights = project.imageEditorHighlights,
-        imageEditorShadows = project.imageEditorShadows
+        imageEditorShadows = project.imageEditorShadows,
+        activeTemplateId = project.activeTemplateId
     )
 
     /** Builds color effects plus the aspect-aware Crop effect for live preview. */
