@@ -129,6 +129,12 @@ data class VideoProject(
     val selectedEffect: String = "none",
     val activeLayers: List<String> = emptyList(),
 
+    // ── Phase C: manual crop (normalized 0..1 frame fractions) ──
+    val cropLeftF: Float = 0f,
+    val cropTopF: Float = 0f,
+    val cropRightF: Float = 1f,
+    val cropBottomF: Float = 1f,
+
     // Green Screen / Chroma Key
     val greenScreenEnabled: Boolean = false,
     val greenScreenColor: String = "green",
@@ -337,6 +343,10 @@ data class VideoProject(
                 put("vertical_safe_zone", project.verticalSafeZone)
                 put("horizontal_letterbox", project.horizontalLetterbox)
                 put("auto_reframe_enabled", project.autoReframeEnabled)
+                put("crop_left_f", project.cropLeftF)
+                put("crop_top_f", project.cropTopF)
+                put("crop_right_f", project.cropRightF)
+                put("crop_bottom_f", project.cropBottomF)
                 put("active_premium_look", project.activePremiumLook)
                 put("blend_mode", project.blendMode)
                 put("is_reverse_enabled", project.isReverseEnabled)
@@ -505,6 +515,10 @@ data class VideoProject(
                 verticalSafeZone = projectJson.optBoolean("vertical_safe_zone", false),
                 horizontalLetterbox = projectJson.optBoolean("horizontal_letterbox", false),
                 autoReframeEnabled = projectJson.optBoolean("auto_reframe_enabled", false),
+                cropLeftF = projectJson.optDouble("crop_left_f", 0.0).toFloat(),
+                cropTopF = projectJson.optDouble("crop_top_f", 0.0).toFloat(),
+                cropRightF = projectJson.optDouble("crop_right_f", 1.0).toFloat(),
+                cropBottomF = projectJson.optDouble("crop_bottom_f", 1.0).toFloat(),
                 activePremiumLook = projectJson.optString("active_premium_look", "none"),
                 blendMode = projectJson.optString("blend_mode", "none"),
                 isReverseEnabled = projectJson.optBoolean("is_reverse_enabled", false),

@@ -47,6 +47,7 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.OnUserEarnedRewardListener
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.AdConstants
+import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.ui.editor.NextGenEditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
@@ -83,6 +84,12 @@ class MainActivity : ComponentActivity() {
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
     private var lastShownAt: Long = 0L
+
+    // ── Phase C: REAL green-screen custom background picker ──
+    private var greenScreenBgCallback: ((android.net.Uri?) -> Unit)? = null
+    private val greenScreenBgPicker = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri -> greenScreenBgCallback?.invoke(uri) }
 
     private var isWatermarkRemoved by mutableStateOf(false)
 
@@ -339,6 +346,9 @@ class MainActivity : ComponentActivity() {
                                         onUpdateCropPreset = { crop ->
                                             viewModel.updateCropPreset(crop)
                                         },
+                                        onUpdateManualCrop = { l, t, r, b ->
+                                            viewModel.updateManualCrop(l, t, r, b)
+                                        },
                                         onUpdateSpeedCurve = { curve ->
                                             viewModel.updateSpeedCurve(curve)
                                         },
@@ -440,7 +450,17 @@ class MainActivity : ComponentActivity() {
                                         onUpdateGreenScreenColor = { viewModel.updateGreenScreenColor(it) },
                                         onUpdateGreenScreenThreshold = { viewModel.updateGreenScreenThreshold(it) },
                                         onSelectAutoBackground = { viewModel.selectAutoBackground(it) },
-                                        onPickCustomBackground = { /* picker handled in screen */ },
+                                        onPickCustomBackground = {
+                                            // Phase C: real image picker → persisted URI →
+                                            // project field consumed by the chroma-key exporter.
+                                            greenScreenBgCallback = { uri ->
+                                                uri?.let {
+                                                    try { UriHelper.takePersistablePermission(this, it) } catch (_: Exception) {}
+                                                    viewModel.updateGreenScreenBackground(it.toString())
+                                                }
+                                            }
+                                            greenScreenBgPicker.launch("image/*")
+                                        },
                                         // Eraser
                                         onUpdateEraserMode = { viewModel.updateEraserMode(it) },
                                         onUpdateEraserBrushSize = { viewModel.updateEraserBrushSize(it) },

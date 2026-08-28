@@ -176,6 +176,7 @@ fun NextGenEditorScreen(
     onToggleFlipHorizontal: () -> Unit,
     onToggleFlipVertical: () -> Unit,
     onUpdateCropPreset: (String) -> Unit,
+    onUpdateManualCrop: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> },
     onUpdateSpeedCurve: (String) -> Unit,
     onUpdateTextOverlay: (String?) -> Unit,
     onUpdateTextAnimation: (String) -> Unit,
@@ -1214,6 +1215,7 @@ fun NextGenEditorScreen(
                 onUpdateMusicVolume = onUpdateMusicVolume,
                 onUpdateBackgroundMusic = onUpdateBackgroundMusic,
                 onUpdateCropPreset = onUpdateCropPreset,
+                onUpdateManualCrop = onUpdateManualCrop,
                 onUpdateAspectPreset = onUpdateAspectPreset,
                 onUpdateRotation = onUpdateRotation,
                 onToggleFlipHorizontal = onToggleFlipHorizontal,
@@ -1646,6 +1648,7 @@ private fun CapCutToolPanel(
     onUpdateMusicVolume: (Float) -> Unit,
     onUpdateBackgroundMusic: (String?) -> Unit,
     onUpdateCropPreset: (String) -> Unit,
+    onUpdateManualCrop: (Float, Float, Float, Float) -> Unit = { _, _, _, _ -> },
     onUpdateAspectPreset: (String) -> Unit,
     onUpdateRotation: () -> Unit,
     onToggleFlipHorizontal: () -> Unit,
@@ -1735,10 +1738,10 @@ private fun CapCutToolPanel(
     ) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
             when (selectedTool) {
-                0 -> EditPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame, onDeleteSelectedClip = onDeleteSelectedClip)
+                0 -> EditPanel(project, onUpdateCropPreset, onUpdateManualCrop, onUpdateAspectPreset, onUpdateSpeed, onUpdateSpeedCurve, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical, onUpdateResolution, onUpdateTrim, onUpdateImageEditorBrightness, onUpdateImageEditorContrast, onUpdateImageEditorSaturation, onUpdateImageEditorSharpen, onUpdateImageEditorTemperature, onUpdateImageEditorFade, onUpdateImageEditorVignette, onUpdateImageEditorGrain, onToggleReverse, onUpdateFreezeFrame, onDeleteSelectedClip = onDeleteSelectedClip)
                 1 -> LayersPanel(project, context, onAddLayer = onAddLayer, onRemoveLayer = onRemoveLayer)
                 2 -> SpeedPanel(project, onUpdateSpeed, onUpdateSpeedCurve, onToggleReverse, onUpdateFreezeFrame)
-                3 -> CropPanel(project, onUpdateCropPreset, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
+                3 -> CropPanel(project, onUpdateCropPreset, onUpdateManualCrop, onUpdateAspectPreset, onUpdateRotation, onToggleFlipHorizontal, onToggleFlipVertical)
                 4 -> AudioPanel(project, onToggleMute, onUpdateVideoVolume, onUpdateMusicVolume, onUpdateVisualizerStyle, onToggleBeatSync, musicPicker, onClearAudio = { onUpdateBackgroundMusic(null) }, onGenerateRoyaltyFreeMusic = onGenerateRoyaltyFreeMusic)
                 5 -> TextPanel(project, onUpdateTextOverlay, onUpdateTextAnimation, onUpdateTextStyle, onUpdateTextPositionX, onUpdateTextPositionY, onUpdateTextColor, onUpdateTextFontSize, onApplyTextBgStyle = onApplyTextBgStyle, onUpdateTextBold = onUpdateTextBold, onUpdateTextItalic = onUpdateTextItalic, onUpdateLogoX = onUpdateImageOverlayX, onUpdateLogoY = onUpdateImageOverlayY)
                 6 -> FiltersPanel(project, onUpdateFilter)
@@ -1846,6 +1849,7 @@ private data class Quint(val emoji: String, val name: String, val value: Float, 
 private fun EditPanel(
     project: VideoProject,
     onUpdateCropPreset: (String) -> Unit,
+    onUpdateManualCrop: (Float, Float, Float, Float) -> Unit,
     onUpdateAspectPreset: (String) -> Unit,
     onUpdateSpeed: (Float) -> Unit,
     onUpdateSpeedCurve: (String) -> Unit,
@@ -1931,15 +1935,20 @@ private fun EditPanel(
                 // Manual Crop Sliders
                 Spacer(Modifier.height(4.dp))
                 Text("MANUAL CROP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                var cropLeft by remember { mutableFloatStateOf(0f) }
-                var cropTop by remember { mutableFloatStateOf(0f) }
-                var cropRight by remember { mutableFloatStateOf(1f) }
-                var cropBottom by remember { mutableFloatStateOf(1f) }
+                // Phase C: sliders are bound to the REAL project fields and are
+                // baked into the export as a normalized FFmpeg crop.
+                var cropLeft by remember(project.cropLeftF) { mutableFloatStateOf(project.cropLeftF) }
+                var cropTop by remember(project.cropTopF) { mutableFloatStateOf(project.cropTopF) }
+                var cropRight by remember(project.cropRightF) { mutableFloatStateOf(project.cropRightF) }
+                var cropBottom by remember(project.cropBottomF) { mutableFloatStateOf(project.cropBottomF) }
+                val commitCrop = { l: Float, tp: Float, r: Float, b: Float ->
+                    onUpdateManualCrop(l, tp, r, b)
+                }
                 listOf(
-                    Triple("⬅️ Left", cropLeft, { v: Float -> cropLeft = v }),
-                    Triple("⬆️ Top", cropTop, { v: Float -> cropTop = v }),
-                    Triple("➡️ Right", cropRight, { v: Float -> cropRight = v }),
-                    Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v })
+                    Triple("⬅️ Left", cropLeft, { v: Float -> cropLeft = v; commitCrop(v, cropTop, cropRight, cropBottom) }),
+                    Triple("⬆️ Top", cropTop, { v: Float -> cropTop = v; commitCrop(cropLeft, v, cropRight, cropBottom) }),
+                    Triple("➡️ Right", cropRight, { v: Float -> cropRight = v; commitCrop(cropLeft, cropTop, v, cropBottom) }),
+                    Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v; commitCrop(cropLeft, cropTop, cropRight, v) })
                 ).forEach { (label, value, onChange) ->
                     Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(55.dp))
@@ -2278,7 +2287,7 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
 
 // ─── 3. CROP PANEL ─────────────────────────────────────────────
 @Composable
-private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onUpdateAspect: (String) -> Unit, onRotate: () -> Unit, onFlipH: () -> Unit, onFlipV: () -> Unit) {
+private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onUpdateManualCrop: (Float, Float, Float, Float) -> Unit, onUpdateAspect: (String) -> Unit, onRotate: () -> Unit, onFlipH: () -> Unit, onFlipV: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         LiveAnimatedHeader("CROP", "📐", SignaturePurple)
 
@@ -2294,15 +2303,17 @@ private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onU
         }
         // Manual Crop Sliders
         Text("MANUAL CROP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        var cropLeft by remember { mutableFloatStateOf(0f) }
-        var cropTop by remember { mutableFloatStateOf(0f) }
-        var cropRight by remember { mutableFloatStateOf(1f) }
-        var cropBottom by remember { mutableFloatStateOf(1f) }
+        // Phase C: bound to real project fields — exported as an FFmpeg crop.
+        var cropLeft by remember(project.cropLeftF) { mutableFloatStateOf(project.cropLeftF) }
+        var cropTop by remember(project.cropTopF) { mutableFloatStateOf(project.cropTopF) }
+        var cropRight by remember(project.cropRightF) { mutableFloatStateOf(project.cropRightF) }
+        var cropBottom by remember(project.cropBottomF) { mutableFloatStateOf(project.cropBottomF) }
+        val commitCrop: (Float, Float, Float, Float) -> Unit = { l, tp, r, b -> onUpdateManualCrop(l, tp, r, b) }
         listOf(
-            Triple("⬅️ Left", cropLeft, { v: Float -> cropLeft = v }),
-            Triple("⬆️ Top", cropTop, { v: Float -> cropTop = v }),
-            Triple("➡️ Right", cropRight, { v: Float -> cropRight = v }),
-            Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v })
+            Triple("⬅️ Left", cropLeft, { v: Float -> cropLeft = v; commitCrop(v, cropTop, cropRight, cropBottom) }),
+            Triple("⬆️ Top", cropTop, { v: Float -> cropTop = v; commitCrop(cropLeft, v, cropRight, cropBottom) }),
+            Triple("➡️ Right", cropRight, { v: Float -> cropRight = v; commitCrop(cropLeft, cropTop, v, cropBottom) }),
+            Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v; commitCrop(cropLeft, cropTop, cropRight, v) })
         ).forEach { (label, value, onChange) ->
             Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(55.dp))
