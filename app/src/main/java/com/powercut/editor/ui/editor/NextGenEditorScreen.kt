@@ -899,63 +899,70 @@ fun NextGenEditorScreen(
         }
     }
 
-    DisposableEffect(project.videoPath, transitionPreviewFile, textAnimPreviewFile, filterPreviewFile) {
-        val uri = filterPreviewFile?.let { Uri.fromFile(it) }
-            ?: textAnimPreviewFile?.let { Uri.fromFile(it) }
-            ?: transitionPreviewFile?.let { Uri.fromFile(it) }
-            ?: if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
-                Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
+    // Load the source video ONCE per path change. Don't re-prepare the player
+    // when only the filter/transition preview files change — a separate
+    // LaunchedEffect below swaps in a preview file only when it's present
+    // and not null, and restores the source URI when the preview clears.
+    // Previously this was one DisposableEffect keyed on (videoPath, all
+    // previewFiles) which reset the player on every preview render, leaving
+    // the PlayerView stuck on the default artwork between resets.
+    var loadedVideoPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(project.videoPath) {
+        if (project.videoPath.isBlank() || project.videoPath == loadedVideoPath) return@LaunchedEffect
+        val uri = if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
+            Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
         exoPlayer.prepare()
-        val listener = object : Player.Listener {
+        loadedVideoPath = project.videoPath
+    }
+    // Swap in a baked preview file (filter / text-anim / transition) when one
+    // is produced. Null preview files leave the source video playing.
+    LaunchedEffect(filterPreviewFile, textAnimPreviewFile, transitionPreviewFile) {
+        val previewFile = filterPreviewFile ?: textAnimPreviewFile ?: transitionPreviewFile
+        if (previewFile == null) {
+            // Restore the source URI (only if we already loaded it once).
+            if (loadedVideoPath != null) {
+                val uri = if (project.videoPath.startsWith("content://") || project.videoPath.startsWith("file://"))
+                    Uri.parse(project.videoPath) else Uri.fromFile(java.io.File(project.videoPath))
+                exoPlayer.setMediaItem(MediaItem.fromUri(uri))
+                exoPlayer.prepare()
+            }
+        } else {
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(previewFile)))
+            exoPlayer.prepare()
+        }
+    }
+    val listener = remember {
+        object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) onDurationRetrieved(exoPlayer.duration)
             }
         }
+    }
+    DisposableEffect(Unit) {
         exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-        }
+        onDispose { exoPlayer.removeListener(listener) }
     }
     LaunchedEffect(isPlaying) {
         if (isPlaying) { exoPlayer.play(); while (isPlaying) { currentPlaybackTime = exoPlayer.currentPosition; kotlinx.coroutines.delay(16) } }
         else { exoPlayer.pause(); kotlinx.coroutines.delay(3000); if (!isPlaying) onSaveDraft() }
     }
     LaunchedEffect(project.isMuted, project.videoVolume) { exoPlayer.volume = if (project.isMuted) 0f else project.videoVolume }
-    // Speed curve — runs a coroutine that re-applies PlaybackParameters based
-    // on the active curve and current playback time. "Normal" = constant speed.
-    // "Montage" / "Hero" / "Flash" / "Bullet" each modulate the speed over time
-    // (start slow, ramp, snap, bullet-time freeze-frame ramp). Export uses the
-    // real FFmpeg setpts filter for pixel accuracy. Voice-changer pitch is
-    // applied here too via the second PlaybackParameters arg (independent of
-    // speed). Real audio effects (robot/phone/reverb/...) need FFmpeg's
-    // affilter chain at export time.
-    LaunchedEffect(project.speedFactor, project.speedCurve, project.voiceChangerPitch, isPlaying) {
+    // Speed / pitch — apply PlaybackParameters ONCE per config change, do NOT
+    // call setPlaybackParameters in a tight loop. Calling it repeatedly while
+    // the player is playing can stall the audio resampler and freeze playback.
+    // The per-frame speed-curve modulation was removed (it starved the
+    // playback thread on real devices). Export still uses the real FFmpeg
+    // setpts filter for pixel-accurate time-varying speed. Voice-changer
+    // pitch is still applied here via the second PlaybackParameters arg.
+    LaunchedEffect(project.speedFactor, project.voiceChangerPitch) {
         val base = project.speedFactor.coerceIn(0.1f, 16f)
         val pitch = Math.pow(2.0, (project.voiceChangerPitch / 12.0).toDouble()).toFloat().coerceIn(0.25f, 4f)
-        val curve = project.speedCurve.lowercase()
-        if (curve == "normal" || curve == "constant") {
-            exoPlayer.playbackParameters = PlaybackParameters(base, pitch)
-            playbackSpeed = base
-            return@LaunchedEffect
-        }
-        val duration = project.durationMs.coerceAtLeast(1L)
-        while (isPlaying) {
-            val tNorm = (currentPlaybackTime.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-            val mult = when (curve) {
-                "montage" -> 1.0f + 0.6f * kotlin.math.sin(tNorm * Math.PI.toFloat())
-                "hero" -> 0.6f + 0.8f * tNorm
-                "flash" -> if (tNorm < 0.85f) base else base * 0.25f
-                "bullet" -> if (tNorm < 0.1f) base * 0.2f else if (tNorm < 0.2f) base * 1.8f else base
-                "custom" -> 0.7f + 0.6f * kotlin.math.sin(tNorm * Math.PI.toFloat() * 2f)
-                else -> 1.0f
-            }
-            val effective = (base * mult).coerceIn(0.1f, 16f)
-            exoPlayer.playbackParameters = PlaybackParameters(effective, pitch)
-            playbackSpeed = effective
-            kotlinx.coroutines.delay(50)
-        }
+        exoPlayer.playbackParameters = PlaybackParameters(base, pitch)
+        playbackSpeed = base
     }
+    // (Speed-curve time-varying multiplier is handled at export time. Live
+    // preview always plays at the configured speedFactor.)
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
     // ═══ BGM (Background Music) ExoPlayer — second player for background music ═══
