@@ -37,14 +37,19 @@ class Media3EffectPipeline @Inject constructor() {
         imageEditorExposure: Float = 0f,
         colorLift: Float = 0f,
         colorGamma: Float = 0f,
-        colorGain: Float = 0f
+        colorGain: Float = 0f,
+        imageEditorSharpen: Float = 0f,
+        greenScreenEnabled: Boolean = false,
+        greenScreenColor: String = "green"
     ): List<ColorEffect> {
         val effects = mutableListOf<ColorEffect>()
         if (filterId != "none" && filterId.isNotBlank()) buildFilterEffect(filterId)?.let(effects::add)
         if (premiumLookId != "none" && premiumLookId.isNotBlank()) buildPremiumLookEffect(premiumLookId)?.let(effects::add)
         buildImageEditorEffect(imageEditorBrightness, imageEditorContrast, imageEditorSaturation, imageEditorTemperature, imageEditorExposure)?.let(effects::add)
         buildColorCurvesEffect(colorLift, colorGamma, colorGain)?.let(effects::add)
-        Log.d(TAG, "Built ${effects.size} Media3 color effects for filter=$filterId, look=$premiumLookId")
+        buildSharpenEffect(imageEditorSharpen)?.let(effects::add)
+        if (greenScreenEnabled) buildChromaDesaturateEffect(greenScreenColor)?.let(effects::add)
+        Log.d(TAG, "Built ${effects.size} Media3 color effects for filter=$filterId, look=$premiumLookId, sharpen=$imageEditorSharpen, chroma=$greenScreenEnabled")
         return effects
     }
 
@@ -117,6 +122,40 @@ class Media3EffectPipeline @Inject constructor() {
         )
     }
 
+    /**
+     * Approximate sharpen for live preview. A real sharpen needs a convolution
+     * (unsharp-mask) which an RgbMatrix 4x4 cannot express, so we boost local
+     * contrast + add a small mid-tone brightness pop. Perceptually close to
+     * mild sharpen at slider <= 0.5. The export pipeline still uses FFmpeg's
+     * real `unsharp` filter.
+     */
+    private fun buildSharpenEffect(amount: Float): ColorEffect? {
+        if (amount == 0f) return null
+        val amt = amount.coerceIn(0f, 1f)
+        val contrast = (1f + amt * 0.6f).coerceIn(1f, 2f)
+        val brightness = (amt * 0.05f).coerceIn(-0.2f, 0.2f)
+        return createRgbAdjustment(
+            brightness = brightness, contrast = contrast, saturation = 1f, temperature = 0f, tint = 0f
+        )
+    }
+
+    /**
+     * Approximate chroma-key for live preview. A real chroma key needs per-pixel
+     * color-distance tests (FFmpeg `colorkey`), which an RgbMatrix cannot express.
+     * The closest matrix approximation: drop saturation toward grayscale + bias
+     * the green channel down so green-dominant pixels blend toward the background.
+     * The Compose overlay draws the selected background image on top of the
+     * preview frame, so the user sees the green visibly "keyed out". The export
+     * pipeline still uses the real FFmpeg `colorkey` for pixel-accurate output.
+     */
+    private fun buildChromaDesaturateEffect(colorName: String): ColorEffect? {
+        val desat = 0.35f
+        val greenBias = if (colorName.equals("green", true) || colorName.contains("00FF00", true)) -0.15f else 0f
+        return createRgbAdjustment(
+            brightness = 0f, contrast = 1f, saturation = desat, temperature = 0f, tint = greenBias
+        )
+    }
+
     private fun createRgbAdjustment(brightness: Float, contrast: Float, saturation: Float, temperature: Float, tint: Float): ColorEffect {
         val brightnessM = GlUtil.create4x4IdentityMatrix().also { if (brightness != 0f) Matrix.translateM(it, 0, brightness, brightness, brightness) }
         val contrastM = GlUtil.create4x4IdentityMatrix().also {
@@ -151,7 +190,10 @@ class Media3EffectPipeline @Inject constructor() {
         imageEditorBrightness = project.imageEditorBrightness, imageEditorContrast = project.imageEditorContrast,
         imageEditorSaturation = project.imageEditorSaturation, imageEditorTemperature = project.imageEditorTemperature,
         imageEditorExposure = project.imageEditorExposure, colorLift = project.colorLift,
-        colorGamma = project.colorGamma, colorGain = project.colorGain
+        colorGamma = project.colorGamma, colorGain = project.colorGain,
+        imageEditorSharpen = project.imageEditorSharpen,
+        greenScreenEnabled = project.greenScreenEnabled,
+        greenScreenColor = project.greenScreenColor
     )
 
     /** Builds color effects plus the aspect-aware Crop effect for live preview. */

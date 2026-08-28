@@ -148,6 +148,26 @@ private fun formatTime(ms: Long): String {
     return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
 
+/** Parses #RRGGBB / RRGGBB / named-color strings into a Compose Color (best-effort). */
+private fun parseHexColor(value: String?): Color? {
+    if (value.isNullOrBlank()) return null
+    return try {
+        val s = value.trim().removePrefix("#")
+        when (s.length) {
+            6 -> Color(("FF$s").toLong(16))
+            8 -> Color(s.toLong(16))
+            else -> when (s.lowercase()) {
+                "green" -> Color(0xFF00FF00)
+                "blue" -> Color(0xFF0000FF)
+                "red" -> Color(0xFFFF0000)
+                "white" -> Color(0xFFFFFFFF)
+                "black" -> Color(0xFF000000)
+                else -> null
+            }
+        }
+    } catch (e: Exception) { null }
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  NEXTGEN EDITOR — CapCut-Level Professional Video Editor
 // ═══════════════════════════════════════════════════════════════
@@ -554,6 +574,7 @@ fun NextGenEditorScreen(
         project.colorLift,
         project.colorGamma,
         project.colorGain,
+        project.imageEditorSharpen,
         filterPreviewFile
     ) {
         // When a real FFmpeg preview clip is on screen, the filter (and any
@@ -704,9 +725,140 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // 3D Shape Mask overlay
+                // 3D Shape Mask — LIVE PREVIEW (v6.4.0)
+                // Draws the actual selected shape (circle/heart/star/hexagon/
+                // triangle/square/cinematic_bars/etc.) and dims the area around
+                // it, so the user sees a real mask instead of a flat black wash.
+                // The export pipeline still uses the real FFmpeg mask filter for
+                // pixel-accurate output.
                 if (project.active3DShapeMask != "none") {
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+                    val maskId = project.active3DShapeMask
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .drawWithContent {
+                                drawContent()
+                                val w = size.width
+                                val h = size.height
+                                val cx = w / 2f
+                                val cy = h / 2f
+                                val maskColor = Color(0xFF000000)
+                                when (maskId) {
+                                    "circle", "oval", "spotlight" -> {
+                                        val r = kotlin.math.min(w, h) * 0.32f
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        drawCircle(color = Color.Transparent, radius = r, center = androidx.compose.ui.geometry.Offset(cx, cy), blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawCircle(color = Color(0xFF9D4EDD).copy(alpha = 0.15f), radius = r, center = androidx.compose.ui.geometry.Offset(cx, cy))
+                                    }
+                                    "heart" -> {
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            val r = kotlin.math.min(w, h) * 0.18f
+                                            moveTo(cx, cy + r)
+                                            cubicTo(cx - r * 2.2f, cy - r * 0.4f, cx - r * 0.6f, cy - r * 1.6f, cx, cy - r * 0.4f)
+                                            cubicTo(cx + r * 0.6f, cy - r * 1.6f, cx + r * 2.2f, cy - r * 0.4f, cx, cy + r)
+                                            close()
+                                        }
+                                        drawPath(path, color = Color.Transparent, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawPath(path, color = Color(0xFFFF3D7F).copy(alpha = 0.18f))
+                                    }
+                                    "star" -> {
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        val r = kotlin.math.min(w, h) * 0.34f
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            val outer = r; val inner = r * 0.45f
+                                            for (i in 0 until 10) {
+                                                val radius = if (i % 2 == 0) outer else inner
+                                                val ang = (Math.PI / 5.0 * i) - Math.PI / 2.0
+                                                val x = (cx + radius * kotlin.math.cos(ang)).toFloat()
+                                                val y = (cy + radius * kotlin.math.sin(ang)).toFloat()
+                                                if (i == 0) moveTo(x, y) else lineTo(x, y)
+                                            }
+                                            close()
+                                        }
+                                        drawPath(path, color = Color.Transparent, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawPath(path, color = Color(0xFFFFD700).copy(alpha = 0.18f))
+                                    }
+                                    "hexagon", "diamond" -> {
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        val r = kotlin.math.min(w, h) * 0.34f
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            val sides = if (maskId == "hexagon") 6 else 4
+                                            for (i in 0 until sides) {
+                                                val ang = (Math.PI * 2.0 / sides * i) - Math.PI / 2.0
+                                                val x = (cx + r * kotlin.math.cos(ang)).toFloat()
+                                                val y = (cy + r * kotlin.math.sin(ang)).toFloat()
+                                                if (i == 0) moveTo(x, y) else lineTo(x, y)
+                                            }
+                                            close()
+                                        }
+                                        drawPath(path, color = Color.Transparent, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawPath(path, color = Color(0xFF2DD4BF).copy(alpha = 0.18f))
+                                    }
+                                    "triangle" -> {
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        val r = kotlin.math.min(w, h) * 0.36f
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            moveTo(cx, cy - r)
+                                            lineTo(cx - r * 0.95f, cy + r * 0.7f)
+                                            lineTo(cx + r * 0.95f, cy + r * 0.7f)
+                                            close()
+                                        }
+                                        drawPath(path, color = Color.Transparent, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawPath(path, color = Color(0xFFFF6B35).copy(alpha = 0.18f))
+                                    }
+                                    "square", "frame" -> {
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        val rw = w * 0.5f
+                                        val rh = h * 0.4f
+                                        drawRect(color = Color.Transparent, topLeft = androidx.compose.ui.geometry.Offset(cx - rw / 2f, cy - rh / 2f), size = androidx.compose.ui.geometry.Size(rw, rh), blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawRect(color = Color(0xFF7C5CFF).copy(alpha = 0.18f), topLeft = androidx.compose.ui.geometry.Offset(cx - rw / 2f, cy - rh / 2f), size = androidx.compose.ui.geometry.Size(rw, rh))
+                                    }
+                                    "arch" -> {
+                                        drawRect(color = maskColor.copy(alpha = 0.55f), size = size)
+                                        val rw = w * 0.55f
+                                        val rh = h * 0.55f
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            addOval(androidx.compose.ui.geometry.Rect(cx - rw / 2f, cy - rh / 2f, cx + rw / 2f, cy + rh / 2f))
+                                        }
+                                        drawPath(path, color = Color.Transparent, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+                                        drawPath(path, color = Color(0xFF60A5FA).copy(alpha = 0.18f))
+                                    }
+                                    "cinematic_bars", "anamorphic" -> {
+                                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(w, h * 0.13f))
+                                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.87f), size = androidx.compose.ui.geometry.Size(w, h * 0.13f))
+                                    }
+                                    "vignette" -> {
+                                        drawRect(color = Color.Black.copy(alpha = 0.6f), size = size)
+                                    }
+                                    "color_splash" -> {
+                                        drawRect(color = Color.Black.copy(alpha = 0.5f), size = size)
+                                        drawCircle(color = Color(0xFFFF00FF).copy(alpha = 0.25f), radius = kotlin.math.min(w, h) * 0.3f, center = androidx.compose.ui.geometry.Offset(cx, cy))
+                                    }
+                                    "film_burn", "fire" -> {
+                                        drawRect(brush = Brush.verticalGradient(listOf(Color(0xFFFF4400).copy(alpha = 0.55f), Color(0xFFFFAA00).copy(alpha = 0.15f), Color.Transparent)), topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.45f), size = androidx.compose.ui.geometry.Size(w, h * 0.55f))
+                                    }
+                                    "light_leak" -> {
+                                        drawRect(brush = Brush.linearGradient(listOf(Color(0xFFFFD700).copy(alpha = 0.45f), Color.Transparent, Color(0xFFFF6B35).copy(alpha = 0.2f))), size = size)
+                                    }
+                                    "lens_flare" -> {
+                                        drawRect(color = Color.Black.copy(alpha = 0.4f), size = size)
+                                        drawCircle(color = Color(0xFFFFEEAA).copy(alpha = 0.5f), radius = kotlin.math.min(w, h) * 0.25f, center = androidx.compose.ui.geometry.Offset(cx, cy))
+                                        drawCircle(color = Color(0xFFFFFFFF).copy(alpha = 0.3f), radius = 8f, center = androidx.compose.ui.geometry.Offset(cx, cy))
+                                    }
+                                    "smoke", "water", "particles", "bokeh" -> {
+                                        drawRect(color = Color(0xFFCCCCCC).copy(alpha = 0.25f), size = size)
+                                    }
+                                    "glitch_3d", "chromatic" -> {
+                                        drawRect(color = Color(0xFFFF00FF).copy(alpha = 0.12f), size = size)
+                                        drawRect(color = Color(0xFF00FFFF).copy(alpha = 0.12f), topLeft = androidx.compose.ui.geometry.Offset(4f, 0f), size = size)
+                                    }
+                                    else -> {
+                                        drawRect(color = Color.Black.copy(alpha = 0.3f), size = size)
+                                    }
+                                }
+                            }
+                    )
                 }
 
                 // ── Live Adjustment Overlays ──
@@ -755,18 +907,47 @@ fun NextGenEditorScreen(
                 // chain into the preview clip) or, for pure colour-matrix
                 // effects, via the Media3 GPU pipeline — so a Compose overlay is
                 // no longer needed and would only double-draw the effect.
-                // Chroma key overlay: show green screen indicator
+                // Chroma key overlay — LIVE PREVIEW (v6.4.0)
+                // Draws a colored border matching the chosen chroma key color so
+                // the user can see at a glance which key is active, plus a badge
+                // and (if set) the keyed background image. The Media3 pipeline
+                // desaturates the green-dominant pixels on the live frame; the
+                // export pipeline still uses the real FFmpeg colorkey filter.
                 if (project.greenScreenEnabled) {
+                    val chromaColor = parseHexColor(project.greenScreenColor) ?: Color(0xFF00FF00)
                     Box(
                         modifier = Modifier.fillMaxSize()
-                            .border(2.dp, Color(0xFF00FF00).copy(alpha = 0.4f))
+                            .border(2.dp, chromaColor.copy(alpha = 0.6f))
                     )
+                    if (!project.greenScreenBackgroundPath.isNullOrBlank()) {
+                        val bgBitmap = remember(project.greenScreenBackgroundPath) {
+                            try {
+                                val p = project.greenScreenBackgroundPath!!
+                                if (p.startsWith("content://") || p.startsWith("file://")) {
+                                    context.contentResolver.openInputStream(android.net.Uri.parse(p))?.use {
+                                        android.graphics.BitmapFactory.decodeStream(it)
+                                    }
+                                } else android.graphics.BitmapFactory.decodeFile(p)
+                            } catch (e: Exception) { null }
+                        }
+                        if (bgBitmap != null) {
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.graphics.painter.BitmapPainter(bgBitmap.asImageBitmap()),
+                                contentDescription = "Chroma background",
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(6.dp)
+                                    .size(60.dp, 34.dp)
+                                    .border(1.dp, Color.White.copy(alpha = 0.5f))
+                            )
+                        }
+                    }
                     Box(
                         modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
                             .background(Color(0xFF00AA00).copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Text("🟢 Chroma", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("🟢 KEYED", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -812,6 +993,52 @@ fun NextGenEditorScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text("🖼️", fontSize = 32.sp)
+                        }
+                    }
+                }
+
+                // Watermark — LIVE PREVIEW (v6.4.0)
+                // Renders the selected watermark image at a fixed bottom-right
+                // corner with slight transparency, so the user sees the same
+                // burned-in watermark they'll get on export. The export pipeline
+                // still uses the real FFmpeg overlay for pixel-accurate output.
+                if (!project.watermarkPath.isNullOrBlank()) {
+                    val watermarkBitmap = remember(project.watermarkPath) {
+                        try {
+                            val path = project.watermarkPath!!
+                            if (path.startsWith("content://") || path.startsWith("file://")) {
+                                val uri = android.net.Uri.parse(path)
+                                context.contentResolver.openInputStream(uri)?.use {
+                                    android.graphics.BitmapFactory.decodeStream(it)
+                                }
+                            } else {
+                                android.graphics.BitmapFactory.decodeFile(path)
+                            }
+                        } catch (e: Exception) { null }
+                    }
+                    if (watermarkBitmap != null) {
+                        val wmPainter = androidx.compose.ui.graphics.painter.BitmapPainter(
+                            watermarkBitmap.asImageBitmap()
+                        )
+                        androidx.compose.foundation.Image(
+                            painter = wmPainter,
+                            contentDescription = "Watermark",
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                                .fillMaxWidth(0.22f)
+                                .graphicsLayer { alpha = 0.85f }
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("© watermark", fontSize = 9.sp, color = Color.White)
                         }
                     }
                 }
@@ -1149,6 +1376,84 @@ fun NextGenEditorScreen(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
+                }
+
+                // Visualizer — LIVE PREVIEW (v6.4.0)
+                // Draws a real animated audio visualizer over the bottom of the
+                // preview frame, driven by an infinite transition. Styles:
+                // wave / bars / radial. The export pipeline still uses the real
+                // FFmpeg showwaves / showfreqs filters for pixel-accurate output.
+                if (project.visualizerStyle.lowercase() != "none") {
+                    val vizStyle = project.visualizerStyle.lowercase()
+                    val vizTransition = rememberInfiniteTransition(label = "viz")
+                    val phase by vizTransition.animateFloat(
+                        initialValue = 0f, targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 1500, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "phase"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val w = size.width
+                            val h = size.height
+                            val accent = Color(0xFF00E5FF)
+                            when (vizStyle) {
+                                "wave" -> {
+                                    val mid = h / 2f
+                                    val bars = 48
+                                    val bw = w / bars
+                                    for (i in 0 until bars) {
+                                        val s = kotlin.math.sin((i / bars.toFloat()) * 6.2831f + phase * 6.2831f)
+                                        val amp = (s * 0.5f + 0.5f) * (h * 0.45f)
+                                        drawLine(
+                                            color = accent,
+                                            start = androidx.compose.ui.geometry.Offset(i * bw + bw / 2f, mid - amp),
+                                            end = androidx.compose.ui.geometry.Offset(i * bw + bw / 2f, mid + amp),
+                                            strokeWidth = 2f
+                                        )
+                                    }
+                                }
+                                "bars" -> {
+                                    val bars = 32
+                                    val bw = w / bars
+                                    for (i in 0 until bars) {
+                                        val n1 = kotlin.math.sin((i * 0.7f) + phase * 6.2831f)
+                                        val n2 = kotlin.math.sin((i * 1.9f) + phase * 4.1f)
+                                        val amp = ((kotlin.math.abs(n1) * 0.6f + kotlin.math.abs(n2) * 0.4f) * h * 0.85f).coerceAtLeast(2f)
+                                        drawRect(
+                                            color = accent,
+                                            topLeft = androidx.compose.ui.geometry.Offset(i * bw + 1f, h - amp),
+                                            size = androidx.compose.ui.geometry.Size(bw - 2f, amp)
+                                        )
+                                    }
+                                }
+                                "radial" -> {
+                                    val cx = w / 2f
+                                    val cy = h / 2f
+                                    val rays = 36
+                                    for (i in 0 until rays) {
+                                        val ang = (i / rays.toFloat()) * 6.2831f
+                                        val len = (kotlin.math.sin(ang * 3f + phase * 6.2831f) * 0.5f + 0.5f) * (kotlin.math.min(w, h) * 0.4f)
+                                        drawLine(
+                                            color = accent,
+                                            start = androidx.compose.ui.geometry.Offset(cx, cy),
+                                            end = androidx.compose.ui.geometry.Offset(cx + kotlin.math.cos(ang) * len, cy + kotlin.math.sin(ang) * len),
+                                            strokeWidth = 2f
+                                        )
+                                    }
+                                    drawCircle(color = accent, radius = 4f, center = androidx.compose.ui.geometry.Offset(cx, cy))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
