@@ -224,9 +224,358 @@ private data class KeyframeState(
     val alpha: Float
 )
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  PREVIEW OVERLAY HELPERS (v6.5.0) — extracted from NextGenEditorScreen to
+//  keep the parent Composable's bytecode under the JVM 64KB method limit.
+//  Each helper is a @Composable that renders one logical group of overlays
+//  on top of the ExoPlayer video frame.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Cinematic bars, vertical safe-zone, horizontal letterbox, drawing strokes. */
+@Composable
+private fun PreviewTemplateOverlays(project: VideoProject) {
+    if (project.activeTemplateId.equals("cinema", ignoreCase = true)) {
+        Box(modifier = Modifier.fillMaxSize().drawWithContent {
+            drawContent()
+            drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.13f))
+            drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height * 0.87f), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.13f))
+        })
+    }
+    if (project.verticalSafeZone) {
+        Box(
+            modifier = Modifier.fillMaxSize().drawWithContent {
+                drawContent()
+                val sw = size.width * 0.85f
+                val sh = size.height
+                val sx = (size.width - sw) / 2f
+                val sy = 0f
+                drawRect(color = Color(0xFF00E5FF).copy(alpha = 0.6f), topLeft = androidx.compose.ui.geometry.Offset(sx, sy), size = androidx.compose.ui.geometry.Size(sw, sh), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                drawRect(color = Color(0xFF00E5FF).copy(alpha = 0.18f), topLeft = androidx.compose.ui.geometry.Offset(sx, sy), size = androidx.compose.ui.geometry.Size(sw, sh))
+            }
+        )
+        Box(
+            modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                .background(Color(0xFF00E5FF).copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("📱 SAFE ZONE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+    }
+    if (project.horizontalLetterbox) {
+        Box(modifier = Modifier.fillMaxSize().drawWithContent {
+            drawContent()
+            val h = size.height * 0.12f
+            drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, h))
+            drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - h), size = androidx.compose.ui.geometry.Size(size.width, h))
+        })
+        Box(
+            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("📽 LETTERBOX", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+    if (project.drawingJson.isNotBlank()) {
+        val drawingStrokes = remember(project.drawingJson) { canvasParseStrokes(project.drawingJson) }
+        if (drawingStrokes.isNotEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().drawWithContent {
+                    drawContent()
+                    for (s in drawingStrokes) {
+                        if (s.points.size < 2) continue
+                        val c = parseHexColor(s.color) ?: Color.White
+                        val w = (s.size.coerceAtLeast(0.002f)) * size.width
+                        for (i in 0 until s.points.size - 1) {
+                            val (x1, y1) = s.points[i]
+                            val (x2, y2) = s.points[i + 1]
+                            drawLine(color = c.copy(alpha = s.opacity), start = androidx.compose.ui.geometry.Offset(x1 * size.width, y1 * size.height), end = androidx.compose.ui.geometry.Offset(x2 * size.width, y2 * size.height), strokeWidth = w)
+                        }
+                    }
+                }
+            )
+        }
+    }
+}
+
+/** Blend mode tint, border style frame, vignette-style preset gradient. */
+@Composable
+private fun PreviewStyleOverlays(project: VideoProject) {
+    if (project.blendMode != "none") {
+        val blendColor = when (project.blendMode) {
+            "multiply" -> Color(0xFF6A4FCF).copy(alpha = 0.22f)
+            "screen" -> Color(0xFFB0E0FF).copy(alpha = 0.22f)
+            "overlay" -> Color(0xFFFFD27F).copy(alpha = 0.18f)
+            "darken" -> Color.Black.copy(alpha = 0.25f)
+            "lighten" -> Color.White.copy(alpha = 0.18f)
+            "color_dodge" -> Color(0xFFFFE08A).copy(alpha = 0.22f)
+            "color_burn" -> Color(0xFF3A1A0A).copy(alpha = 0.28f)
+            "hard_light" -> Color(0xFFFF7F50).copy(alpha = 0.20f)
+            "soft_light" -> Color(0xFFBFA5FF).copy(alpha = 0.18f)
+            "difference" -> Color(0xFF00FFFF).copy(alpha = 0.15f)
+            "exclusion" -> Color(0xFFFF00FF).copy(alpha = 0.15f)
+            "hue" -> Color(0xFF00FF7F).copy(alpha = 0.16f)
+            "saturation" -> Color(0xFFFF1493).copy(alpha = 0.16f)
+            "color" -> Color(0xFF7FFFD4).copy(alpha = 0.16f)
+            "luminosity" -> Color(0xFFFFFFFF).copy(alpha = 0.12f)
+            "addition" -> Color(0xFFFFB300).copy(alpha = 0.16f)
+            "phoenix" -> Color(0xFFFF6B6B).copy(alpha = 0.16f)
+            "reflect" -> Color(0xFF6EC1E4).copy(alpha = 0.18f)
+            "glow" -> Color(0xFFFFE4B5).copy(alpha = 0.20f)
+            "negation" -> Color(0xFF7FFF00).copy(alpha = 0.16f)
+            else -> Color.White.copy(alpha = 0.10f)
+        }
+        Box(modifier = Modifier.fillMaxSize().background(blendColor))
+        Box(
+            modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("🎨 ${project.blendMode}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+    if (project.borderStyle != "none") {
+        val borderColor = when (project.borderStyle) {
+            "white" -> Color.White
+            "black" -> Color.Black
+            "neon" -> Color(0xFF00E5FF)
+            "gradient" -> Color(0xFFFF00E5)
+            "film" -> Color(0xFF8B7355)
+            "polaroid" -> Color(0xFFFAF0E6)
+            "vintage" -> Color(0xFFB8860B)
+            "modern" -> Color(0xFF7C5CFF)
+            "minimal" -> Color(0xFFCCCCCC)
+            "glow" -> Color(0xFFFFAA00)
+            "shadow" -> Color(0xFF333333)
+            "rounded" -> Color(0xFF1A1A2E)
+            else -> Color.White
+        }
+        val borderWidth = if (project.borderStyle in listOf("neon", "glow", "film")) 8.dp else 6.dp
+        Box(
+            modifier = Modifier.fillMaxSize()
+                .border(borderWidth, borderColor, if (project.borderStyle == "rounded") RoundedCornerShape(20.dp) else RoundedCornerShape(0.dp))
+                .padding(borderWidth)
+        )
+        Box(
+            modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("🖼 ${project.borderStyle}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+    if (project.vignetteStyle != "none") {
+        val (strength, color, reverse, blur) = when (project.vignetteStyle) {
+            "classic" -> VignetteParams(0.7f, Color.Black, false, false)
+            "soft" -> VignetteParams(0.45f, Color.Black, false, false)
+            "strong" -> VignetteParams(0.95f, Color.Black, false, false)
+            "reverse" -> VignetteParams(0.7f, Color.White, true, false)
+            "colored" -> VignetteParams(0.65f, Color(0xFF3A1A4A), false, false)
+            "blur" -> VignetteParams(0.55f, Color.Black, false, true)
+            "spotlight" -> VignetteParams(0.5f, Color.Black, false, false)
+            else -> VignetteParams(0.5f, Color.Black, false, false)
+        }
+        if (blur) {
+            Box(modifier = Modifier.fillMaxSize().blur((20f).dp).background(color.copy(alpha = strength)))
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize().drawWithContent {
+                    drawContent()
+                    drawRect(brush = Brush.radialGradient(colors = listOf(Color.Transparent, color.copy(alpha = strength)), center = center, radius = size.maxDimension * 0.7f))
+                }
+            )
+        }
+        Box(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("🔆 ${project.vignetteStyle}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * Status badges, edit-on-preview hint, beat-sync pulsing border, and
+ * manual-crop drag handles. Combined into one helper because the four
+ * groups together still keep the bytecode reasonable and they share
+ * the bottom edge of the preview.
+ */
+@Composable
+private fun PreviewBadgesAndIndicators(project: VideoProject, playbackSpeed: Float) {
+    // Speed badge top-left
+    if (playbackSpeed != 1.0f) {
+        Box(
+            modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+                .background(Color.Black.copy(0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("${playbackSpeed}x", fontSize = 9.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
+        }
+    }
+    // Speed curve badge
+    if (project.speedCurve.lowercase() !in listOf("normal", "constant")) {
+        Box(
+            modifier = Modifier.align(Alignment.TopStart).let {
+                if (playbackSpeed != 1.0f) it.padding(top = 28.dp, start = 8.dp) else it.padding(8.dp)
+            }
+                .background(Color(0xFF00E5FF).copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("📈 ${project.speedCurve}", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+    }
+    // Reverse badge
+    if (project.isReverseEnabled) {
+        Box(
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                .background(Color(0xFFFF6B6B).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("🔁 REVERSE", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+    // Freeze frame badge
+    if (project.freezeFrameMs > 0L) {
+        Box(
+            modifier = Modifier.align(Alignment.TopEnd).let {
+                if (project.isReverseEnabled) it.padding(top = 28.dp, end = 8.dp) else it.padding(8.dp)
+            }
+                .background(Color(0xFF88E1FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("❄ FREEZE @ ${project.freezeFrameMs}ms", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+    }
+    // Keyframe animation badge
+    if (project.keyframeTracks.isNotEmpty()) {
+        Box(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(6.dp)
+                .background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("◆ ${project.keyframeTracks.size} KF TRACK${if (project.keyframeTracks.size != 1) "S" else ""}", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+    // Edit-on-preview hint
+    Box(
+        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+            .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
+    }
+    // Audio status badges
+    Row(
+        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        if (project.audioEffect != "none") {
+            Box(modifier = Modifier.background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🔊 ${project.audioEffect}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.voiceChangerPitch != 0f) {
+            val semis = project.voiceChangerPitch
+            val dir = if (semis > 0) "↑" else "↓"
+            Box(modifier = Modifier.background(Color(0xFFFF6B6B).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🎤 $dir${kotlin.math.abs(semis).toInt()}st", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.isAudioDuckingEnabled) {
+            Box(modifier = Modifier.background(Color(0xFFFFAA00).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🦆 DUCK", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.isSilenceRemoverEnabled) {
+            Box(modifier = Modifier.background(Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🔇 REMOVE SILENCE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+    // Beat sync pulsing border
+    if (project.isBeatSyncEnabled) {
+        val beat = rememberInfiniteTransition(label = "beat")
+        val pulse by beat.animateFloat(
+            initialValue = 0.3f, targetValue = 0.85f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 500, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse"
+        )
+        Box(modifier = Modifier.fillMaxSize().border(6.dp, Color(0xFF00E5FF).copy(alpha = pulse)))
+        Box(
+            modifier = Modifier.align(Alignment.BottomEnd).let {
+                if (project.audioEffect == "none" && project.voiceChangerPitch == 0f && !project.isAudioDuckingEnabled && !project.isSilenceRemoverEnabled) it else it.padding(bottom = 28.dp)
+            }
+                .background(Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("🥁 BEAT SYNC", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+    }
+    // External-processing status badges
+    Row(
+        modifier = Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 28.dp, end = 6.dp, top = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        if (project.autoReframeEnabled) {
+            Box(modifier = Modifier.background(Color(0xFF9D4EDD).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("📐 AUTO REFRAME", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.eraserMode != "none") {
+            Box(modifier = Modifier.background(Color(0xFFFF3D7F).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🧽 ERASER ${project.eraserMode}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.autoCaptionsLanguage != "off") {
+            Box(modifier = Modifier.background(Color(0xFFFFD700).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("📝 CAPTIONS ${project.autoCaptionsLanguage.uppercase()}", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.activeAiFeature != "none") {
+            Box(modifier = Modifier.background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🤖 ${project.activeAiFeature}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (project.upscaleFactor > 1.01f) {
+            Box(modifier = Modifier.background(Color(0xFF00FF7F).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text("🔍 ${project.upscaleFactor}x UPSCALE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+    // Manual-crop drag handles overlay
+    val manualCropActive = project.cropLeftF > 0f || project.cropTopF > 0f ||
+        project.cropRightF < 1f || project.cropBottomF < 1f
+    if (manualCropActive) {
+        Box(
+            modifier = Modifier.fillMaxSize().drawWithContent {
+                drawContent()
+                val l = project.cropLeftF * size.width
+                val t = project.cropTopF * size.height
+                val r = project.cropRightF * size.width
+                val b = project.cropBottomF * size.height
+                val boxW = r - l
+                val boxH = b - t
+                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, t))
+                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, b), size = androidx.compose.ui.geometry.Size(size.width, size.height - b))
+                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, t), size = androidx.compose.ui.geometry.Size(l, boxH))
+                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(r, t), size = androidx.compose.ui.geometry.Size(size.width - r, boxH))
+                drawRect(color = Color(0xFFFFD700), topLeft = androidx.compose.ui.geometry.Offset(l, t), size = androidx.compose.ui.geometry.Size(boxW, boxH), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                val hs = 8f
+                listOf(
+                    androidx.compose.ui.geometry.Offset(l, t),
+                    androidx.compose.ui.geometry.Offset(r, t),
+                    androidx.compose.ui.geometry.Offset(l, b),
+                    androidx.compose.ui.geometry.Offset(r, b)
+                ).forEach { p ->
+                    drawCircle(color = Color(0xFFFFD700), radius = hs, center = p)
+                }
+            }
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  NEXTGEN EDITOR — CapCut-Level Professional Video Editor
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 @OptIn(UnstableApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -1067,132 +1416,10 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // Blend mode — LIVE PREVIEW (v6.5.0)
-                // Tints the frame with a translucent color pass that approximates
-                // the chosen Porter-Duff / Photoshop blend mode. Real blend modes
-                // operate on the underlying video pixels, which an RgbMatrix can't
-                // do; the closest honest approximation is a low-alpha colored
-                // overlay that conveys the user's selection. The export pipeline
-                // still uses the real FFmpeg `blend` / `overlay` filter.
-                if (project.blendMode != "none") {
-                    val blendColor = when (project.blendMode) {
-                        "multiply" -> Color(0xFF6A4FCF).copy(alpha = 0.22f)
-                        "screen" -> Color(0xFFB0E0FF).copy(alpha = 0.22f)
-                        "overlay" -> Color(0xFFFFD27F).copy(alpha = 0.18f)
-                        "darken" -> Color.Black.copy(alpha = 0.25f)
-                        "lighten" -> Color.White.copy(alpha = 0.18f)
-                        "color_dodge" -> Color(0xFFFFE08A).copy(alpha = 0.22f)
-                        "color_burn" -> Color(0xFF3A1A0A).copy(alpha = 0.28f)
-                        "hard_light" -> Color(0xFFFF7F50).copy(alpha = 0.20f)
-                        "soft_light" -> Color(0xFFBFA5FF).copy(alpha = 0.18f)
-                        "difference" -> Color(0xFF00FFFF).copy(alpha = 0.15f)
-                        "exclusion" -> Color(0xFFFF00FF).copy(alpha = 0.15f)
-                        "hue" -> Color(0xFF00FF7F).copy(alpha = 0.16f)
-                        "saturation" -> Color(0xFFFF1493).copy(alpha = 0.16f)
-                        "color" -> Color(0xFF7FFFD4).copy(alpha = 0.16f)
-                        "luminosity" -> Color(0xFFFFFFFF).copy(alpha = 0.12f)
-                        "addition" -> Color(0xFFFFB300).copy(alpha = 0.16f)
-                        "phoenix" -> Color(0xFFFF6B6B).copy(alpha = 0.16f)
-                        "reflect" -> Color(0xFF6EC1E4).copy(alpha = 0.18f)
-                        "glow" -> Color(0xFFFFE4B5).copy(alpha = 0.20f)
-                        "negation" -> Color(0xFF7FFF00).copy(alpha = 0.16f)
-                        else -> Color.White.copy(alpha = 0.10f)
-                    }
-                    Box(modifier = Modifier.fillMaxSize().background(blendColor))
-                    Box(
-                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("🎨 ${project.blendMode}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Border style — LIVE PREVIEW (v6.5.0)
-                // Draws a styled frame around the preview, with thickness,
-                // color, and decoration varying per style. Rounded / neon /
-                // shadow / glow / film / polaroid / vintage / modern / minimal.
-                if (project.borderStyle != "none") {
-                    val borderColor = when (project.borderStyle) {
-                        "white" -> Color.White
-                        "black" -> Color.Black
-                        "neon" -> Color(0xFF00E5FF)
-                        "gradient" -> Color(0xFFFF00E5)
-                        "film" -> Color(0xFF8B7355)
-                        "polaroid" -> Color(0xFFFAF0E6)
-                        "vintage" -> Color(0xFFB8860B)
-                        "modern" -> Color(0xFF7C5CFF)
-                        "minimal" -> Color(0xFFCCCCCC)
-                        "glow" -> Color(0xFFFFAA00)
-                        "shadow" -> Color(0xFF333333)
-                        "rounded" -> Color(0xFF1A1A2E)
-                        else -> Color.White
-                    }
-                    val borderWidth = if (project.borderStyle in listOf("neon", "glow", "film")) 8.dp else 6.dp
-                    Box(
-                        modifier = Modifier.fillMaxSize()
-                            .border(borderWidth, borderColor, if (project.borderStyle == "rounded") RoundedCornerShape(20.dp) else RoundedCornerShape(0.dp))
-                            .padding(borderWidth)
-                    )
-                    Box(
-                        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("🖼 ${project.borderStyle}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Vignette style (preset) — LIVE PREVIEW (v6.5.0)
-                // The imageEditorVignette slider is already a Compose radial
-                // gradient overlay above. This adds the *preset* styles
-                // (classic/soft/strong/reverse/colored/blur/spotlight) on top
-                // of that, matching the FFmpeg vignette expressions export uses.
-                if (project.vignetteStyle != "none") {
-                    val (strength, color, reverse, blur) = when (project.vignetteStyle) {
-                        "classic" -> VignetteParams(0.7f, Color.Black, false, false)
-                        "soft" -> VignetteParams(0.45f, Color.Black, false, false)
-                        "strong" -> VignetteParams(0.95f, Color.Black, false, false)
-                        "reverse" -> VignetteParams(0.7f, Color.White, true, false)
-                        "colored" -> VignetteParams(0.65f, Color(0xFF3A1A4A), false, false)
-                        "blur" -> VignetteParams(0.55f, Color.Black, false, true)
-                        "spotlight" -> VignetteParams(0.5f, Color.Black, false, false)
-                        else -> VignetteParams(0.5f, Color.Black, false, false)
-                    }
-                    if (blur) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .blur((20f).dp)
-                                .background(color.copy(alpha = strength))
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize().drawWithContent {
-                                drawContent()
-                                val brush = if (reverse) {
-                                    Brush.radialGradient(
-                                        colors = listOf(Color.Transparent, color.copy(alpha = strength)),
-                                        center = center, radius = size.maxDimension * 0.7f
-                                    )
-                                } else {
-                                    Brush.radialGradient(
-                                        colors = listOf(Color.Transparent, color.copy(alpha = strength)),
-                                        center = center, radius = size.maxDimension * 0.7f
-                                    )
-                                }
-                                drawRect(brush = brush)
-                            }
-                        )
-                    }
-                    Box(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("🔆 ${project.vignetteStyle}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
+                // Blend mode / border / vignette-style preset overlays
+                // extracted to PreviewStyleOverlays (v6.5.0) so the parent
+                // Composable stays under the 64KB method size limit.
+                PreviewStyleOverlays(project)
 
                 // Image overlay — show actual image with position/scale/opacity
                 // + entrance animation (v6.5.0). The animatable re-triggers on
@@ -1288,102 +1515,10 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // Cinematic bars for cinema template (v6.5.0)
-                // The template's color grade is applied via Media3. The black
-                // bars are overlay-only because they're a drawbox in the FFmpeg
-                // chain. Export draws them via FFmpeg drawbox for pixel-accuracy.
-                if (project.activeTemplateId.equals("cinema", ignoreCase = true)) {
-                    Box(modifier = Modifier.fillMaxSize().drawWithContent {
-                        drawContent()
-                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.13f))
-                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height * 0.87f), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.13f))
-                    })
-                }
-
-                // Vertical safe-zone guide (v6.5.0)
-                // Draws a centered safe-area rectangle for 9:16 vertical exports.
-                if (project.verticalSafeZone) {
-                    Box(
-                        modifier = Modifier.fillMaxSize().drawWithContent {
-                            drawContent()
-                            val sw = size.width * 0.85f
-                            val sh = size.height
-                            val sx = (size.width - sw) / 2f
-                            val sy = 0f
-                            drawRect(
-                                color = Color(0xFF00E5FF).copy(alpha = 0.6f),
-                                topLeft = androidx.compose.ui.geometry.Offset(sx, sy),
-                                size = androidx.compose.ui.geometry.Size(sw, sh),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
-                            )
-                            drawRect(
-                                color = Color(0xFF00E5FF).copy(alpha = 0.18f),
-                                topLeft = androidx.compose.ui.geometry.Offset(sx, sy),
-                                size = androidx.compose.ui.geometry.Size(sw, sh)
-                            )
-                        }
-                    )
-                    Box(
-                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("📱 SAFE ZONE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Horizontal letterbox (v6.5.0)
-                // Renders a black bar across the top + bottom of the frame for
-                // 2.35:1 / 2.39:1 cinematic letterbox compositions. The aspect
-                // ratio itself is already applied via Media3 Crop effect.
-                if (project.horizontalLetterbox) {
-                    Box(modifier = Modifier.fillMaxSize().drawWithContent {
-                        drawContent()
-                        val h = size.height * 0.12f
-                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, h))
-                        drawRect(color = Color.Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - h), size = androidx.compose.ui.geometry.Size(size.width, h))
-                    })
-                    Box(
-                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("📽 LETTERBOX", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Drawing / canvas annotations (v6.5.0)
-                // Renders the user-drawn strokes from project.drawingJson on
-                // top of the preview frame. The points are normalized (0..1)
-                // and scaled to the frame size; color/size/opacity come from
-                // the stored stroke data. Export uses the real FFmpeg chain
-                // (OverlayDrawingStudio.drawingChain) for pixel accuracy.
-                if (project.drawingJson.isNotBlank()) {
-                    val drawingStrokes = remember(project.drawingJson) { canvasParseStrokes(project.drawingJson) }
-                    if (drawingStrokes.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize()
-                                .drawWithContent {
-                                    drawContent()
-                                    for (s in drawingStrokes) {
-                                        if (s.points.size < 2) continue
-                                        val c = parseHexColor(s.color) ?: Color.White
-                                        val w = (s.size.coerceAtLeast(0.002f)) * size.width
-                                        for (i in 0 until s.points.size - 1) {
-                                            val (x1, y1) = s.points[i]
-                                            val (x2, y2) = s.points[i + 1]
-                                            drawLine(
-                                                color = c.copy(alpha = s.opacity),
-                                                start = androidx.compose.ui.geometry.Offset(x1 * size.width, y1 * size.height),
-                                                end = androidx.compose.ui.geometry.Offset(x2 * size.width, y2 * size.height),
-                                                strokeWidth = w
-                                            )
-                                        }
-                                    }
-                                }
-                        )
-                    }
-                }
+                // Cinematic bars / safe-zone / letterbox / drawing overlays
+                // extracted to PreviewTemplateOverlays (v6.5.0) so the parent
+                // Composable stays under the 64KB method size limit.
+                PreviewTemplateOverlays(project)
 
                 // Watermark — LIVE PREVIEW (v6.4.0)
                 // Renders the selected watermark image at a fixed bottom-right
@@ -1747,240 +1882,11 @@ fun NextGenEditorScreen(
                     Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
 
-                // Speed badge top-left
-                if (playbackSpeed != 1.0f) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
-                            .background(Color.Black.copy(0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("${playbackSpeed}x", fontSize = 9.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
-                    }
-                }
-                // Speed curve badge (v6.5.0)
-                if (project.speedCurve.lowercase() !in listOf("normal", "constant")) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopStart).let {
-                            if (playbackSpeed != 1.0f) it.padding(top = 28.dp, start = 8.dp) else it.padding(8.dp)
-                        }
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.6f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("📈 ${project.speedCurve}", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-                // Reverse badge (v6.5.0) — ExoPlayer can't natively play backwards;
-                // surface a clear indicator so the user knows the toggle is active.
-                if (project.isReverseEnabled) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
-                            .background(Color(0xFFFF6B6B).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("🔁 REVERSE", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-                // Freeze frame badge (v6.5.0)
-                if (project.freezeFrameMs > 0L) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopEnd).let {
-                            if (project.isReverseEnabled) it.padding(top = 28.dp, end = 8.dp) else it.padding(8.dp)
-                        }
-                            .background(Color(0xFF88E1FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("❄ FREEZE @ ${project.freezeFrameMs}ms", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-                // Keyframe animation badge (v6.5.0)
-                if (project.keyframeTracks.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(6.dp)
-                            .background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("◆ ${project.keyframeTracks.size} KF TRACK${if (project.keyframeTracks.size != 1) "S" else ""}", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // v5.2.0 — Edit-on-preview hint (bottom-left)
-                Box(
-                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
-                        .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
-                }
-
-                // Audio status badges (v6.5.0) — surface what's currently
-                // applied to the audio chain in a single bottom-right row.
-                // Real audio effects beyond pitch (robot/phone/reverb/...)
-                // require FFmpeg's affilter chain at export time.
-                Row(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (project.audioEffect != "none") {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🔊 ${project.audioEffect}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.voiceChangerPitch != 0f) {
-                        val semis = project.voiceChangerPitch
-                        val dir = if (semis > 0) "↑" else "↓"
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFFFF6B6B).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🎤 $dir${kotlin.math.abs(semis).toInt()}st", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.isAudioDuckingEnabled) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFFFFAA00).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🦆 DUCK", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.isSilenceRemoverEnabled) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🔇 REMOVE SILENCE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                // Beat sync — pulsing border (v6.5.0)
-                if (project.isBeatSyncEnabled) {
-                    val beat = rememberInfiniteTransition(label = "beat")
-                    val pulse by beat.animateFloat(
-                        initialValue = 0.3f, targetValue = 0.85f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(durationMillis = 500, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "pulse"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .border(6.dp, Color(0xFF00E5FF).copy(alpha = pulse))
-                    )
-                    Box(
-                        modifier = Modifier.align(Alignment.BottomEnd).let {
-                            if (project.audioEffect == "none" && project.voiceChangerPitch == 0f && !project.isAudioDuckingEnabled && !project.isSilenceRemoverEnabled) it else it.padding(bottom = 28.dp)
-                        }
-                            .background(Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text("🥁 BEAT SYNC", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // External-processing status badges (v6.5.0)
-                // Features that need model inference / speech-to-text / cloud AI
-                // cannot run in real-time on the preview. Surface a clear badge
-                // so the user knows the toggle is active, and the export will
-                // apply the real pipeline.
-                Row(
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 28.dp, end = 6.dp, top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (project.autoReframeEnabled) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF9D4EDD).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("📐 AUTO REFRAME", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.eraserMode != "none") {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFFFF3D7F).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🧽 ERASER ${project.eraserMode}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.autoCaptionsLanguage != "off") {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFFFFD700).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("📝 CAPTIONS ${project.autoCaptionsLanguage.uppercase()}", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.activeAiFeature != "none") {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🤖 ${project.activeAiFeature}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (project.upscaleFactor > 1.01f) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF00FF7F).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("🔍 ${project.upscaleFactor}x UPSCALE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                // Manual-crop drag handles overlay (v6.5.0)
-                // Drawn when the user has moved any of the freeform crop
-                // sliders away from the default full-frame box. The actual
-                // crop is applied via Media3 Crop effect; this overlay shows
-                // the editable region with corner handles so the user can see
-                // the crop area on the preview.
-                val manualCropActive = project.cropLeftF > 0f || project.cropTopF > 0f ||
-                    project.cropRightF < 1f || project.cropBottomF < 1f
-                if (manualCropActive) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .drawWithContent {
-                                drawContent()
-                                val l = project.cropLeftF * size.width
-                                val t = project.cropTopF * size.height
-                                val r = project.cropRightF * size.width
-                                val b = project.cropBottomF * size.height
-                                val boxW = r - l
-                                val boxH = b - t
-                                // dim outside
-                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, t))
-                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, b), size = androidx.compose.ui.geometry.Size(size.width, size.height - b))
-                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, t), size = androidx.compose.ui.geometry.Size(l, boxH))
-                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(r, t), size = androidx.compose.ui.geometry.Size(size.width - r, boxH))
-                                // crop border
-                                drawRect(
-                                    color = Color(0xFFFFD700),
-                                    topLeft = androidx.compose.ui.geometry.Offset(l, t),
-                                    size = androidx.compose.ui.geometry.Size(boxW, boxH),
-                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
-                                )
-                                // corner handles
-                                val hs = 8f
-                                listOf(
-                                    androidx.compose.ui.geometry.Offset(l, t),
-                                    androidx.compose.ui.geometry.Offset(r, t),
-                                    androidx.compose.ui.geometry.Offset(l, b),
-                                    androidx.compose.ui.geometry.Offset(r, b)
-                                ).forEach { p ->
-                                    drawCircle(color = Color(0xFFFFD700), radius = hs, center = p)
-                                }
-                            }
-                    )
-                }
+                // Status badges, edit-on-preview hint, beat-sync pulsing
+                // border, and manual-crop drag handles extracted to
+                // PreviewBadgesAndIndicators (v6.5.0) so the parent Composable
+                // stays under the 64KB method size limit.
+                PreviewBadgesAndIndicators(project, playbackSpeed)
 
                 // Visualizer — LIVE PREVIEW (v6.4.0)
                 // Draws a real animated audio visualizer over the bottom of the
