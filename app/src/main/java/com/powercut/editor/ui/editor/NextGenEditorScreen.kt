@@ -1879,6 +1879,107 @@ fun NextGenEditorScreen(
                     }
                 }
 
+                // External-processing status badges (v6.5.0)
+                // Features that need model inference / speech-to-text / cloud AI
+                // cannot run in real-time on the preview. Surface a clear badge
+                // so the user knows the toggle is active, and the export will
+                // apply the real pipeline.
+                Row(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 28.dp, end = 6.dp, top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (project.autoReframeEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF9D4EDD).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("📐 AUTO REFRAME", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.eraserMode != "none") {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFF3D7F).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🧽 ERASER ${project.eraserMode}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.autoCaptionsLanguage != "off") {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFFD700).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("📝 CAPTIONS ${project.autoCaptionsLanguage.uppercase()}", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.activeAiFeature != "none") {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF7C5CFF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🤖 ${project.activeAiFeature}", fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (project.upscaleFactor > 1.01f) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF00FF7F).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("🔍 ${project.upscaleFactor}x UPSCALE", fontSize = 7.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                // Manual-crop drag handles overlay (v6.5.0)
+                // Drawn when the user has moved any of the freeform crop
+                // sliders away from the default full-frame box. The actual
+                // crop is applied via Media3 Crop effect; this overlay shows
+                // the editable region with corner handles so the user can see
+                // the crop area on the preview.
+                val manualCropActive = project.cropLeftF > 0f || project.cropTopF > 0f ||
+                    project.cropRightF < 1f || project.cropBottomF < 1f
+                if (manualCropActive) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .drawWithContent {
+                                drawContent()
+                                val l = project.cropLeftF * size.width
+                                val t = project.cropTopF * size.height
+                                val r = project.cropRightF * size.width
+                                val b = project.cropBottomF * size.height
+                                val boxW = r - l
+                                val boxH = b - t
+                                // dim outside
+                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, t))
+                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, b), size = androidx.compose.ui.geometry.Size(size.width, size.height - b))
+                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(0f, t), size = androidx.compose.ui.geometry.Size(l, boxH))
+                                drawRect(color = Color.Black.copy(alpha = 0.45f), topLeft = androidx.compose.ui.geometry.Offset(r, t), size = androidx.compose.ui.geometry.Size(size.width - r, boxH))
+                                // crop border
+                                drawRect(
+                                    color = Color(0xFFFFD700),
+                                    topLeft = androidx.compose.ui.geometry.Offset(l, t),
+                                    size = androidx.compose.ui.geometry.Size(boxW, boxH),
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+                                )
+                                // corner handles
+                                val hs = 8f
+                                listOf(
+                                    androidx.compose.ui.geometry.Offset(l, t),
+                                    androidx.compose.ui.geometry.Offset(r, t),
+                                    androidx.compose.ui.geometry.Offset(l, b),
+                                    androidx.compose.ui.geometry.Offset(r, b)
+                                ).forEach { p ->
+                                    drawCircle(color = Color(0xFFFFD700), radius = hs, center = p)
+                                }
+                            }
+                    )
+                }
+
                 // Visualizer — LIVE PREVIEW (v6.4.0)
                 // Draws a real animated audio visualizer over the bottom of the
                 // preview frame, driven by an infinite transition. Styles:

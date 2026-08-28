@@ -274,6 +274,7 @@ class Media3EffectPipeline @Inject constructor() {
         allEffects.addAll(buildEffectsFromProject(project))
         if (selectedEffect != "none" && selectedEffect.isNotBlank()) allEffects.addAll(buildVisualEffect(selectedEffect))
         Media3CropEffect.forProject(project)?.let(allEffects::add)
+        Media3CropEffect.forManualCrop(project)?.let(allEffects::add)
         Log.d(TAG, "Built ${allEffects.size} total live effects (visual=$selectedEffect, crop=${project.cropPreset})")
         return allEffects
     }
