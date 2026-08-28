@@ -582,7 +582,7 @@ fun NextGenEditorScreen(
     // affilter chain at export time.
     LaunchedEffect(project.speedFactor, project.speedCurve, project.voiceChangerPitch, isPlaying) {
         val base = project.speedFactor.coerceIn(0.1f, 16f)
-        val pitch = kotlin.math.pow(2.0, (project.voiceChangerPitch / 12.0).toDouble()).toFloat().coerceIn(0.25f, 4f)
+        val pitch = Math.pow(2.0, (project.voiceChangerPitch / 12.0).toDouble()).toFloat().coerceIn(0.25f, 4f)
         val curve = project.speedCurve.lowercase()
         if (curve == "normal" || curve == "constant") {
             exoPlayer.playbackParameters = PlaybackParameters(base, pitch)
@@ -606,19 +606,21 @@ fun NextGenEditorScreen(
             kotlinx.coroutines.delay(50)
         }
     }
-    // Audio ducking — when enabled, BGM volume auto-drops while video is
-    // audible (i.e. not muted) and rises while muted. Cheap real-time
-    // approximation of FFmpeg sidechaincompress at export.
-    LaunchedEffect(project.isAudioDuckingEnabled, project.backgroundMusicVolume, project.isMuted, bgmPrepared) {
-        if (!project.isAudioDuckingEnabled || !bgmPrepared) return@LaunchedEffect
-        val target = if (project.isMuted) project.backgroundMusicVolume else project.backgroundMusicVolume * 0.35f
-        bgmPlayer.volume = target
-    }
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
     // ═══ BGM (Background Music) ExoPlayer — second player for background music ═══
     val bgmPlayer = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
     var bgmPrepared by remember { mutableStateOf(false) }
+
+    // Audio ducking — when enabled, BGM volume auto-drops while video is
+    // audible (i.e. not muted) and rises while muted. Cheap real-time
+    // approximation of FFmpeg sidechaincompress at export. Placed here
+    // (after the BGM player declaration) so the identifiers resolve.
+    LaunchedEffect(project.isAudioDuckingEnabled, project.backgroundMusicVolume, project.isMuted, bgmPrepared) {
+        if (!project.isAudioDuckingEnabled || !bgmPrepared) return@LaunchedEffect
+        val target = if (project.isMuted) project.backgroundMusicVolume else project.backgroundMusicVolume * 0.35f
+        bgmPlayer.volume = target
+    }
 
     // Prepare BGM when backgroundMusicPath changes
     LaunchedEffect(project.backgroundMusicPath) {
