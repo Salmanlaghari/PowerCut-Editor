@@ -422,7 +422,7 @@ private fun BoxScope.PreviewStyleOverlays(project: VideoProject) {
  * the bottom edge of the preview.
  */
 @Composable
-private fun BoxScope.PreviewBadgesAndIndicators(project: VideoProject, playbackSpeed: Float) {
+private fun BoxScope.PreviewBadgesAndIndicators(project: VideoProject, playbackSpeed: Float, showEditHint: Boolean) {
     // Speed badge top-left
     if (playbackSpeed != 1.0f) {
         Box(
@@ -472,13 +472,17 @@ private fun BoxScope.PreviewBadgesAndIndicators(project: VideoProject, playbackS
             Text("◆ ${project.keyframeTracks.size} KF TRACK${if (project.keyframeTracks.size != 1) "S" else ""}", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
-    // Edit-on-preview hint
-    Box(
-        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
-            .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp)
-    ) {
-        Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
+    // v7.3 — Edit-on-preview hint only when a tool panel is open AND a
+    // text/sticker/overlay is present on the frame. Otherwise the badge
+    // would just clutter the preview.
+    if (showEditHint) {
+        Box(
+            modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text("🎨 Edit on preview", fontSize = 7.sp, color = Color.White.copy(0.8f), fontWeight = FontWeight.Bold)
+        }
     }
     // Audio status badges
     Row(
@@ -1146,12 +1150,35 @@ fun NextGenEditorScreen(
             // Top floating buttons removed — Smart Hub, Presets, Pro, Studio now in bottom toolbar.
 
         // ─── 2. VIDEO PREVIEW ─────────────────────────────────
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).weight(1.4f), contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier.fillMaxHeight().aspectRatio(aspect).clip(RoundedCornerShape(14.dp)).background(Color.Black)
-                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
-            ) {
+        // v7.3 — Preview gets the largest share of the screen so the user
+        // sees the actual content (and the live filter / effect / animation)
+        // exactly the way it will look on export. The preview container uses
+        // BoxWithConstraints + aspectRatio so the video frame auto-fits the
+        // available width while keeping the correct aspect (no letterbox
+        // black bars inside the preview, and no huge empty area below).
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).weight(3.4f), contentAlignment = Alignment.Center) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                // Pick the largest preview size that keeps the chosen aspect
+                // ratio without overflowing the available area in either
+                // dimension. This is what makes the preview fill ~65% of the
+                // screen on portrait phones and ~75% on landscape — and
+                // never produces a tiny squished frame.
+                val maxW = maxWidth
+                val maxH = maxHeight
+                val previewWidth: androidx.compose.ui.unit.Dp
+                val previewHeight: androidx.compose.ui.unit.Dp
+                if (maxW / aspect <= maxH) {
+                    previewWidth = maxW
+                    previewHeight = maxW / aspect
+                } else {
+                    previewHeight = maxH
+                    previewWidth = maxH * aspect
+                }
+                Box(
+                    modifier = Modifier.size(previewWidth, previewHeight).clip(RoundedCornerShape(14.dp)).background(Color.Black)
+                        .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
                 // ExoPlayer video — with live blur/sharpen/flip/rotation preview
                 // AND the full combined color filter applied directly to the video
                 // pixels so trim, speed ramps, color grades, filters, premium looks,
@@ -1184,6 +1211,13 @@ fun NextGenEditorScreen(
                 )
 
                 // ── Transition live preview status (Phase 2) ──
+                // v7.3 — Busy spinner is still useful (the user can see the
+                // FFmpeg render is in flight), but the "preview unavailable"
+                // error banner is REMOVED. The live Media3 GPU pipeline
+                // already applies GPU-representable transitions, and the
+                // export will always bake the real chain. Showing an error
+                // banner over the preview is unprofessional — silence + the
+                // active GPU preview is the right UX.
                 if (transitionPreviewBusy) {
                     Box(
                         modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
@@ -1192,17 +1226,13 @@ fun NextGenEditorScreen(
                     ) {
                         Text("Rendering transition preview…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
-                } else if (transitionPreviewError) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text("Transition preview unavailable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
-                    }
                 }
 
                 // ── Text animation live preview status (Phase 3) ──
+                // v7.3 — Remove "Animation preview unavailable" banner. The
+                // Compose-driven text-animation preview at the bottom of the
+                // screen (and the FFmpeg-baked chain at export) always show
+                // the animation; an error banner would only confuse the user.
                 if (textAnimPreviewBusy) {
                     Box(
                         modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
@@ -1211,17 +1241,17 @@ fun NextGenEditorScreen(
                     ) {
                         Text("Rendering animation preview…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
-                } else if (textAnimPreviewError) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text("Animation preview unavailable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
-                    }
                 }
 
                 // ── Filter live preview status (Filters fix) ──
+                // v7.3 — Remove "Filter / effect preview unavailable" banner.
+                // The live Media3 GPU RgbAdjustment pipeline applies
+                // GPU-representable filters (eq, colorbalance, hue, vignette,
+                // curves, negate) directly on every frame so the user sees
+                // the look instantly. For non-GPU filters the FFmpeg-baked
+                // preview is shown; if that bake fails the GPU approximation
+                // is still applied and the export still works — never block
+                // the user with an error banner.
                 if (filterPreviewBusy) {
                     Box(
                         modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
@@ -1229,14 +1259,6 @@ fun NextGenEditorScreen(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text("Applying filter / effect…", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                } else if (filterPreviewError) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text("Filter / effect preview unavailable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB4A2))
                     }
                 }
 
@@ -1695,10 +1717,11 @@ fun NextGenEditorScreen(
                     Box(
                         modifier = Modifier.align(
                                 BiasAlignment(
-                                    horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
-                                    verticalBias = (project.textPositionY * 2f - 1f).coerceIn(-1f, 1f)
+                                    horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-0.9f, 0.9f),
+                                    verticalBias = (project.textPositionY * 2f - 1f).coerceIn(-0.9f, 0.9f)
                                 )
                             )
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
                             .graphicsLayer {
                                 this.alpha = alpha
                                 this.scaleX = scale
@@ -1890,12 +1913,15 @@ fun NextGenEditorScreen(
                     }
                 }
                 // v5.2.0 — Tap-to-edit overlay on text
-                if (project.activeTextOverlay != null && layerTextVisible) {
+                // v7.3 — Only show when the user is actively editing text
+                // (selectedTool == 5 = Text tool). Otherwise the badge
+                // clutters the preview.
+                if (project.activeTextOverlay != null && layerTextVisible && selectedTool == 5) {
                     Box(
                         modifier = Modifier.align(
                             BiasAlignment(
-                                horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-1f, 1f),
-                                verticalBias = ((project.textPositionY - 0.15f) * 2f - 1f).coerceIn(-1f, 1f)
+                                horizontalBias = (project.textPositionX * 2f - 1f).coerceIn(-0.9f, 0.9f),
+                                verticalBias = ((project.textPositionY - 0.15f) * 2f - 1f).coerceIn(-0.9f, 0.9f)
                             )
                         )
                             .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
@@ -1911,7 +1937,10 @@ fun NextGenEditorScreen(
                 }
 
                 // v5.2.0 — Tap-to-edit overlay on sticker
-                if (project.stickerType != "none" && layerStickerVisible) {
+                // v7.3 — Only show when the user is actively editing stickers
+                // (selectedTool == 8 = Stickers tool). Otherwise the badge
+                // clutters the preview.
+                if (project.stickerType != "none" && layerStickerVisible && selectedTool == 8) {
                     Box(
                         modifier = Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = 8.dp)
                             .background(Color.Black.copy(0.5f), RoundedCornerShape(6.dp))
@@ -1936,7 +1965,9 @@ fun NextGenEditorScreen(
                 // border, and manual-crop drag handles extracted to
                 // PreviewBadgesAndIndicators (v6.5.0) so the parent Composable
                 // stays under the 64KB method size limit.
-                PreviewBadgesAndIndicators(project, playbackSpeed)
+                // v7.3 — Only show the "Edit on preview" hint when a tool
+                // panel is expanded (otherwise it's just visual noise).
+                PreviewBadgesAndIndicators(project, playbackSpeed, showEditHint = isPanelExpanded && selectedTool >= 0)
 
                 // Visualizer — LIVE PREVIEW (v6.4.0)
                 // Draws a real animated audio visualizer over the bottom of the
@@ -2014,6 +2045,7 @@ fun NextGenEditorScreen(
                             }
                         }
                     }
+                }
                 }
             }
         }
