@@ -91,6 +91,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -2058,7 +2059,25 @@ fun NextGenEditorScreen(
             durationMs = project.durationMs,
             onPlayPause = { isPlaying = !isPlaying },
             onPrevFrame = { exoPlayer.seekTo((exoPlayer.currentPosition - 33).coerceAtLeast(0)) },
-            onNextFrame = { exoPlayer.seekTo((exoPlayer.currentPosition + 33).coerceAtMost(exoPlayer.duration)) }
+            onNextFrame = { exoPlayer.seekTo((exoPlayer.currentPosition + 33).coerceAtMost(exoPlayer.duration)) },
+            onSeek = { seekMs ->
+                exoPlayer.seekTo(seekMs)
+                currentPlaybackTime = seekMs
+            }
+        )
+
+        // v7.3 — KEYFRAME TIMELINE BAR: diamond markers + Add KF + second ticks.
+        // Sits between playback controls and the main timeline so the user
+        // always sees a visible, clickable keyframe icon above the timeline.
+        KeyframeTimelineBar(
+            project = project,
+            currentTimeMs = currentPlaybackTime,
+            onSeek = { seekMs ->
+                exoPlayer.seekTo(seekMs)
+                currentPlaybackTime = seekMs
+            },
+            onAddKeyframe = { onUpdateKeyframeAnim("add:position") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
         )
 
         // ─── 4. PROFESSIONAL TIMELINE ──────────────────────────
@@ -2406,28 +2425,178 @@ private fun PlaybackControls(
     durationMs: Long,
     onPlayPause: () -> Unit,
     onPrevFrame: () -> Unit,
-    onNextFrame: () -> Unit
+    onNextFrame: () -> Unit,
+    onSeek: (Long) -> Unit = {}
 ) {
+    // v7.3 — Second-by-second / frame-by-frame scrub controls (CapCut-class).
+    // Icons: ⏮ -1s | ◀ frame -1 | ▶ play/pause | ▶ frame +1 | ⏭ +1s
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(30.dp).glassmorphic(CircleShape).tactileClick(onClick = onPrevFrame), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.SkipPrevious, "Prev", tint = Color.White, modifier = Modifier.size(14.dp))
-        }
-        Spacer(Modifier.width(14.dp))
+        ScrubButton("⏮", "-1s", onClick = { onSeek((currentTime - 1000).coerceAtLeast(0L)) })
+        Spacer(Modifier.width(8.dp))
+        ScrubButton("⏪", "frame", onClick = onPrevFrame)
+        Spacer(Modifier.width(10.dp))
         Box(modifier = Modifier.size(42.dp).neonGlow(NeonOrange, CircleShape).background(NeonOrange, CircleShape).tactileClick(onClick = onPlayPause), contentAlignment = Alignment.Center) {
             Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.width(14.dp))
-        Box(modifier = Modifier.size(30.dp).glassmorphic(CircleShape).tactileClick(onClick = onNextFrame), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(14.dp))
-        }
+        Spacer(Modifier.width(10.dp))
+        ScrubButton("⏩", "frame", onClick = onNextFrame)
+        Spacer(Modifier.width(8.dp))
+        ScrubButton("⏭", "+1s", onClick = { onSeek((currentTime + 1000).coerceAtMost(durationMs)) })
         Spacer(Modifier.width(14.dp))
         Box(modifier = Modifier.background(Color.White.copy(0.05f), RoundedCornerShape(6.dp)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) {
             Text("${speedFactor}x", fontSize = 10.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
         }
+        Spacer(Modifier.width(6.dp))
+        // HH:MM:SS.cc readout
+        Box(modifier = Modifier.background(Color.Black.copy(0.4f), RoundedCornerShape(6.dp)).border(1.dp, CyberCyan.copy(0.3f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) {
+            Text(formatTimecode(currentTime, durationMs), fontSize = 9.sp, color = CyberCyan, fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        }
     }
 }
 
+/** Small monochrome button for second-by-second / frame-by-frame scrub. */
+@Composable
+private fun ScrubButton(icon: String, hint: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .glassmorphic(CircleShape)
+            .tactileClick(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(icon, fontSize = 13.sp, color = Color.White)
+    }
+}
 
+/** Formats ms as HH:MM:SS.cs / total. */
+private fun formatTimecode(currentMs: Long, totalMs: Long): String {
+    fun fmt(ms: Long): String {
+        val total = (ms / 10).coerceAtLeast(0) // centiseconds
+        val cs = total % 100
+        val s = (total / 100) % 60
+        val m = (total / 6000) % 60
+        val h = total / 360000
+        return "%02d:%02d:%02d.%02d".format(h, m, s, cs)
+    }
+    return "${fmt(currentMs)} / ${fmt(totalMs)}"
+}
+
+/**
+ * v7.3 — KEYFRAME TIMELINE BAR — shows diamond markers above the timeline
+ * for every keyframe the user has placed. Diamonds are clickable: tapping
+ * one seeks the playhead to that keyframe's time. A "+" diamond at the
+ * playhead position adds a new keyframe for the currently selected
+ * property. This is the "keyframe icon on the timeline" the user asked
+ * for. The bar also shows seconds 0, 1, 2, … as visible tick labels so
+ * editing second-by-second is always obvious.
+ */
+@Composable
+private fun KeyframeTimelineBar(
+    project: VideoProject,
+    currentTimeMs: Long,
+    onSeek: (Long) -> Unit,
+    onAddKeyframe: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val totalMs = maxOf(project.durationMs, 1000L)
+    val totalSec = ((totalMs + 999) / 1000).toInt().coerceAtLeast(1)
+    val allKfs = project.keyframeTracks.flatMap { it.keyframes }
+    val trackCount = allKfs.size
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .background(
+                Brush.horizontalGradient(listOf(Color(0xFF1A0F08), Color(0xFF2A1810))),
+                RoundedCornerShape(8.dp)
+            )
+            .border(1.dp, SignatureOrange.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+    ) {
+        val maxW = maxWidth
+        // Second tick marks
+        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            for (sec in 0..totalSec) {
+                val ratio = (sec.toFloat() / totalSec.toFloat()).coerceIn(0f, 1f)
+                val x = (maxW.value * ratio).toInt()
+                Box(
+                    modifier = Modifier
+                        .offset(x = x.dp, y = 0.dp)
+                        .width(1.dp)
+                        .height(8.dp)
+                        .background(Color.White.copy(alpha = 0.2f))
+                )
+                if (sec % maxOf(1, totalSec / 8) == 0) {
+                    Text(
+                        "${sec}s",
+                        fontSize = 6.sp,
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.offset(x = (x + 2).dp, y = 0.dp)
+                    )
+                }
+            }
+        }
+        // Existing keyframe diamonds (clickable)
+        allKfs.forEach { kf ->
+            val ratio = (kf.timeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+            val x = (maxW.value * ratio).toInt().coerceIn(0, maxW.value.toInt() - 12)
+            val color = when (kf.property) {
+                "scale" -> CyberCyan
+                "rotation" -> PremiumGold
+                "opacity" -> Color(0xFFEC4899)
+                "position_x", "position_y" -> SignatureOrange
+                else -> NeonOrange
+            }
+            Box(
+                modifier = Modifier
+                    .offset(x = x.dp, y = 6.dp)
+                    .size(12.dp)
+                    .graphicsLayer { rotationZ = 45f }
+                    .background(color)
+                    .border(1.dp, Color.White.copy(alpha = 0.6f))
+                    .tactileClick(onClick = { onSeek(kf.timeMs) })
+            )
+        }
+        // Playhead (vertical line)
+        val playRatio = (currentTimeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+        val playX = (maxW.value * playRatio).toInt()
+        Box(
+            modifier = Modifier
+                .offset(x = playX.dp, y = 0.dp)
+                .width(2.dp)
+                .height(38.dp)
+                .background(Color(0xFFEC4899))
+        )
+        // "+ Keyframe" floating button anchored at playhead
+        Box(
+            modifier = Modifier
+                .offset(x = (playX + 6).dp, y = 22.dp)
+                .background(SignatureOrange, RoundedCornerShape(4.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                .tactileClick(onClick = onAddKeyframe)
+                .padding(horizontal = 5.dp, vertical = 2.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("◆", fontSize = 7.sp, color = Color.White)
+                Spacer(Modifier.width(2.dp))
+                Text("Add KF", fontSize = 6.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        // Track-count chip on the right
+        if (trackCount > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 6.dp)
+                    .background(SignatureOrange.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            ) {
+                Text("◆ $trackCount KF", fontSize = 6.sp, color = SignatureOrange, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -4074,7 +4243,59 @@ private fun EffectsPanel(project: VideoProject, onUpdateEffect: (String) -> Unit
                 EffectItem("🔀 Glitch Flow", "magic_glitch_flow", "none", "magic"),
                 EffectItem("💜 Neon Flow", "magic_neon_flow", "none", "magic"),
                 EffectItem("🌊 Wave", "magic_wave", "none", "magic"),
-                EffectItem("💨 Breath", "magic_breath", "none", "magic")
+                EffectItem("💨 Breath", "magic_breath", "none", "magic"),
+                // ── v7.3 — EXTENDED EFFECTS LIBRARY (per user request) ──
+                EffectItem("🪐 Galaxy", "galaxy", "neon", "neon"),
+                EffectItem("🌌 Nebula", "nebula", "invert", "vfx"),
+                EffectItem("🛸 UFO", "ufo", "none", "vfx"),
+                EffectItem("🌠 Meteor", "meteor", "none", "vfx"),
+                EffectItem("☄️ Comet", "comet", "none", "vfx"),
+                EffectItem("🔮 Crystal", "crystal", "neon", "neon"),
+                EffectItem("💎 Diamond FX", "diamond_fx", "none", "vfx"),
+                EffectItem("🪞 Mirror", "mirror_fx", "none", "vfx"),
+                EffectItem("🌈 Aurora", "aurora", "none", "color"),
+                EffectItem("🌀 Vortex", "vortex", "invert", "vfx"),
+                EffectItem("🎯 Target", "target", "none", "vfx"),
+                EffectItem("📡 Signal", "signal", "none", "retro"),
+                EffectItem("🕹️ Arcade", "arcade", "none", "retro"),
+                EffectItem("💾 VHS Static", "vhs_static", "sepia", "retro"),
+                EffectItem("📺 TV Noise", "tv_noise", "grayscale", "retro"),
+                EffectItem("📼 Tape", "tape", "sepia", "retro"),
+                EffectItem("🎞️ Projector", "projector", "sepia", "retro"),
+                EffectItem("🌃 Cyber Night", "cyber_night", "neon", "neon"),
+                EffectItem("💜 Neon Pulse", "neon_pulse", "invert", "neon"),
+                EffectItem("🧡 Neon Glow", "neon_glow", "invert", "neon"),
+                EffectItem("💚 Neon Green", "neon_green", "none", "neon"),
+                EffectItem("💙 Neon Blue", "neon_blue", "none", "neon"),
+                EffectItem("❤️ Neon Red", "neon_red", "none", "neon"),
+                EffectItem("🌶️ Heat", "heat", "invert", "color"),
+                EffectItem("❄️ Cold", "cold", "none", "color"),
+                EffectItem("🟡 Sepia Tone", "sepia_tone", "sepia", "color"),
+                EffectItem("🟢 Green Mono", "green_mono", "grayscale", "color"),
+                EffectItem("🔵 Blue Mono", "blue_mono", "grayscale", "color"),
+                EffectItem("🔴 Red Mono", "red_mono", "grayscale", "color"),
+                EffectItem("⚙️ Cyber", "cyber", "invert", "neon"),
+                EffectItem("🤖 Robot", "robot", "none", "vfx"),
+                EffectItem("👾 Arcade Glitch", "arcade_glitch", "invert", "retro"),
+                EffectItem("🕶️ 3D Glasses", "3d_glasses", "none", "vfx"),
+                EffectItem("🌐 Hologram", "hologram", "invert", "neon"),
+                EffectItem("🪄 Magical", "magical", "neon", "magic"),
+                EffectItem("🧚 Fairy", "fairy", "none", "magic"),
+                EffectItem("🪶 Smoke Trail", "smoke_trail", "none", "vfx"),
+                EffectItem("🔥 Burn", "burn", "invert", "vfx"),
+                EffectItem("💨 Wind", "wind", "none", "motion"),
+                EffectItem("🌊 Underwater", "underwater", "none", "color"),
+                EffectItem("🪨 Stone", "stone", "grayscale", "color"),
+                EffectItem("🪵 Wood", "wood", "sepia", "vintage"),
+                EffectItem("🖼️ Oil Painting", "oil_painting", "none", "art"),
+                EffectItem("🖌️ Watercolor FX", "watercolor_fx", "none", "art"),
+                EffectItem("🖍️ Crayon", "crayon", "none", "art"),
+                EffectItem("✏️ Pencil Sketch", "pencil_sketch", "grayscale", "art"),
+                EffectItem("🖋️ Ink", "ink", "grayscale", "art"),
+                EffectItem("📜 Comic Book", "comic_book", "none", "art"),
+                EffectItem("🌈 Pop Art", "pop_art", "none", "art"),
+                EffectItem("🧑‍🎨 Picasso", "picasso", "none", "art"),
+                EffectItem("🌸 Anime FX", "anime_fx", "none", "art")
             )
             allEffects.filter { effectCategory == "all" || it.category == effectCategory }.forEach { (name, effectId, filterId, category) ->
                 val sel = project.selectedEffect == effectId
@@ -4522,7 +4743,22 @@ private fun TransitionsPanel(project: VideoProject, onUpdateTransition: (String)
                 "rgb_glitch", "color_flash", "flip_h", "flip_v", "rotate_3d",
                 "swing", "push_left", "push_right", "push_up", "push_down",
                 "curtain", "blinds", "checkerboard", "diagonal", "triangle",
-                "hexagon", "star", "cross", "ripple", "shatter"
+                "hexagon", "star", "cross", "ripple", "shatter",
+                // ── v7.3 — EXTENDED TRANSITIONS (per user request) ──
+                "wipeleft", "wiperight", "wipeup", "wipedown",
+                "slideleft", "slideright", "slideup", "slidedown",
+                "circlecrop", "rectcrop", "distance", "fadeblack", "fadewhite",
+                "radial", "smoothleft", "smoothright", "smoothup", "smoothdown",
+                "circleopen", "circleclose", "vertopen", "vertclose",
+                "horzopen", "horzclose", "pixelize",
+                "diagtl", "diagtr", "diagbl", "diagbr",
+                "hlslice", "hrslice", "vuslice", "vdslice",
+                "hblur", "fadegrays", "wipetl", "wipetr", "wipebl", "wipebr",
+                "squeezeh", "squeezev",
+                "zoomin", "fadefast", "fadeslow",
+                "hlwind", "hrwind", "vuwind", "vdwind",
+                "coverleft", "coverright", "coverup", "coverdown",
+                "revealleft", "revealright", "revealup", "revealdown"
             ).forEach { t ->
                 val display = t.replace("_", " ").replaceFirstChar { it.uppercase() }
                 val sel = project.transitionType.lowercase() == t.lowercase()
@@ -4986,7 +5222,64 @@ private fun TemplatePanel(project: VideoProject, onUpdateTemplate: (String) -> U
                 "golden" to "🌟 Golden",
                 "ocean" to "🌊 Ocean",
                 "fire" to "🔥 Fire",
-                "ice" to "❄️ Ice"
+                "ice" to "❄️ Ice",
+                // ── v7.3 — EXTENDED TEMPLATE LIBRARY (per user request) ──
+                "birthday" to "🎂 Birthday",
+                "anniversary" to "💍 Anniversary",
+                "baby" to "👶 Baby",
+                "kids" to "🧒 Kids",
+                "graduation" to "🎓 Graduation",
+                "party" to "🎉 Party",
+                "concert" to "🎤 Concert",
+                "festival" to "🎪 Festival",
+                "clubbing" to "🪩 Club",
+                "rave" to "🕺 Rave",
+                "fashion" to "👗 Fashion",
+                "luxury" to "💎 Luxury",
+                "sports" to "🏆 Sports",
+                "fitness" to "💪 Fitness",
+                "yoga" to "🧘 Yoga",
+                "meditation" to "🕉️ Meditation",
+                "cooking" to "🍳 Cooking",
+                "food" to "🍔 Food",
+                "cafe" to "☕ Cafe",
+                "travel_journal" to "🗺️ Travel",
+                "beach_trip" to "🏖️ Beach",
+                "mountain_trip" to "⛰️ Mountain",
+                "city_explorer" to "🏙️ City",
+                "nature" to "🌲 Nature",
+                "sunset" to "🌅 Sunset",
+                "sunrise" to "🌄 Sunrise",
+                "starlight" to "✨ Starlight",
+                "rainy" to "🌧️ Rainy",
+                "snowy" to "❄️ Snowy",
+                "autumn" to "🍂 Autumn",
+                "spring" to "🌸 Spring",
+                "summer" to "☀️ Summer",
+                "winter" to "🥶 Winter",
+                "valentine" to "❤️ Valentine",
+                "eid" to "🌙 Eid",
+                "diwali" to "🪔 Diwali",
+                "christmas" to "🎄 Christmas",
+                "halloween" to "🎃 Halloween",
+                "newyear" to "🎆 New Year",
+                "blackfriday" to "🛍️ Sale",
+                "motivation" to "🔥 Motivation",
+                "business" to "💼 Business",
+                "education" to "📚 Education",
+                "tech" to "💻 Tech",
+                "gaming" to "🎮 Gaming",
+                "anime_style" to "🌸 Anime",
+                "korean" to "🇰🇷 Korean",
+                "japanese" to "🇯🇵 Japanese",
+                "retro_80s" to "📼 80s",
+                "retro_90s" to "📼 90s",
+                "y2k" to "💿 Y2K",
+                "minimal_white" to "⬜ Minimal+",
+                "cinematic_dark" to "🎬 Dark",
+                "music_video" to "🎤 Music",
+                "lyric_video" to "📝 Lyric",
+                "podcast" to "🎙️ Podcast"
             )
             items(templates) { (id, name) ->
                 val sel = project.activeTemplateId == id
