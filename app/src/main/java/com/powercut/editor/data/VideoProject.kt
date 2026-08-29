@@ -212,6 +212,22 @@ data class VideoProject(
     // ── v6.1.0 Keyframe Animation ──
     val keyframeTracks: List<KeyframeTrack> = emptyList(),
     val activeKeyframePreset: String = "none",
+    // ── v7.4 NEW CapCut-class features ──
+    /** Mask shape applied to filters/effects (rectangle, circle, heart, star, linear, radial). */
+    val maskShape: String = "none",
+    val maskFeather: Float = 0.0f,
+    val maskInvert: Boolean = false,
+    /** AI auto-captions (speech-to-text subtitles rendered over the video). */
+    val captionsEnabled: Boolean = false,
+    val captionStyle: String = "capcut_classic",
+    val captionLanguage: String = "en-US",
+    /** Motion tracking for stickers/text (target follows a point in the video). */
+    val motionTrackingEnabled: Boolean = false,
+    val motionTrackingTarget: String = "face",
+    val motionTrackingSmoothing: Float = 0.5f,
+    /** Anti-shake / video stabilization. */
+    val stabilizeEnabled: Boolean = false,
+    val stabilizeStrength: Float = 0.5f,
     // ── JSON persistence: active effects/filters ──
     val activeEffects: List<AppliedEffect> = emptyList(),
     // ── JSON persistence: text overlays ──
@@ -292,6 +308,16 @@ data class VideoProject(
     /** v4.4.0: true when a premium Brightness/HDR/iPhone look is active. */
     val isPremiumLookActive: Boolean
         get() = activePremiumLook != "none" && activePremiumLook.isNotBlank()
+
+    // ── v7.4 NEW CapCut-class feature helpers ──
+    val isMaskActive: Boolean
+        get() = maskShape != "none"
+    val isCaptionsActive: Boolean
+        get() = captionsEnabled
+    val isMotionTrackingActive: Boolean
+        get() = motionTrackingEnabled
+    val isStabilizeActive: Boolean
+        get() = stabilizeEnabled
 
     companion object {
 
