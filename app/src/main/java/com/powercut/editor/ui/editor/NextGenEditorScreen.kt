@@ -2069,17 +2069,16 @@ fun NextGenEditorScreen(
         // v7.3 — KEYFRAME TIMELINE BAR: diamond markers + Add KF + second ticks.
         // Sits between playback controls and the main timeline so the user
         // always sees a visible, clickable keyframe icon above the timeline.
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
-            KeyframeTimelineBar(
-                project = project,
-                currentTimeMs = currentPlaybackTime,
-                onSeek = { seekMs ->
-                    exoPlayer.seekTo(seekMs)
-                    currentPlaybackTime = seekMs
-                },
-                onAddKeyframe = { onUpdateKeyframeAnim("add:position") }
-            )
-        }
+        KeyframeTimelineBar(
+            project = project,
+            currentTimeMs = currentPlaybackTime,
+            onSeek = { seekMs ->
+                exoPlayer.seekTo(seekMs)
+                currentPlaybackTime = seekMs
+            },
+            onAddKeyframe = { onUpdateKeyframeAnim("add:position") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
+        )
 
         // ─── 4. PROFESSIONAL TIMELINE ──────────────────────────
         ProfessionalTimeline(
@@ -2492,20 +2491,19 @@ private fun formatTimecode(currentMs: Long, totalMs: Long): String {
  * editing second-by-second is always obvious.
  */
 @Composable
-private fun BoxWithConstraintsScope.KeyframeTimelineBar(
+private fun KeyframeTimelineBar(
     project: VideoProject,
     currentTimeMs: Long,
     onSeek: (Long) -> Unit,
     onAddKeyframe: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
     val totalMs = maxOf(project.durationMs, 1000L)
     val totalSec = ((totalMs + 999) / 1000).toInt().coerceAtLeast(1)
     val allKfs = project.keyframeTracks.flatMap { it.keyframes }
     val trackCount = allKfs.size
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .height(38.dp)
@@ -2515,11 +2513,12 @@ private fun BoxWithConstraintsScope.KeyframeTimelineBar(
             )
             .border(1.dp, SignatureOrange.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
     ) {
+        val maxW = maxWidth
         // Second tick marks
         Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             for (sec in 0..totalSec) {
                 val ratio = (sec.toFloat() / totalSec.toFloat()).coerceIn(0f, 1f)
-                val x = (constraints.maxWidth * ratio).toInt()
+                val x = (maxW.value * ratio).toInt()
                 Box(
                     modifier = Modifier
                         .offset(x = x.dp, y = 0.dp)
@@ -2541,7 +2540,7 @@ private fun BoxWithConstraintsScope.KeyframeTimelineBar(
         // Existing keyframe diamonds (clickable)
         allKfs.forEach { kf ->
             val ratio = (kf.timeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-            val x = (constraints.maxWidth * ratio).toInt().coerceIn(0, constraints.maxWidth - 12)
+            val x = (maxW.value * ratio).toInt().coerceIn(0, maxW.value.toInt() - 12)
             val color = when (kf.property) {
                 "scale" -> CyberCyan
                 "rotation" -> PremiumGold
@@ -2561,7 +2560,7 @@ private fun BoxWithConstraintsScope.KeyframeTimelineBar(
         }
         // Playhead (vertical line)
         val playRatio = (currentTimeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-        val playX = (constraints.maxWidth * playRatio).toInt()
+        val playX = (maxW.value * playRatio).toInt()
         Box(
             modifier = Modifier
                 .offset(x = playX.dp, y = 0.dp)
@@ -2597,19 +2596,6 @@ private fun BoxWithConstraintsScope.KeyframeTimelineBar(
             }
         }
     }
-}
-
-/** Format helper used by PlaybackControls. */
-private fun formatTimecode(currentMs: Long, totalMs: Long): String {
-    fun fmt(ms: Long): String {
-        val total = (ms / 10).coerceAtLeast(0)
-        val cs = total % 100
-        val s = (total / 100) % 60
-        val m = (total / 6000) % 60
-        val h = total / 360000
-        return "%02d:%02d:%02d.%02d".format(h, m, s, cs)
-    }
-    return "${fmt(currentMs)} / ${fmt(totalMs)}"
 }
 
 
