@@ -2069,8 +2069,6 @@ fun NextGenEditorScreen(
                 exoPlayer.seekTo(seekMs)
                 currentPlaybackTime = seekMs
             }
-<<<<<<< ours
-=======
         )
 
         // v7.3 — KEYFRAME TIMELINE BAR: diamond markers + Add KF + second ticks.
@@ -2085,23 +2083,7 @@ fun NextGenEditorScreen(
             },
             onAddKeyframe = { onUpdateKeyframeAnim("add:position") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
->>>>>>> theirs
         )
-
-        // v7.3 — KEYFRAME TIMELINE BAR: diamond markers + Add KF + second ticks.
-        // Sits between playback controls and the main timeline so the user
-        // always sees a visible, clickable keyframe icon above the timeline.
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
-            KeyframeTimelineBar(
-                project = project,
-                currentTimeMs = currentPlaybackTime,
-                onSeek = { seekMs ->
-                    exoPlayer.seekTo(seekMs)
-                    currentPlaybackTime = seekMs
-                },
-                onAddKeyframe = { onUpdateKeyframeAnim("add:position") }
-            )
-        }
 
         // ─── 4. PROFESSIONAL TIMELINE ──────────────────────────
         ProfessionalTimeline(
@@ -2474,7 +2456,6 @@ private fun PlaybackControls(
         Box(modifier = Modifier.background(Color.Black.copy(0.4f), RoundedCornerShape(6.dp)).border(1.dp, CyberCyan.copy(0.3f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) {
             Text(formatTimecode(currentTime, durationMs), fontSize = 9.sp, color = CyberCyan, fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
         }
-<<<<<<< ours
     }
 }
 
@@ -2501,164 +2482,9 @@ private fun formatTimecode(currentMs: Long, totalMs: Long): String {
         val m = (total / 6000) % 60
         val h = total / 360000
         return "%02d:%02d:%02d.%02d".format(h, m, s, cs)
-=======
->>>>>>> theirs
     }
     return "${fmt(currentMs)} / ${fmt(totalMs)}"
 }
-
-<<<<<<< ours
-/**
- * v7.3 — KEYFRAME TIMELINE BAR — shows diamond markers above the timeline
- * for every keyframe the user has placed. Diamonds are clickable: tapping
- * one seeks the playhead to that keyframe's time. A "+" diamond at the
- * playhead position adds a new keyframe for the currently selected
- * property. This is the "keyframe icon on the timeline" the user asked
- * for. The bar also shows seconds 0, 1, 2, … as visible tick labels so
- * editing second-by-second is always obvious.
- */
-@Composable
-private fun BoxWithConstraintsScope.KeyframeTimelineBar(
-    project: VideoProject,
-    currentTimeMs: Long,
-    onSeek: (Long) -> Unit,
-    onAddKeyframe: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val density = LocalDensity.current
-    val totalMs = maxOf(project.durationMs, 1000L)
-    val totalSec = ((totalMs + 999) / 1000).toInt().coerceAtLeast(1)
-    val allKfs = project.keyframeTracks.flatMap { it.keyframes }
-    val trackCount = allKfs.size
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(38.dp)
-            .background(
-                Brush.horizontalGradient(listOf(Color(0xFF1A0F08), Color(0xFF2A1810))),
-                RoundedCornerShape(8.dp)
-            )
-            .border(1.dp, SignatureOrange.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-    ) {
-        // Second tick marks
-        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            for (sec in 0..totalSec) {
-                val ratio = (sec.toFloat() / totalSec.toFloat()).coerceIn(0f, 1f)
-                val x = (constraints.maxWidth * ratio).toInt()
-                Box(
-                    modifier = Modifier
-                        .offset(x = x.dp, y = 0.dp)
-                        .width(1.dp)
-                        .height(8.dp)
-                        .background(Color.White.copy(alpha = 0.2f))
-                )
-                if (sec % maxOf(1, totalSec / 8) == 0) {
-                    Text(
-                        "${sec}s",
-                        fontSize = 6.sp,
-                        color = Color.White.copy(alpha = 0.45f),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.offset(x = (x + 2).dp, y = 0.dp)
-                    )
-                }
-            }
-        }
-        // Existing keyframe diamonds (clickable)
-        allKfs.forEach { kf ->
-            val ratio = (kf.timeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-            val x = (constraints.maxWidth * ratio).toInt().coerceIn(0, constraints.maxWidth - 12)
-            val color = when (kf.property) {
-                "scale" -> CyberCyan
-                "rotation" -> PremiumGold
-                "opacity" -> Color(0xFFEC4899)
-                "position_x", "position_y" -> SignatureOrange
-                else -> NeonOrange
-            }
-            Box(
-                modifier = Modifier
-                    .offset(x = x.dp, y = 6.dp)
-                    .size(12.dp)
-                    .graphicsLayer { rotationZ = 45f }
-                    .background(color)
-                    .border(1.dp, Color.White.copy(alpha = 0.6f))
-                    .tactileClick(onClick = { onSeek(kf.timeMs) })
-            )
-        }
-        // Playhead (vertical line)
-        val playRatio = (currentTimeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-        val playX = (constraints.maxWidth * playRatio).toInt()
-        Box(
-            modifier = Modifier
-                .offset(x = playX.dp, y = 0.dp)
-                .width(2.dp)
-                .height(38.dp)
-                .background(Color(0xFFEC4899))
-        )
-        // "+ Keyframe" floating button anchored at playhead
-        Box(
-            modifier = Modifier
-                .offset(x = (playX + 6).dp, y = 22.dp)
-                .background(SignatureOrange, RoundedCornerShape(4.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                .tactileClick(onClick = onAddKeyframe)
-                .padding(horizontal = 5.dp, vertical = 2.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("◆", fontSize = 7.sp, color = Color.White)
-                Spacer(Modifier.width(2.dp))
-                Text("Add KF", fontSize = 6.sp, color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
-        // Track-count chip on the right
-        if (trackCount > 0) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-                    .background(SignatureOrange.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
-            ) {
-                Text("◆ $trackCount KF", fontSize = 6.sp, color = SignatureOrange, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-/** Format helper used by PlaybackControls. */
-private fun formatTimecode(currentMs: Long, totalMs: Long): String {
-    fun fmt(ms: Long): String {
-        val total = (ms / 10).coerceAtLeast(0)
-=======
-/** Small monochrome button for second-by-second / frame-by-frame scrub. */
-@Composable
-private fun ScrubButton(icon: String, hint: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(30.dp)
-            .glassmorphic(CircleShape)
-            .tactileClick(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(icon, fontSize = 13.sp, color = Color.White)
-    }
-}
-
-/** Formats ms as HH:MM:SS.cs / total. */
-private fun formatTimecode(currentMs: Long, totalMs: Long): String {
-    fun fmt(ms: Long): String {
-        val total = (ms / 10).coerceAtLeast(0) // centiseconds
->>>>>>> theirs
-        val cs = total % 100
-        val s = (total / 100) % 60
-        val m = (total / 6000) % 60
-        val h = total / 360000
-        return "%02d:%02d:%02d.%02d".format(h, m, s, cs)
-    }
-    return "${fmt(currentMs)} / ${fmt(totalMs)}"
-}
-<<<<<<< ours
-=======
 
 /**
  * v7.3 — KEYFRAME TIMELINE BAR — shows diamond markers above the timeline
@@ -2685,7 +2511,7 @@ private fun KeyframeTimelineBar(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(38.dp)
+            .height(36.dp)
             .background(
                 Brush.horizontalGradient(listOf(Color(0xFF1A0F08), Color(0xFF2A1810))),
                 RoundedCornerShape(8.dp)
@@ -2693,19 +2519,24 @@ private fun KeyframeTimelineBar(
             .border(1.dp, SignatureOrange.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
     ) {
         val maxW = maxWidth
+        // v7.3.1 — Smart tick spacing: only label every Nth second so the
+        // "50s" / "0 KF" overlap on long videos never happens. We pick the
+        // step that yields 5–7 labels across the whole bar.
+        val labelStep = maxOf(1, totalSec / 6)
+        val maxWInt = maxW.value.toInt()
         // Second tick marks
-        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            for (sec in 0..totalSec) {
+        Row(modifier = Modifier.fillMaxSize().padding(start = 4.dp, end = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+            for (sec in 0..totalSec step 1) {
                 val ratio = (sec.toFloat() / totalSec.toFloat()).coerceIn(0f, 1f)
-                val x = (maxW.value * ratio).toInt()
+                val x = ((maxWInt - 36) * ratio).toInt()
                 Box(
                     modifier = Modifier
                         .offset(x = x.dp, y = 0.dp)
                         .width(1.dp)
-                        .height(8.dp)
+                        .height(6.dp)
                         .background(Color.White.copy(alpha = 0.2f))
                 )
-                if (sec % maxOf(1, totalSec / 8) == 0) {
+                if (sec % labelStep == 0) {
                     Text(
                         "${sec}s",
                         fontSize = 6.sp,
@@ -2719,7 +2550,7 @@ private fun KeyframeTimelineBar(
         // Existing keyframe diamonds (clickable)
         allKfs.forEach { kf ->
             val ratio = (kf.timeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-            val x = (maxW.value * ratio).toInt().coerceIn(0, maxW.value.toInt() - 12)
+            val x = ((maxWInt - 36) * ratio).toInt().coerceIn(0, maxWInt - 36 - 12)
             val color = when (kf.property) {
                 "scale" -> CyberCyan
                 "rotation" -> PremiumGold
@@ -2729,54 +2560,51 @@ private fun KeyframeTimelineBar(
             }
             Box(
                 modifier = Modifier
-                    .offset(x = x.dp, y = 6.dp)
-                    .size(12.dp)
+                    .offset(x = x.dp, y = 4.dp)
+                    .size(11.dp)
                     .graphicsLayer { rotationZ = 45f }
                     .background(color)
                     .border(1.dp, Color.White.copy(alpha = 0.6f))
                     .tactileClick(onClick = { onSeek(kf.timeMs) })
             )
         }
-        // Playhead (vertical line)
+        // Playhead (vertical line) — constrained to the safe area so it
+        // never collides with the track-count chip on the right.
         val playRatio = (currentTimeMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-        val playX = (maxW.value * playRatio).toInt()
+        val playX = ((maxWInt - 36) * playRatio).toInt()
         Box(
             modifier = Modifier
                 .offset(x = playX.dp, y = 0.dp)
                 .width(2.dp)
-                .height(38.dp)
+                .height(36.dp)
                 .background(Color(0xFFEC4899))
         )
-        // "+ Keyframe" floating button anchored at playhead
+        // "+ Keyframe" floating button anchored at playhead (kept above
+        // the bar so it doesn't get clipped)
         Box(
             modifier = Modifier
-                .offset(x = (playX + 6).dp, y = 22.dp)
+                .offset(x = (playX + 6).dp, y = 18.dp)
                 .background(SignatureOrange, RoundedCornerShape(4.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                 .tactileClick(onClick = onAddKeyframe)
-                .padding(horizontal = 5.dp, vertical = 2.dp)
+                .padding(horizontal = 4.dp, vertical = 1.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("◆", fontSize = 7.sp, color = Color.White)
-                Spacer(Modifier.width(2.dp))
-                Text("Add KF", fontSize = 6.sp, color = Color.White, fontWeight = FontWeight.Bold)
-            }
+            Text("◆ +KF", fontSize = 6.sp, color = Color.White, fontWeight = FontWeight.Bold)
         }
-        // Track-count chip on the right
+        // Track-count chip on the right (always in safe area)
         if (trackCount > 0) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-                    .background(SignatureOrange.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                    .padding(end = 4.dp)
+                    .background(SignatureOrange.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
-                Text("◆ $trackCount KF", fontSize = 6.sp, color = SignatureOrange, fontWeight = FontWeight.Bold)
+                Text("◆ $trackCount", fontSize = 6.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
->>>>>>> theirs
 
 
 // ═══════════════════════════════════════════════════════════════
