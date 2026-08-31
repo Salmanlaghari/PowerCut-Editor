@@ -17,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.powercut.editor.data.TimelineClip
+import com.powercut.editor.data.TrackType as DataTrackType
 
 // ── Colors ──
 private val BgDark = Color(0xFF0A0A0F)
@@ -32,26 +34,33 @@ private val AccentCyan = Color(0xFF00D4FF)
 private val KeyframeOrange = Color(0xFFFF9500)
 private val BeatMarker = Color(0xFFFF9500)
 
-data class TimelineClip(
-    val id: String,
-    val name: String,
-    val trackType: TrackType,
-    val startTimeMs: Long,
-    val durationMs: Long,
-    val color: Color = when (trackType) {
-        TrackType.VIDEO -> ClipVideo
-        TrackType.AUDIO -> ClipAudio
-        TrackType.TEXT -> ClipText
-    },
-    val keyframes: List<Long> = emptyList()
-)
+// Use existing TimelineClip and TrackType from data package
+// TrackType mapping for display labels
+private fun DataTrackType.displayName(): String = when (this) {
+    DataTrackType.VIDEO -> "V1"
+    DataTrackType.AUDIO -> "A1"
+    DataTrackType.TEXT -> "Text"
+    DataTrackType.STICKER -> "Sticker"
+    DataTrackType.OVERLAY -> "Overlay"
+    DataTrackType.EFFECT -> "Effect"
+    DataTrackType.TRANSITION -> "Transition"
+}
 
-enum class TrackType(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    VIDEO("V1", Icons.Default.Videocam),
-    VIDEO_2("V2", Icons.Default.Videocam),
-    AUDIO("A1", Icons.Default.MusicNote),
-    AUDIO_2("A2", Icons.Default.MusicNote),
-    TEXT("Text", Icons.Default.TextFields)
+private fun DataTrackType.displayIcon(): androidx.compose.ui.graphics.vector.ImageVector = when (this) {
+    DataTrackType.VIDEO -> Icons.Default.Videocam
+    DataTrackType.AUDIO -> Icons.Default.MusicNote
+    DataTrackType.TEXT -> Icons.Default.TextFields
+    DataTrackType.STICKER -> Icons.Default.EmojiEmotions
+    DataTrackType.OVERLAY -> Icons.Default.Layers
+    DataTrackType.EFFECT -> Icons.Default.AutoAwesome
+    DataTrackType.TRANSITION -> Icons.Default.Transition
+}
+
+private fun DataTrackType.clipColor(): Color = when (this) {
+    DataTrackType.VIDEO -> ClipVideo
+    DataTrackType.AUDIO -> ClipAudio
+    DataTrackType.TEXT -> ClipText
+    else -> ClipVideo
 }
 
 @Composable
@@ -65,6 +74,9 @@ fun MultiTrackTimeline(
     modifier: Modifier = Modifier
 ) {
     val pixelsPerMs = 0.15f // zoom level
+
+    // Get unique track types from clips
+    val trackTypes = clips.map { it.type }.distinct()
 
     Column(
         modifier = modifier
@@ -82,10 +94,10 @@ fun MultiTrackTimeline(
         Box(modifier = Modifier.fillMaxWidth()) {
             // Track rows
             Column {
-                TrackType.entries.forEach { trackType ->
+                trackTypes.forEach { trackType ->
                     TrackRow(
                         trackType = trackType,
-                        clips = clips.filter { it.trackType == trackType },
+                        clips = clips.filter { it.type == trackType },
                         currentTimeMs = currentTimeMs,
                         totalDurationMs = totalDurationMs,
                         pixelsPerMs = pixelsPerMs,
@@ -143,7 +155,7 @@ private fun TimeRuler(
 
 @Composable
 private fun TrackRow(
-    trackType: TrackType,
+    trackType: DataTrackType,
     clips: List<TimelineClip>,
     currentTimeMs: Long,
     totalDurationMs: Long,
@@ -167,7 +179,7 @@ private fun TrackRow(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = trackType.label,
+                text = trackType.displayName(),
                 color = TextGray,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
@@ -203,6 +215,7 @@ private fun ClipCard(
     onClick: () -> Unit
 ) {
     val width = (clip.durationMs * pixelsPerMs).dp.coerceIn(60.dp, 400.dp)
+    val clipColor = clip.type.clipColor()
 
     Box(
         modifier = Modifier
@@ -213,8 +226,8 @@ private fun ClipCard(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        clip.color,
-                        clip.color.copy(alpha = 0.7f)
+                        clipColor,
+                        clipColor.copy(alpha = 0.7f)
                     )
                 )
             )
@@ -236,23 +249,6 @@ private fun ClipCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-
-            // Keyframe dots
-            if (clip.keyframes.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    clip.keyframes.take(5).forEach {
-                        Box(
-                            modifier = Modifier
-                                .size(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(KeyframeOrange)
-                        )
-                    }
-                }
-            }
         }
     }
 }
