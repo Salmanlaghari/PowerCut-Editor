@@ -246,7 +246,7 @@ enum class EasingFunction(val displayName: String) {
             if (t == 0f || t == 1f) return t
             return -0.5f * kotlin.math.pow(2f, 10f * (t - 1)) * kotlin.math.sin((t - 1.1f) * 5 * Math.PI.toFloat())
         }
-    }
+    };
 
     abstract fun evaluate(t: Float): Float
 }
