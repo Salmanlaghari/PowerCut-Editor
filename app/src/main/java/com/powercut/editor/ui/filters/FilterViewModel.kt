@@ -45,7 +45,14 @@ class FilterViewModel : ViewModel() {
                 _segmentationEnabled,
                 _colorGradingEnabled,
                 _audioReactiveEnabled
-            ) { filter, intensity, beauty, seg, color, audio ->
+            ) { values: Array<*> ->
+                val filter = values[0] as? FilterPreset
+                val intensity = values[1] as? Float ?: 0.75f
+                val beauty = values[2] as? Boolean ?: false
+                val seg = values[3] as? Boolean ?: false
+                val color = values[4] as? Boolean ?: false
+                val audio = values[5] as? Boolean ?: false
+
                 AIFilterConfig(
                     beautyEnabled = beauty,
                     smoothIntensity = if (beauty) intensity else 0f,
