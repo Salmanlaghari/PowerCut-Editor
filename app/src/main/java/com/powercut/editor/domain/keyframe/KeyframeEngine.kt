@@ -2,6 +2,7 @@ package com.powercut.editor.domain.keyframe
 
 import androidx.compose.ui.graphics.Color
 import kotlin.math.abs
+import kotlin.math.pow
 
 /**
  * Precision keyframe engine supporting linear, bezier, and custom easing functions.

@@ -2,6 +2,7 @@ package com.powercut.editor.domain.processing
 
 import android.opengl.GLES20
 import kotlin.math.abs
+import com.powercut.editor.domain.ai.ShaderProgram
 
 /**
  * AI Speed Ramp engine with optical flow frame interpolation.
