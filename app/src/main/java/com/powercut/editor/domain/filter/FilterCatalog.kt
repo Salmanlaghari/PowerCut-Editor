@@ -162,8 +162,8 @@ object FilterCatalog {
         FilterDef("neon_outline", "Neon Outline", "ai"),
         FilterDef("depth_bokeh", "Depth Bokeh", "ai"),
         FilterDef("face_mesh", "Face Mesh", "ai"),
-        FilterDef("audio_pulse", "Audio Pulse", "ai")
-// ── v7.3 — EXTENDED PROFESSIONAL FILTER LIBRARY (added per user request) ──
+        FilterDef("audio_pulse", "Audio Pulse", "ai"),
+        // ── v7.3 — EXTENDED PROFESSIONAL FILTER LIBRARY (added per user request) ──
         // Cinema / mood / neon / adjust — CapCut / KineMaster class
         FilterDef("teal_orange", "Teal & Orange", "cinema"),
         FilterDef("matrix", "Matrix", "neon"),
@@ -430,8 +430,8 @@ object FilterCatalog {
         "neon_outline" to "eq=contrast=1.5:saturation=1.8:gamma=0.8,edgedetect=mode=canny,eq=brightness=0.1",
         "depth_bokeh" to "gblur=sigma=8,eq=contrast=1.1:saturation=1.05",
         "face_mesh" to "eq=brightness=0.05:contrast=1.1:saturation=1.1",
-        "audio_pulse" to "eq=contrast=1.3:saturation=1.5,eq=brightness=0.05"
-// ── v7.3 — EXTENDED PROFESSIONAL FILTER CHAINS ──
+        "audio_pulse" to "eq=contrast=1.3:saturation=1.5,eq=brightness=0.05",
+        // ── v7.3 — EXTENDED PROFESSIONAL FILTER CHAINS ──
         "teal_orange" to "colorbalance=rs=0.1:bs=0.15:rm=0.12:bm=0.1,eq=contrast=1.15:saturation=1.2",
         "matrix" to "colorbalance=gs=0.5:bs=0.0,eq=saturation=0.8:contrast=1.2,hue=h=110",
         "blade_runner" to "colorbalance=rs=0.05:bs=0.3:rm=0.1:bm=0.2,eq=saturation=1.5:contrast=1.3:brightness=-0.1",
