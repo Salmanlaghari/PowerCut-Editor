@@ -3007,7 +3007,7 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
                                     .background(FiltersPanelCyan),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Check, "Selected", tint = Color(0xFF0A0A0F), modifier = Modifier.size(10.dp))
+                                Text("\u2713", fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color(0xFF0A0A0F))
                             }
                         }
                     }
