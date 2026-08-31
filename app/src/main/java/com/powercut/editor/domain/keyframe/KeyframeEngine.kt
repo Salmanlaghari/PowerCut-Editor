@@ -246,7 +246,7 @@ enum class EasingFunction(val displayName: String) {
     ELASTIC("Elastic") {
         override fun evaluate(t: Float): Float {
             if (t == 0f || t == 1f) return t
-            return -0.5f * pow(2f, 10f * (t - 1)) * sin((t - 1.1f) * 5 * Math.PI.toFloat())
+            return (-0.5f * Math.pow(2.0, (10.0 * (t - 1)).toDouble()).toFloat() * Math.sin(((t - 1.1f) * 5 * Math.PI).toDouble()).toFloat()).toFloat()
         }
     };
 
