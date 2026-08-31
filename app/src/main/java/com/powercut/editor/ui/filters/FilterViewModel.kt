@@ -20,7 +20,10 @@ class FilterViewModel : ViewModel() {
     private val _filterIntensity = MutableStateFlow(0.75f)
     val filterIntensity: StateFlow<Float> = _filterIntensity.asStateFlow()
 
-    private val _selectedCategory = MutableStateFlow(FilterCategory.AI_FX)
+    private val _selectedTab = MutableStateFlow(EditorTab.FILTERS)
+    val selectedTab: StateFlow<EditorTab> = _selectedTab.asStateFlow()
+
+    private val _selectedCategory = MutableStateFlow(FilterCategory.COLOR_LUTS)
     val selectedCategory: StateFlow<FilterCategory> = _selectedCategory.asStateFlow()
 
     private val _filterConfig = MutableStateFlow(AIFilterConfig())
@@ -34,7 +37,6 @@ class FilterViewModel : ViewModel() {
     private val _audioReactiveEnabled = MutableStateFlow(false)
 
     init {
-        // Rebuild filter config whenever any state changes
         viewModelScope.launch {
             combine(
                 _selectedFilter,
@@ -68,17 +70,16 @@ class FilterViewModel : ViewModel() {
         _selectedFilter.value = filter
         _filterIntensity.value = 0.75f
 
-        // Enable/disable appropriate pipeline stages
         when (filter.category) {
             FilterCategory.AI_FX -> {
                 _beautyEnabled.value = filter == FilterPreset.AI_BEAUTY
                 _segmentationEnabled.value = filter in listOf(FilterPreset.DEPTH_BOKEH, FilterPreset.FACE_MESH)
                 _audioReactiveEnabled.value = filter == FilterPreset.AUDIO_PULSE
-                _colorGradingEnabled.value = filter == FilterPreset.CYBER_NEON
+                _colorGradingEnabled.value = false
             }
             FilterCategory.COLOR_LUTS -> {
                 _colorGradingEnabled.value = true
-                _beautyEnabled.value = false
+                _beautyEnabled.value = filter == FilterPreset.BEAUTY_FILTER
                 _segmentationEnabled.value = false
                 _audioReactiveEnabled.value = false
             }
@@ -113,6 +114,18 @@ class FilterViewModel : ViewModel() {
         _filterIntensity.value = intensity
     }
 
+    fun selectTab(tab: EditorTab) {
+        _selectedTab.value = tab
+        // Update category based on tab
+        when (tab) {
+            EditorTab.FILTERS -> _selectedCategory.value = FilterCategory.COLOR_LUTS
+            EditorTab.EFFECTS -> _selectedCategory.value = FilterCategory.AI_FX
+            EditorTab.ADJUST -> _selectedCategory.value = FilterCategory.BEAUTY
+            EditorTab.STICKERS -> _selectedCategory.value = FilterCategory.AR_MASKS
+            EditorTab.MUSIC -> _selectedCategory.value = FilterCategory.AUDIO_FX
+        }
+    }
+
     fun selectCategory(category: FilterCategory) {
         _selectedCategory.value = category
     }
@@ -125,20 +138,19 @@ class FilterViewModel : ViewModel() {
         _audioReactiveEnabled.value = false
     }
 
-    /**
-     * Map UI filter presets to the actual color grading pipeline presets.
-     */
     private fun mapFilterToPreset(filter: FilterPreset?): ColorGradingPreset {
         return when (filter) {
             FilterPreset.TEAL_ORANGE -> ColorGradingPreset.TEAL_ORANGE
             FilterPreset.VINTAGE_FILM -> ColorGradingPreset.VINTAGE_FILM
-            FilterPreset.CYBERPUNK_LUT -> ColorGradingPreset.CYBERPUNK
+            FilterPreset.CYBER_NEON -> ColorGradingPreset.CYBERPUNK
             FilterPreset.FILM_NOIR -> ColorGradingPreset.FILM_NOIR
             FilterPreset.GOLDEN_HOUR -> ColorGradingPreset.GOLDEN_HOUR
             FilterPreset.RETRO_FILM -> ColorGradingPreset.RETRO_FILM
             FilterPreset.COOL_TONE -> ColorGradingPreset.COOL_TONE
-            FilterPreset.CYBER_NEON -> ColorGradingPreset.CYBERPUNK
             FilterPreset.DRAMATIC -> ColorGradingPreset.TEAL_ORANGE
+            FilterPreset.CINEMATIC -> ColorGradingPreset.VINTAGE_FILM
+            FilterPreset.BW_DRAMA -> ColorGradingPreset.FILM_NOIR
+            FilterPreset.RETRO_80S -> ColorGradingPreset.CYBERPUNK
             else -> ColorGradingPreset.NONE
         }
     }

@@ -3,8 +3,10 @@ package com.powercut.editor.ui.filters
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,304 +19,506 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.domain.ai.ColorGradingPreset
+import kotlin.math.roundToInt
 
-/**
- * Bottom filter drawer UI matching the reference design:
- * - Top 70%: Video preview canvas
- * - Middle bar: Active filter intensity slider
- * - Bottom 30%: Horizontally scrollable filter carousel with category tabs
- */
+// ──────────────────────────────────────────────────────────────────────────────
+// Color palette matching reference image exactly
+// ──────────────────────────────────────────────────────────────────────────────
+private val BackgroundDark = Color(0xFF0A0A0F)
+private val PanelDark = Color(0xFF141420)
+private val PanelGlass = Color(0xE0141420)
+private val SliderCyan = Color(0xFF00D4FF)
+private val SliderTrack = Color(0xFF1E2A3A)
+private val SliderInactive = Color(0xFF2A3040)
+private val TextWhite = Color(0xFFFFFFFF)
+private val TextGray = Color(0xFF7A7A8E)
+private val TextDim = Color(0xFF555566)
+private val ActiveGlow = Color(0xFF00D4FF)
+private val TabActive = Color(0xFF00D4FF)
+private val TabInactive = Color(0xFF555566)
+private val DragHandle = Color(0xFF3A3A4A)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Main composable — full-screen editor layout matching reference
+// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 fun FilterDrawer(
     activeFilter: FilterPreset?,
     onFilterSelected: (FilterPreset) -> Unit,
     onIntensityChanged: (Float) -> Unit,
+    onCancel: () -> Unit,
+    onDone: () -> Unit,
+    onTabSelected: (EditorTab) -> Unit,
+    selectedTab: EditorTab,
+    isPlaying: Boolean,
+    onTogglePlayPause: () -> Unit,
+    playbackPosition: Long,
+    totalDuration: Long,
+    playbackSpeed: Float,
     modifier: Modifier = Modifier
 ) {
-    var selectedCategory by remember { mutableStateOf(FilterCategory.AI_FX) }
-    var isDrawerExpanded by remember { mutableStateOf(true) }
+    var intensity by remember { mutableFloatStateOf(0.75f) }
+    var selectedCategory by remember { mutableStateOf(FilterCategory.COLOR_LUTS) }
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color(0xCC0A0A0F), Color(0xF00A0A0F))
-                )
-            )
+            .fillMaxSize()
+            .background(BackgroundDark)
     ) {
-        // Active filter intensity slider (middle bar)
-        AnimatedVisibility(
-            visible = activeFilter != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        // ── Top Bar: Cancel / PixelEdit / Done ──
+        TopBar(onCancel = onCancel, onDone = onDone)
+
+        // ── Video Preview Area (~55%) ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
         ) {
-            activeFilter?.let { filter ->
-                FilterIntensitySlider(
-                    filterName = filter.displayName,
-                    onIntensityChanged = onIntensityChanged
+            // Video preview placeholder (dark rounded rect with gradient)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(9f / 12f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF1A1020),
+                                Color(0xFF0D0D18)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                // Filter preview indicator
+                if (activeFilter != null) {
+                    Text(
+                        text = activeFilter.displayName,
+                        color = ActiveGlow.copy(alpha = 0.6f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Play/Pause button overlay
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(onClick = onTogglePlayPause),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = TextWhite,
+                    modifier = Modifier.size(32.dp)
                 )
+            }
+
+            // Bottom controls overlay (timestamp + speed)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp)
+            ) {
+                // Timestamp row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${formatTime(playbackPosition)} / ${formatTime(totalDuration)}",
+                        color = TextWhite.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "${playbackSpeed}x",
+                        color = TextWhite.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Timeline scrubber
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp)
+                        .padding(horizontal = 8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.3f))
+                ) {
+                    // Progress fill
+                    val progress = if (totalDuration > 0) playbackPosition.toFloat() / totalDuration else 0f
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction = progress)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(SliderCyan.copy(alpha = 0.3f), SliderCyan.copy(alpha = 0.5f))
+                                )
+                            )
+                    )
+                    // Playhead
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(2.dp)
+                            .align(Alignment.CenterStart)
+                            .offset(x = (progress * 100).dp * 0.01f)
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(SliderCyan)
+                    )
+                }
             }
         }
 
-        // Category tabs
-        FilterCategoryTabs(
-            selectedCategory = selectedCategory,
-            onCategorySelected = { selectedCategory = it }
-        )
+        // ── Bottom Panel (glassmorphic) ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(0.55f)
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(PanelGlass)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Drag handle
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(DragHandle)
+                    )
+                }
 
-        // Filter carousel
-        FilterCarousel(
-            category = selectedCategory,
-            activeFilter = activeFilter,
-            onFilterSelected = onFilterSelected,
-            modifier = Modifier.height(140.dp)
-        )
+                Spacer(modifier = Modifier.height(8.dp))
 
-        // Spacer for safe area
-        Spacer(modifier = Modifier.height(16.dp))
+                // ── Intensity Slider ──
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                ) {
+                    // Slider with percentage on right
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Slider(
+                            value = intensity,
+                            onValueChange = {
+                                intensity = it
+                                onIntensityChanged(it)
+                            },
+                            valueRange = 0f..1f,
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = SliderCyan,
+                                activeTrackColor = SliderCyan,
+                                inactiveTrackColor = SliderInactive
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${(intensity * 100).roundToInt()}%",
+                            color = SliderCyan,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(40.dp)
+                        )
+                    }
+
+                    // Filter name (centered below slider)
+                    if (activeFilter != null) {
+                        Text(
+                            text = activeFilter.displayName,
+                            color = TextWhite,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ── Filter Carousel (circular thumbnails) ──
+                val filters = FilterPreset.entries.filter { it.category == selectedCategory }
+                LazyRow(
+                    modifier = Modifier.height(120.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    items(filters) { filter ->
+                        CircularFilterThumbnail(
+                            filter = filter,
+                            isActive = filter == activeFilter,
+                            onClick = { onFilterSelected(filter) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // ── Bottom Tab Bar: Filters | Effects | Adjust | Stickers | Music ──
+                EditorTabBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = onTabSelected
+                )
+            }
+        }
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Top Bar
+// ──────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun FilterIntensitySlider(
-    filterName: String,
-    onIntensityChanged: (Float) -> Unit
-) {
-    var intensity by remember { mutableFloatStateOf(0.75f) }
-
-    Column(
+private fun TopBar(onCancel: () -> Unit, onDone: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = filterName,
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = "${(intensity * 100).toInt()}%",
-                color = Color(0xFF00E5FF),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Slider(
-            value = intensity,
-            onValueChange = {
-                intensity = it
-                onIntensityChanged(it)
-            },
-            valueRange = 0f..1f,
-            colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF00E5FF),
-                activeTrackColor = Color(0xFF00E5FF),
-                inactiveTrackColor = Color(0xFF2A2A3A)
-            ),
-            modifier = Modifier.fillMaxWidth()
+        Text(
+            text = "Cancel",
+            color = TextWhite,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier.clickable(onClick = onCancel)
+        )
+        Text(
+            text = "PixelEdit",
+            color = TextWhite,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Done",
+            color = SliderCyan,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable(onClick = onDone)
         )
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Circular Filter Thumbnail (matching reference exactly)
+// ──────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun FilterCategoryTabs(
-    selectedCategory: FilterCategory,
-    onCategorySelected: (FilterCategory) -> Unit
-) {
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(FilterCategory.entries) { category ->
-            FilterCategoryChip(
-                category = category,
-                isSelected = category == selectedCategory,
-                onClick = { onCategorySelected(category) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilterCategoryChip(
-    category: FilterCategory,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFF00E5FF) else Color(0xFF1A1A2E),
-        label = "chipBg"
-    )
-    val textColor by animateColorAsState(
-        targetValue = if (isSelected) Color.Black else Color(0xFF8888AA),
-        label = "chipText"
-    )
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = backgroundColor,
-        modifier = Modifier
-            .shadow(
-                elevation = if (isSelected) 8.dp else 0.dp,
-                shape = RoundedCornerShape(20.dp),
-                ambientColor = Color(0xFF00E5FF).copy(alpha = 0.3f)
-            )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Icon(
-                imageVector = category.icon,
-                contentDescription = null,
-                tint = textColor,
-                modifier = Modifier.size(16.dp)
-            )
-            Text(
-                text = category.displayName,
-                color = textColor,
-                fontSize = 12.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilterCarousel(
-    category: FilterCategory,
-    activeFilter: FilterPreset?,
-    onFilterSelected: (FilterPreset) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val filters = FilterPreset.entries.filter { it.category == category }
-
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(filters) { filter ->
-            FilterThumbnailCard(
-                filter = filter,
-                isActive = filter == activeFilter,
-                onClick = { onFilterSelected(filter) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilterThumbnailCard(
+private fun CircularFilterThumbnail(
     filter: FilterPreset,
     isActive: Boolean,
     onClick: () -> Unit
 ) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isActive) Color(0xFF00E5FF) else Color.Transparent,
-        label = "border"
+    val borderWidth by animateDpAsState(
+        targetValue = if (isActive) 3.dp else 0.dp,
+        label = "borderWidth"
     )
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (isActive) 0.6f else 0f,
-        label = "glow"
+    val glowRadius by animateFloatAsState(
+        targetValue = if (isActive) 12f else 0f,
+        label = "glowRadius"
     )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(80.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        filter.previewColor.copy(alpha = 0.4f),
-                        filter.previewColor.copy(alpha = 0.15f)
-                    )
-                )
-            )
-            .border(
-                width = 2.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(8.dp)
+        modifier = Modifier.width(72.dp)
     ) {
-        // Filter preview icon
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(filter.previewColor.copy(alpha = 0.3f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = filter.icon,
-                contentDescription = filter.displayName,
-                tint = filter.previewColor,
-                modifier = Modifier.size(28.dp)
-            )
+            // Glow effect behind active thumbnail
+            if (isActive) {
+                Box(
+                    modifier = Modifier
+                        .size(68.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    ActiveGlow.copy(alpha = 0.4f),
+                                    ActiveGlow.copy(alpha = 0.0f)
+                                )
+                            )
+                        )
+                )
+            }
+
+            // Circular thumbnail
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .shadow(
+                        elevation = if (isActive) 8.dp else 0.dp,
+                        shape = CircleShape,
+                        ambientColor = ActiveGlow.copy(alpha = 0.5f),
+                        spotColor = ActiveGlow.copy(alpha = 0.5f)
+                    )
+                    .clip(CircleShape)
+                    .border(
+                        width = borderWidth,
+                        color = if (isActive) ActiveGlow else Color.Transparent,
+                        shape = CircleShape
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                filter.previewColor.copy(alpha = 0.5f),
+                                filter.previewColor.copy(alpha = 0.2f)
+                            )
+                        )
+                    )
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                // Filter icon
+                Icon(
+                    imageVector = filter.icon,
+                    contentDescription = filter.displayName,
+                    tint = if (isActive) ActiveGlow else filter.previewColor,
+                    modifier = Modifier.size(28.dp)
+                )
+
+                // Active checkmark badge
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(ActiveGlow),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Active",
+                            tint = Color.Black,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Filter name
+        // Filter name below thumbnail
         Text(
             text = filter.shortName,
-            color = if (isActive) Color(0xFF00E5FF) else Color(0xFFAAAACC),
+            color = if (isActive) ActiveGlow else TextGray,
             fontSize = 10.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
             textAlign = TextAlign.Center,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+    }
+}
 
-        // Active badge
-        if (isActive) {
-            Spacer(modifier = Modifier.height(2.dp))
-            Box(
+// ──────────────────────────────────────────────────────────────────────────────
+// Editor Tab Bar (Filters | Effects | Adjust | Stickers | Music)
+// ──────────────────────────────────────────────────────────────────────────────
+enum class EditorTab(val displayName: String, val icon: ImageVector) {
+    FILTERS("Filters", Icons.Default.Tune),
+    EFFECTS("Effects", Icons.Default.AutoAwesome),
+    ADJUST("Adjust", Icons.Default.Tune),
+    STICKERS("Stickers", Icons.Default.EmojiEmotions),
+    MUSIC("Music", Icons.Default.MusicNote)
+}
+
+@Composable
+private fun EditorTabBar(
+    selectedTab: EditorTab,
+    onTabSelected: (EditorTab) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        EditorTab.entries.forEach { tab ->
+            val isSelected = tab == selectedTab
+            val color = if (isSelected) TabActive else TabInactive
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .size(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xFF00E5FF))
-            )
+                    .weight(1f)
+                    .clickable { onTabSelected(tab) }
+                    .padding(vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = tab.icon,
+                    contentDescription = tab.displayName,
+                    tint = color,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = tab.displayName,
+                    color = color,
+                    fontSize = 10.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+            }
         }
     }
 }
 
-/**
- * Filter categories for the bottom drawer tabs.
- */
-enum class FilterCategory(val displayName: String, val icon: ImageVector) {
-    AI_FX("AI FX", Icons.Default.AutoAwesome),
-    COLOR_LUTS("Color LUTs", Icons.Default.Palette),
-    BEAUTY("Beauty", Icons.Default.Face),
-    BACKGROUND("Background", Icons.Default.Landscape),
-    AR_MASKS("AR Masks", Icons.Default.Theaters),
-    AUDIO_FX("Audio FX", Icons.Default.GraphicEq)
+// ──────────────────────────────────────────────────────────────────────────────
+// Filter Categories (for carousel filtering)
+// ──────────────────────────────────────────────────────────────────────────────
+enum class FilterCategory(val displayName: String) {
+    AI_FX("AI FX"),
+    COLOR_LUTS("Color LUTs"),
+    BEAUTY("Beauty"),
+    BACKGROUND("Background"),
+    AR_MASKS("AR Masks"),
+    AUDIO_FX("Audio FX")
 }
 
-/**
- * Filter presets organized by category.
- */
+// ──────────────────────────────────────────────────────────────────────────────
+// Filter Presets (matching reference thumbnail order)
+// ──────────────────────────────────────────────────────────────────────────────
 enum class FilterPreset(
     val displayName: String,
     val shortName: String,
@@ -322,22 +526,25 @@ enum class FilterPreset(
     val icon: ImageVector,
     val previewColor: Color
 ) {
+    // Color LUTs (shown first in reference)
+    BEAUTY_FILTER("Beauty", "Beauty", FilterCategory.COLOR_LUTS, Icons.Default.Face, Color(0xFFFF6B9D)),
+    DRAMATIC("Dramatic", "Dramatic", FilterCategory.COLOR_LUTS, Icons.Default.TheaterComedy, Color(0xFFB71C1C)),
+    CINEMATIC("Cinematic", "Cinematic", FilterCategory.COLOR_LUTS, Icons.Default.Film, Color(0xFFD4A574)),
+    CYBER_NEON("Cyber Neon", "Cyber Neon", FilterCategory.COLOR_LUTS, Icons.Default.Bolt, Color(0xFF00FF88)),
+    TEAL_ORANGE("Teal & Orange", "Teal & Orange", FilterCategory.COLOR_LUTS, Icons.Default.Tonality, Color(0xFF00897B)),
+    RETRO_FILM("Retro Film", "Retro Film", FilterCategory.COLOR_LUTS, Icons.Default.CameraAlt, Color(0xFFE65100)),
+    BW_DRAMA("B&W Drama", "B&W", FilterCategory.COLOR_LUTS, Icons.Default.DarkMode, Color(0xFF424242)),
+    GOLDEN_HOUR("Golden Hour", "Golden", FilterCategory.COLOR_LUTS, Icons.Default.WbSunny, Color(0xFFFFB300)),
+    VINTAGE_FILM("Vintage Film", "Vintage", FilterCategory.COLOR_LUTS, Icons.Default.PhotoFilter, Color(0xFF8D6E63)),
+    COOL_TONE("Cool Tone", "Cool", FilterCategory.COLOR_LUTS, Icons.Default.AcUnit, Color(0xFF29B6F6)),
+    FILM_NOIR("Film Noir", "Noir", FilterCategory.COLOR_LUTS, Icons.Default.NoFlash, Color(0xFF212121)),
+    RETRO_80S("Retro 80s", "Retro 80", FilterCategory.COLOR_LUTS, Icons.Default.Nightlife, Color(0xFFE040FB)),
+
     // AI FX
     AI_BEAUTY("AI Beauty", "Beauty", FilterCategory.AI_FX, Icons.Default.Face, Color(0xFFFF6B9D)),
-    CYBER_NEON("Cyber Neon", "Neon", FilterCategory.AI_FX, Icons.Default.Bolt, Color(0xFF00FF88)),
     DEPTH_BOKEH("Depth Bokeh", "Bokeh", FilterCategory.AI_FX, Icons.Default.BlurOn, Color(0xFF6366F1)),
     FACE_MESH("Face Mesh", "Mesh", FilterCategory.AI_FX, Icons.Default.GridOn, Color(0xFFEC4899)),
     AUDIO_PULSE("Audio Pulse", "Pulse", FilterCategory.AI_FX, Icons.Default.GraphicEq, Color(0xFF00E5FF)),
-
-    // Color LUTs
-    TEAL_ORANGE("Teal & Orange", "T&O", FilterCategory.COLOR_LUTS, Icons.Default.Tonality, Color(0xFF00897B)),
-    VINTAGE_FILM("Vintage Film", "Vintage", FilterCategory.COLOR_LUTS, Icons.Default.Film, Color(0xFFD4A574)),
-    CYBERPUNK_LUT("Cyberpunk", "Cyber", FilterCategory.COLOR_LUTS, Icons.Default.Nightlife, Color(0xFFFF00FF)),
-    FILM_NOIR("Film Noir", "Noir", FilterCategory.COLOR_LUTS, Icons.Default.DarkMode, Color(0xFF424242)),
-    GOLDEN_HOUR("Golden Hour", "Golden", FilterCategory.COLOR_LUTS, Icons.Default.WbSunny, Color(0xFFFFB300)),
-    RETRO_FILM("Retro Film", "Retro", FilterCategory.COLOR_LUTS, Icons.Default.CameraAlt, Color(0xFFE65100)),
-    COOL_TONE("Cool Tone", "Cool", FilterCategory.COLOR_LUTS, Icons.Default.AcUnit, Color(0xFF29B6F6)),
-    DRAMATIC("Dramatic", "Dramatic", FilterCategory.COLOR_LUTS, Icons.Default.TheaterComedy, Color(0xFFB71C1C)),
 
     // Beauty
     SKIN_SMOOTH("Skin Smooth", "Smooth", FilterCategory.BEAUTY, Icons.Default.AutoFixHigh, Color(0xFFFF80AB)),
@@ -362,4 +569,14 @@ enum class FilterPreset(
     BASS_DROP("Bass Drop", "Bass", FilterCategory.AUDIO_FX, Icons.Default.Equalizer, Color(0xFFFF5252)),
     VOCAL_ECHO("Vocal Echo", "Echo", FilterCategory.AUDIO_FX, Icons.Default.RecordVoiceOver, Color(0xFF448AFF)),
     RHYTHM_ZOOM("Rhythm Zoom", "Zoom", FilterCategory.AUDIO_FX, Icons.Default.ZoomOutMap, Color(0xFF69F0AE))
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Utility: format milliseconds to MM:SS
+// ──────────────────────────────────────────────────────────────────────────────
+private fun formatTime(ms: Long): String {
+    val totalSecs = ms / 1000
+    val minutes = totalSecs / 60
+    val seconds = totalSecs % 60
+    return String.format("%02d:%02d", minutes, seconds)
 }
