@@ -82,6 +82,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -2900,8 +2901,6 @@ private fun TextPanel(
 
 
 // ─── 6. FILTERS PANEL ──────────────────────────────────────────
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
 // Premium Glassmorphic Filters Panel (real integration)
 // Connected to existing FilterCatalog + onUpdateFilter + GPUImage preview + FFmpeg export.
 private val FiltersPanelCyan = Color(0xFF00D4FF)
@@ -3008,7 +3007,7 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
                                     .background(FiltersPanelCyan),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(androidx.compose.material.icons.filled.Check, "Selected", tint = Color(0xFF0A0A0F), modifier = Modifier.size(10.dp))
+                                Icon(Icons.Default.Check, "Selected", tint = Color(0xFF0A0A0F), modifier = Modifier.size(10.dp))
                             }
                         }
                     }
