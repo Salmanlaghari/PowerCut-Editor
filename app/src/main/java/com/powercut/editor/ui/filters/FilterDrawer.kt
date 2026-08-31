@@ -529,7 +529,7 @@ enum class FilterPreset(
     // Color LUTs (shown first in reference)
     BEAUTY_FILTER("Beauty", "Beauty", FilterCategory.COLOR_LUTS, Icons.Default.Face, Color(0xFFFF6B9D)),
     DRAMATIC("Dramatic", "Dramatic", FilterCategory.COLOR_LUTS, Icons.Default.TheaterComedy, Color(0xFFB71C1C)),
-    CINEMATIC("Cinematic", "Cinematic", FilterCategory.COLOR_LUTS, Icons.Default.Film, Color(0xFFD4A574)),
+    CINEMATIC("Cinematic", "Cinematic", FilterCategory.COLOR_LUTS, Icons.Default.Theaters, Color(0xFFD4A574)),
     CYBER_NEON("Cyber Neon", "Cyber Neon", FilterCategory.COLOR_LUTS, Icons.Default.Bolt, Color(0xFF00FF88)),
     TEAL_ORANGE("Teal & Orange", "Teal & Orange", FilterCategory.COLOR_LUTS, Icons.Default.Tonality, Color(0xFF00897B)),
     RETRO_FILM("Retro Film", "Retro Film", FilterCategory.COLOR_LUTS, Icons.Default.CameraAlt, Color(0xFFE65100)),

@@ -95,8 +95,8 @@ class AudioReactiveEngine {
     private fun drawQuad() {
         val v = floatArrayOf(-1f,-1f,0f,1f, 1f,-1f,1f,1f, -1f,1f,0f,0f, 1f,1f,1f,0f)
         val buf = java.nio.ByteBuffer.allocateDirect(64).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer().apply { put(v); position(0) }
-        val p = GLES20.glGetAttribLocation(GLES20.glGetCurrentProgram(), "a_position")
-        val t = GLES20.glGetAttribLocation(GLES20.glGetCurrentProgram(), "a_texCoord")
+        val p = GLES20.glGetAttribLocation(shaderProgram, "a_position")
+        val t = GLES20.glGetAttribLocation(shaderProgram, "a_texCoord")
         GLES20.glEnableVertexAttribArray(p); GLES20.glVertexAttribPointer(p, 2, GLES20.GL_FLOAT, false, 16, buf)
         buf.position(2)
         GLES20.glEnableVertexAttribArray(t); GLES20.glVertexAttribPointer(t, 2, GLES20.GL_FLOAT, false, 16, buf)
