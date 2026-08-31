@@ -153,6 +153,16 @@ object FilterCatalog {
         FilterDef("yellow_tone", "Yellow", "color"),
         FilterDef("cyan_tone", "Cyan", "color"),
         FilterDef("magenta_tone", "Magenta", "color"),
+// ── AI Premium Filters (reference image presets) ──
+        FilterDef("ai_glow", "AI Glow", "ai"),
+        FilterDef("ai_neon", "AI Neon", "ai"),
+        FilterDef("film_35mm", "Film 35mm", "ai"),
+        FilterDef("beauty_pro", "Beauty Pro", "ai"),
+        FilterDef("cinematic_teal_orange", "Cinematic T&O", "ai"),
+        FilterDef("neon_outline", "Neon Outline", "ai"),
+        FilterDef("depth_bokeh", "Depth Bokeh", "ai"),
+        FilterDef("face_mesh", "Face Mesh", "ai"),
+        FilterDef("audio_pulse", "Audio Pulse", "ai"),
         // ── v7.3 — EXTENDED PROFESSIONAL FILTER LIBRARY (added per user request) ──
         // Cinema / mood / neon / adjust — CapCut / KineMaster class
         FilterDef("teal_orange", "Teal & Orange", "cinema"),
@@ -411,6 +421,16 @@ object FilterCatalog {
         "yellow_tone" to "colorbalance=rs=0.3:gs=0.2:bs=-0.2",
         "cyan_tone" to "colorbalance=rs=-0.2:gs=0.2:bs=0.3",
         "magenta_tone" to "colorbalance=rs=0.3:gs=-0.2:bs=0.2",
+// ── AI Premium Filter chains ──
+        "ai_glow" to "eq=brightness=0.12:contrast=1.15:saturation=1.3,unsharp=5:5:1:5:5:0,boxblur=luma_radius=3:luma_power=1,tblend=all_mode=screen:all_opacity=0.25",
+        "ai_neon" to "eq=contrast=1.4:saturation=1.8:gamma=0.9,eq=brightness=0.05,noise=alls=3:allf=t",
+        "film_35mm" to "eq=saturation=1.05:contrast=1.08:gamma=1.03,noise=alls=12:allf=t,colorbalance=rs=0.04:gs=0.02:bs=0.02,vignette=angle=PI/4",
+        "beauty_pro" to "eq=brightness=0.08:contrast=1.05:saturation=1.15:gamma=1.05,boxblur=luma_radius=2:luma_power=1",
+        "cinematic_teal_orange" to "colorbalance=rs=0.12:gs=-0.05:bs=0.05:rm=0.1:bm=0.08,eq=saturation=1.3:contrast=1.15",
+        "neon_outline" to "eq=contrast=1.5:saturation=1.8:gamma=0.8,edgedetect=mode=canny,eq=brightness=0.1",
+        "depth_bokeh" to "gblur=sigma=8,eq=contrast=1.1:saturation=1.05",
+        "face_mesh" to "eq=brightness=0.05:contrast=1.1:saturation=1.1",
+        "audio_pulse" to "eq=contrast=1.3:saturation=1.5,eq=brightness=0.05",
         // ── v7.3 — EXTENDED PROFESSIONAL FILTER CHAINS ──
         "teal_orange" to "colorbalance=rs=0.1:bs=0.15:rm=0.12:bm=0.1,eq=contrast=1.15:saturation=1.2",
         "matrix" to "colorbalance=gs=0.5:bs=0.0,eq=saturation=0.8:contrast=1.2,hue=h=110",
