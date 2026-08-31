@@ -455,11 +455,11 @@ private fun CircularFilterThumbnail(
 // Editor Tab Bar (Filters | Effects | Adjust | Stickers | Music)
 // ──────────────────────────────────────────────────────────────────────────────
 enum class EditorTab(val displayName: String, val icon: ImageVector) {
-    FILTERS("Filters", Icons.Default.Tune),
+    MEDIA("Media", Icons.Default.VideoLibrary),
     EFFECTS("Effects", Icons.Default.AutoAwesome),
-    ADJUST("Adjust", Icons.Default.Tune),
-    STICKERS("Stickers", Icons.Default.EmojiEmotions),
-    MUSIC("Music", Icons.Default.MusicNote)
+    FILTER("Filter", Icons.Default.Tune),
+    AUDIO("Audio", Icons.Default.MusicNote),
+    EXPORT("Export", Icons.Default.Upload)
 }
 
 @Composable
@@ -526,19 +526,21 @@ enum class FilterPreset(
     val icon: ImageVector,
     val previewColor: Color
 ) {
-    // Color LUTs (shown first in reference)
-    BEAUTY_FILTER("Beauty", "Beauty", FilterCategory.COLOR_LUTS, Icons.Default.Face, Color(0xFFFF6B9D)),
+    // AI Filters (from reference image)
+    AI_GLOW("AI Glow", "AI Glow", FilterCategory.COLOR_LUTS, Icons.Default.AutoAwesome, Color(0xFF00FF88)),
+    CYBERPUNK("Cyberpunk", "Cyberpunk", FilterCategory.COLOR_LUTS, Icons.Default.Bolt, Color(0xFFFF00FF)),
+    FILM_35MM("Film 35mm", "Film 35mm", FilterCategory.COLOR_LUTS, Icons.Default.CameraAlt, Color(0xFFD4A574)),
+    BEAUTY_PRO("Beauty Pro", "Beauty Pro", FilterCategory.COLOR_LUTS, Icons.Default.Face, Color(0xFFFF6B9D)),
+
+    // Additional filters
+    TEAL_ORANGE("Teal & Orange", "T&O", FilterCategory.COLOR_LUTS, Icons.Default.Tonality, Color(0xFF00897B)),
     DRAMATIC("Dramatic", "Dramatic", FilterCategory.COLOR_LUTS, Icons.Default.TheaterComedy, Color(0xFFB71C1C)),
-    CINEMATIC("Cinematic", "Cinematic", FilterCategory.COLOR_LUTS, Icons.Default.Theaters, Color(0xFFD4A574)),
-    CYBER_NEON("Cyber Neon", "Cyber Neon", FilterCategory.COLOR_LUTS, Icons.Default.Bolt, Color(0xFF00FF88)),
-    TEAL_ORANGE("Teal & Orange", "Teal & Orange", FilterCategory.COLOR_LUTS, Icons.Default.Tonality, Color(0xFF00897B)),
-    RETRO_FILM("Retro Film", "Retro Film", FilterCategory.COLOR_LUTS, Icons.Default.CameraAlt, Color(0xFFE65100)),
+    CINEMATIC("Cinematic", "Cinema", FilterCategory.COLOR_LUTS, Icons.Default.Theaters, Color(0xFFD4A574)),
+    RETRO_FILM("Retro Film", "Retro", FilterCategory.COLOR_LUTS, Icons.Default.PhotoFilter, Color(0xFFE65100)),
     BW_DRAMA("B&W Drama", "B&W", FilterCategory.COLOR_LUTS, Icons.Default.DarkMode, Color(0xFF424242)),
     GOLDEN_HOUR("Golden Hour", "Golden", FilterCategory.COLOR_LUTS, Icons.Default.WbSunny, Color(0xFFFFB300)),
-    VINTAGE_FILM("Vintage Film", "Vintage", FilterCategory.COLOR_LUTS, Icons.Default.PhotoFilter, Color(0xFF8D6E63)),
     COOL_TONE("Cool Tone", "Cool", FilterCategory.COLOR_LUTS, Icons.Default.AcUnit, Color(0xFF29B6F6)),
     FILM_NOIR("Film Noir", "Noir", FilterCategory.COLOR_LUTS, Icons.Default.NoFlash, Color(0xFF212121)),
-    RETRO_80S("Retro 80s", "Retro 80", FilterCategory.COLOR_LUTS, Icons.Default.Nightlife, Color(0xFFE040FB)),
 
     // AI FX
     AI_BEAUTY("AI Beauty", "Beauty", FilterCategory.AI_FX, Icons.Default.Face, Color(0xFFFF6B9D)),

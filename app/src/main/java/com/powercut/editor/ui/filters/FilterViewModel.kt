@@ -123,13 +123,12 @@ class FilterViewModel : ViewModel() {
 
     fun selectTab(tab: EditorTab) {
         _selectedTab.value = tab
-        // Update category based on tab
         when (tab) {
-            EditorTab.FILTERS -> _selectedCategory.value = FilterCategory.COLOR_LUTS
+            EditorTab.MEDIA -> _selectedCategory.value = FilterCategory.COLOR_LUTS
             EditorTab.EFFECTS -> _selectedCategory.value = FilterCategory.AI_FX
-            EditorTab.ADJUST -> _selectedCategory.value = FilterCategory.BEAUTY
-            EditorTab.STICKERS -> _selectedCategory.value = FilterCategory.AR_MASKS
-            EditorTab.MUSIC -> _selectedCategory.value = FilterCategory.AUDIO_FX
+            EditorTab.FILTER -> _selectedCategory.value = FilterCategory.COLOR_LUTS
+            EditorTab.AUDIO -> _selectedCategory.value = FilterCategory.AUDIO_FX
+            EditorTab.EXPORT -> _selectedCategory.value = FilterCategory.COLOR_LUTS
         }
     }
 
@@ -147,6 +146,10 @@ class FilterViewModel : ViewModel() {
 
     private fun mapFilterToPreset(filter: FilterPreset?): ColorGradingPreset {
         return when (filter) {
+            FilterPreset.AI_GLOW -> ColorGradingPreset.AI_GLOW
+            FilterPreset.CYBERPUNK -> ColorGradingPreset.CYBERPUNK
+            FilterPreset.FILM_35MM -> ColorGradingPreset.FILM_35MM
+            FilterPreset.BEAUTY_PRO -> ColorGradingPreset.BEAUTY_PRO
             FilterPreset.TEAL_ORANGE -> ColorGradingPreset.TEAL_ORANGE
             FilterPreset.VINTAGE_FILM -> ColorGradingPreset.VINTAGE_FILM
             FilterPreset.CYBER_NEON -> ColorGradingPreset.CYBERPUNK
@@ -157,7 +160,6 @@ class FilterViewModel : ViewModel() {
             FilterPreset.DRAMATIC -> ColorGradingPreset.TEAL_ORANGE
             FilterPreset.CINEMATIC -> ColorGradingPreset.VINTAGE_FILM
             FilterPreset.BW_DRAMA -> ColorGradingPreset.FILM_NOIR
-            FilterPreset.RETRO_80S -> ColorGradingPreset.CYBERPUNK
             else -> ColorGradingPreset.NONE
         }
     }
