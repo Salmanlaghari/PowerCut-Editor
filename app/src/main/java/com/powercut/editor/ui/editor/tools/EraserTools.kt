@@ -21,7 +21,10 @@ import com.powercut.editor.ui.theme.*
 
 /**
  * Eraser Tools Panel
- * Features: Background Eraser, Object Eraser, Area Eraser with brush size & tolerance controls
+ * Phase C: reduced to what is REALLY implemented — background removal via
+ * chroma-key of the estimated background color, baked into the export with
+ * the tolerance slider as key similarity. The previous fake "object"/"area"
+ * paint-to-remove modes (no content-aware backend) were removed per audit.
  */
 
 @Composable
@@ -34,8 +37,8 @@ fun EraserToolsPanel(
     onUpdateBrushSize: (Float) -> Unit,
     onUpdateTolerance: (Float) -> Unit,
     onToggleSoftEdge: () -> Unit,
-    onUndoEraser: () -> Unit,
-    onResetEraser: () -> Unit
+    onUndoEraser: () -> Unit = {},
+    onResetEraser: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -50,9 +53,8 @@ fun EraserToolsPanel(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             listOf(
-                Triple("background", "🖼️", "BG Eraser"),
-                Triple("object", "🎯", "Object"),
-                Triple("area", "✂️", "Area")
+                Triple("none", "🚫", "Off"),
+                Triple("background", "🖼️", "BG Eraser")
             ).forEach { (mode, emoji, label) ->
                 val isSel = eraserMode == mode
                 Box(
@@ -69,50 +71,6 @@ fun EraserToolsPanel(
                         Text(emoji, fontSize = 14.sp)
                         Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isSel) NeonOrange else Color.White)
                     }
-                }
-            }
-        }
-
-        // Brush Size
-        Text("BRUSH SIZE: ${eraserBrushSize.toInt()}px", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Slider(
-                value = eraserBrushSize,
-                onValueChange = onUpdateBrushSize,
-                valueRange = 5f..100f,
-                colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan),
-                modifier = Modifier.weight(1f).height(24.dp)
-            )
-            // Brush preview circle
-            Box(
-                modifier = Modifier
-                    .size((eraserBrushSize / 3).dp.coerceIn(12.dp, 40.dp))
-                    .background(CyberCyan.copy(alpha = 0.3f), CircleShape)
-                    .border(1.dp, CyberCyan, CircleShape)
-            )
-        }
-
-        // Quick brush sizes
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf(10f, 20f, 30f, 50f, 80f).forEach { size ->
-                val isSel = eraserBrushSize == size
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(24.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSel) CyberCyan.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.04f))
-                        .clickable { onUpdateBrushSize(size) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("${size.toInt()}", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isSel) CyberCyan else Color.White)
                 }
             }
         }
@@ -146,26 +104,11 @@ fun EraserToolsPanel(
             )
         }
 
-        // Action Buttons
+        // Action Button (Reset only — erasing is baked into the export)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.04f))
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                    .clickable { onUndoEraser() },
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Default.Undo, contentDescription = "Undo", tint = Color.White, modifier = Modifier.size(12.dp))
-                    Text("UNDO", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                }
-            }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -192,10 +135,8 @@ fun EraserToolsPanel(
                 .padding(8.dp)
         ) {
             val desc = when (eraserMode) {
-                "background" -> "🎯 Automatically detect and erase the video background. Tap areas to remove."
-                "object" -> "🖌️ Paint over objects to remove them from the video frame."
-                "area" -> "✂️ Select a rectangular area to erase or replace."
-                else -> "Select an eraser mode to begin editing."
+                "background" -> "🎯 Removes the background by keying out its dominant color. The tolerance slider controls how much is erased. Applied to the exported video."
+                else -> "Select BG Eraser and adjust the tolerance — the removal is applied when you export."
             }
             Text(desc, fontSize = 9.sp, color = Color.Gray, lineHeight = 13.sp)
         }

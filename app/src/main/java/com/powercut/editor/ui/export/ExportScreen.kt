@@ -712,6 +712,41 @@ fun ExportScreen(
                 }
             }
 
+            is Resource.SuccessWithWarning -> {
+                val warnCtx = androidx.compose.ui.platform.LocalContext.current
+                androidx.compose.runtime.LaunchedEffect(exportState.data) {
+                    android.widget.Toast.makeText(
+                        warnCtx,
+                        exportState.message,
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+                Spacer(Modifier.height(40.dp))
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp)) {
+                        Icon(Icons.Default.CheckCircle, "Success", tint = CyberCyan, modifier = Modifier.size(72.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text(LanguageHelper.getString(R.string.export_success, language), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
+                        Spacer(Modifier.height(8.dp))
+                        Text(exportState.data, fontSize = 12.sp, color = CyberCyan, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(NeonOrange.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                .border(1.dp, NeonOrange.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                "⚠ " + exportState.message,
+                                fontSize = 12.sp,
+                                color = NeonOrange,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+
             is Resource.Error -> {
                 Spacer(Modifier.height(40.dp))
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {

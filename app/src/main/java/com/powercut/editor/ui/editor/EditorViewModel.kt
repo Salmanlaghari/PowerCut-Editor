@@ -5,6 +5,7 @@ import android.util.Log
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.graphics.toArgb
 import com.powercut.editor.core.base.Resource
 import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.data.*
@@ -733,6 +734,9 @@ class EditorViewModel @Inject constructor(
                         trimStartMs = 0L,
                         trimEndMs = if (realDurationMs > 0L) realDurationMs else 0L,
                         targetResolution = _selectedResolution.value,
+                        // Phase B: Settings → Default Aspect Ratio is applied to
+                        // every newly created project (real exporter field).
+                        aspectPreset = com.powercut.editor.core.utils.AppSettings.defaultAspectPreset,
                         activeTemplateId = templateId,
                         selectedFilter = filter,
                         transitionType = transition,
@@ -806,10 +810,10 @@ class EditorViewModel @Inject constructor(
     }
 
     /** v4.5.0 — AI Edit: apply an AI auto-enhance grade to a picked video. */
-    fun applyAiEdit(videoUri: Uri) {
+    fun applySmartEdit(videoUri: Uri) {
         viewModelScope.launch {
             try { UriHelper.takePersistablePermission(appContext, videoUri) } catch (_: Exception) {}
-            exportManager.applyAiEdit(videoUri)
+            exportManager.applySmartEdit(videoUri)
         }
     }
 
@@ -999,6 +1003,14 @@ class EditorViewModel @Inject constructor(
         pushUndoState()
         projectRepository.updateProject { project ->
             project.copy(cropPreset = crop)
+        }
+    }
+
+    /** Phase C: manual crop sliders — normalized frame fractions, real export crop. */
+    fun updateManualCrop(left: Float, top: Float, right: Float, bottom: Float) {
+        pushUndoState()
+        projectRepository.updateProject { project ->
+            project.copy(cropLeftF = left, cropTopF = top, cropRightF = right, cropBottomF = bottom)
         }
     }
 
@@ -1397,9 +1409,45 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Phase C: auto backgrounds are now REAL — selecting one generates a
+     * 1920x1080 gradient PNG from the preset's two colors and stores it as the
+     * chroma-key replacement background used by the exporter.
+     */
     fun selectAutoBackground(index: Int) {
+        val bg = runCatching {
+            com.powercut.editor.ui.editor.tools.autoBackgrounds.getOrNull(index)
+        }.getOrNull()
+        val path = if (bg != null) generateAutoBackgroundPng(index, bg) else null
         projectRepository.updateProject { project ->
-            project.copy(greenScreenAutoBgIndex = index, greenScreenBackgroundPath = null)
+            project.copy(greenScreenAutoBgIndex = index, greenScreenBackgroundPath = path)
+        }
+    }
+
+    /** Renders the auto-background preset's gradient to a real PNG in filesDir. */
+    private fun generateAutoBackgroundPng(index: Int, bg: com.powercut.editor.ui.editor.tools.AutoBackground): String? {
+        return try {
+            val dir = java.io.File(appContext.filesDir, "greenscreen_bg").apply { mkdirs() }
+            val file = java.io.File(dir, "auto_bg_$index.png")
+            if (!file.exists()) {
+                val w = 1920; val h = 1080
+                val bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bitmap)
+                val startColor = bg.gradient.first().toArgb()
+                val endColor = bg.gradient.last().toArgb()
+                val paint = android.graphics.Paint().apply {
+                    shader = android.graphics.LinearGradient(
+                        0f, 0f, w.toFloat(), h.toFloat(), startColor, endColor,
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                }
+                canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+                file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, it) }
+                bitmap.recycle()
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -1918,8 +1966,11 @@ class EditorViewModel @Inject constructor(
             project.copy(
                 targetResolution = resolution,
                 targetFps = fps,
-                isHdrEnabled = isHdr,
-                isHighBitrateEnabled = isHighBitrate,
+                isHdrEnabled = isHdr || com.powercut.editor.core.utils.AppSettings.hdrMode == "hdr10",
+                // Phase B: the Lossless bitrate preset in Settings forces the
+                // high-bitrate (CRF 18 / 16 Mbps VBV) encoder path.
+                isHighBitrateEnabled = isHighBitrate ||
+                    com.powercut.editor.core.utils.AppSettings.bitratePreset == "lossless",
                 watermarkPath = watermarkPath,
                 activeAiFeature = _activeAiFeature.value,
                 socialPreset = _socialPreset.value

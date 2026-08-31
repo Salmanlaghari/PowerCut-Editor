@@ -47,11 +47,12 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.OnUserEarnedRewardListener
 import com.powercut.editor.core.utils.LanguageHelper
 import com.powercut.editor.core.utils.AdConstants
+import com.powercut.editor.core.utils.UriHelper
 import com.powercut.editor.ui.editor.NextGenEditorScreen
 import com.powercut.editor.ui.editor.EditorViewModel
 import com.powercut.editor.ui.export.ExportScreen
 import com.powercut.editor.ui.home.HomeScreen
-import com.powercut.editor.ui.premium.AiFeatureHubScreen
+import com.powercut.editor.ui.premium.SmartToolsHubScreen
 import com.powercut.editor.ui.premium.EffectsScreen
 import com.powercut.editor.ui.premium.PremiumEntryPoint
 import com.powercut.editor.ui.premium.ProTierScreen
@@ -83,6 +84,12 @@ class MainActivity : ComponentActivity() {
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
     private var lastShownAt: Long = 0L
+
+    // ── Phase C: REAL green-screen custom background picker ──
+    private var greenScreenBgCallback: ((android.net.Uri?) -> Unit)? = null
+    private val greenScreenBgPicker = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri -> greenScreenBgCallback?.invoke(uri) }
 
     private var isWatermarkRemoved by mutableStateOf(false)
 
@@ -119,7 +126,7 @@ class MainActivity : ComponentActivity() {
                         val project by viewModel.currentProject.collectAsState()
                         val exportState by viewModel.exportState.collectAsState()
                         val exportProgress by viewModel.exportProgress.collectAsState()
-                        // v6.0.0 Premium overlay screen state — AI Hub, Social Presets, Pro Tier, Studio
+                        // v6.0.0 Premium overlay screen state — Smart Hub, Social Presets, Pro Tier, Studio
                         var showAiHub by remember { mutableStateOf(false) }
                         var showSocialPresets by remember { mutableStateOf(false) }
                         var showProTier by remember { mutableStateOf(false) }
@@ -271,7 +278,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel.createSlideshow(imageUris)
                                     },
                                     onApplyAiEdit = { videoUri ->
-                                        viewModel.applyAiEdit(videoUri)
+                                        viewModel.applySmartEdit(videoUri)
                                     },
                                     // v4.6.0: pass quick-tool export feedback to HomeScreen so the user
                                     // actually sees progress / success / error when MP3->MP4, Slideshow,
@@ -338,6 +345,9 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onUpdateCropPreset = { crop ->
                                             viewModel.updateCropPreset(crop)
+                                        },
+                                        onUpdateManualCrop = { l, t, r, b ->
+                                            viewModel.updateManualCrop(l, t, r, b)
                                         },
                                         onUpdateSpeedCurve = { curve ->
                                             viewModel.updateSpeedCurve(curve)
@@ -440,7 +450,17 @@ class MainActivity : ComponentActivity() {
                                         onUpdateGreenScreenColor = { viewModel.updateGreenScreenColor(it) },
                                         onUpdateGreenScreenThreshold = { viewModel.updateGreenScreenThreshold(it) },
                                         onSelectAutoBackground = { viewModel.selectAutoBackground(it) },
-                                        onPickCustomBackground = { /* picker handled in screen */ },
+                                        onPickCustomBackground = {
+                                            // Phase C: real image picker → persisted URI →
+                                            // project field consumed by the chroma-key exporter.
+                                            greenScreenBgCallback = { uri ->
+                                                uri?.let {
+                                                    try { UriHelper.takePersistablePermission(this, it) } catch (_: Exception) {}
+                                                    viewModel.updateGreenScreenBackground(it.toString())
+                                                }
+                                            }
+                                            greenScreenBgPicker.launch("image/*")
+                                        },
                                         // Eraser
                                         onUpdateEraserMode = { viewModel.updateEraserMode(it) },
                                         onUpdateEraserBrushSize = { viewModel.updateEraserBrushSize(it) },
@@ -488,8 +508,8 @@ class MainActivity : ComponentActivity() {
                                         // v6.2.0 In-editor premium panels
                                         onUpdateAiFeature = { viewModel.updateAiFeature(it) },
                                         onUpdateSocialPreset = { viewModel.updateSocialPreset(it) },
-                                        // v6.0.0 Premium launcher — top action row buttons (AI Hub, Presets, Pro, Studio)
-                                        onAiHub = { showAiHub = true },
+                                        // v6.0.0 Premium launcher — top action row buttons (Smart Hub, Presets, Pro, Studio)
+                                        onSmartHub = { showAiHub = true },
                                         onSocialPresets = { showSocialPresets = true },
                                         onProTier = { showProTier = true },
                                         onPremiumStudio = { showPremiumStudio = true },
@@ -535,7 +555,7 @@ class MainActivity : ComponentActivity() {
                         //  chains through EditorViewModel → VideoProcessor at export.
                         // ─────────────────────────────────────────────────────────────
                         if (showAiHub) {
-                            AiFeatureHubScreen(
+                            SmartToolsHubScreen(
                                 viewModel = viewModel,
                                 onBack = { showAiHub = false }
                             )
@@ -775,7 +795,7 @@ class MainActivity : ComponentActivity() {
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun PowerCutPremiumLauncherBar(
-    onAiHub: () -> Unit,
+    onSmartHub: () -> Unit,
     onSocialPresets: () -> Unit,
     onProTier: () -> Unit,
     onPremiumStudio: () -> Unit
@@ -788,7 +808,7 @@ fun PowerCutPremiumLauncherBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        PremiumLaunchChip("🤖", "AI Hub", onAiHub)
+        PremiumLaunchChip("🤖", "Smart Hub", onSmartHub)
         PremiumLaunchChip("📱", "Presets", onSocialPresets)
         PremiumLaunchChip("👑", "Pro", onProTier)
         PremiumLaunchChip("✨", "Studio", onPremiumStudio)

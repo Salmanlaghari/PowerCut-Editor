@@ -268,10 +268,10 @@ class ExportManager @Inject constructor(
 
     /**
      * v4.5.0 — AI Edit quick tool: apply an AI auto-enhance grade to a picked
-     * video (content:// URI). Streams to temp, runs [VideoProcessor.applyAiEdit],
+     * video (content:// URI). Streams to temp, runs [VideoProcessor.applySmartEdit],
      * saves the enhanced MP4 to the public Movies/PowerCut gallery.
      */
-    suspend fun applyAiEdit(videoUri: android.net.Uri): String? {
+    suspend fun applySmartEdit(videoUri: android.net.Uri): String? {
         _exportState.value = Resource.Loading
         _progress.value = 5
         var tempInput: File? = null
@@ -291,10 +291,10 @@ class ExportManager @Inject constructor(
             }
             _progress.value = 35
             tempOutput = File(secureDir, "ai_edited_${System.currentTimeMillis()}.mp4")
-            val ok = videoProcessor.applyAiEdit(tempInput.absolutePath, tempOutput.absolutePath)
+            val ok = videoProcessor.applySmartEdit(tempInput.absolutePath, tempOutput.absolutePath)
             _progress.value = 85
             if (!ok || !tempOutput.exists() || tempOutput.length() == 0L) {
-                _exportState.value = Resource.Error("AI Edit failed. The video may be unsupported.", Exception("applyAiEdit returned false"))
+                _exportState.value = Resource.Error("Smart Edit failed. The video may be unsupported.", Exception("applySmartEdit returned false"))
                 _progress.value = 0; return null
             }
             val galleryPath = saveToPublicGallery(context, tempOutput)
@@ -309,8 +309,8 @@ class ExportManager @Inject constructor(
                 return tempOutput.absolutePath
             }
         } catch (e: Exception) {
-            Log.e(tag, "applyAiEdit exception", e)
-            _exportState.value = Resource.Error("AI Edit failed: ${e.message}", e)
+            Log.e(tag, "applySmartEdit exception", e)
+            _exportState.value = Resource.Error("Smart Edit failed: ${e.message}", e)
             _progress.value = 0; return null
         } finally {
             tempInput?.delete()
@@ -561,6 +561,7 @@ class ExportManager @Inject constructor(
             //  -vf/-af filters. This ensures 100% of edits appear in export.
             // ═══════════════════════════════════════════════════════════════════════
             Log.d(tag, "Using transcode pipeline for full filter chain")
+            var exportWarning: String? = null
             val success = videoProcessor.processAndExport(
                     inputPath = videoPath,
                     outputPath = tempOutputPath,
@@ -648,8 +649,18 @@ class ExportManager @Inject constructor(
                     socialPreset = project.socialPreset,
                     // v7.1 Keyframe animation
                     keyframeTracks = project.keyframeTracks,
+                    // ── Phase C: real eraser / auto-reframe / manual crop / layers ──
+                    eraserMode = project.eraserMode,
+                    eraserTolerance = project.eraserTolerance,
+                    autoReframeEnabled = project.autoReframeEnabled,
+                    cropLeftF = project.cropLeftF,
+                    cropTopF = project.cropTopF,
+                    cropRightF = project.cropRightF,
+                    cropBottomF = project.cropBottomF,
+                    activeLayers = project.activeLayers,
                     keyframeClipId = "",
-                    onProgress = { pct -> updateProgress(pct) }
+                    onProgress = { pct -> updateProgress(pct) },
+                    onWarning = { msg -> exportWarning = msg }
             )
 
             if (success && tempOutputFile.exists() && tempOutputFile.length() > 0) {
@@ -657,15 +668,18 @@ class ExportManager @Inject constructor(
                 _progress.value = 95 // encoding done, saving to gallery
 
                 val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                val finalPath = galleryPath ?: tempOutputPath
 
+                _progress.value = 100
                 if (galleryPath != null) {
                     Log.d(tag, "Successfully registered output in system gallery: $galleryPath")
-                    _progress.value = 100
-                    _exportState.value = Resource.Success(galleryPath)
                 } else {
                     Log.w(tag, "Could not insert in MediaStore, falling back to secure sandbox path")
-                    _progress.value = 100
-                    _exportState.value = Resource.Success(tempOutputPath)
+                }
+                _exportState.value = if (exportWarning != null) {
+                    Resource.SuccessWithWarning(finalPath, exportWarning!!)
+                } else {
+                    Resource.Success(finalPath)
                 }
             } else {
                 Log.e(tag, "Export failed during video processing")
@@ -758,13 +772,27 @@ class ExportManager @Inject constructor(
                         socialPreset = project.socialPreset,
                         // v7.1 Keyframe animation
                         keyframeTracks = project.keyframeTracks,
+                        // ── Phase C: real eraser / auto-reframe / manual crop / layers ──
+                        eraserMode = project.eraserMode,
+                        eraserTolerance = project.eraserTolerance,
+                        autoReframeEnabled = project.autoReframeEnabled,
+                        cropLeftF = project.cropLeftF,
+                        cropTopF = project.cropTopF,
+                        cropRightF = project.cropRightF,
+                        cropBottomF = project.cropBottomF,
+                        activeLayers = project.activeLayers,
                         keyframeClipId = "",
-onProgress = { pct -> updateProgress(pct) }
+                        onProgress = { pct -> updateProgress(pct) },
+                        onWarning = { msg -> exportWarning = msg }
                     )
                     if (retrySuccess && tempOutputFile.exists() && tempOutputFile.length() > 0) {
-                        val galleryPath = saveToPublicGallery(context, tempOutputFile)
+                        val finalPath = saveToPublicGallery(context, tempOutputFile) ?: tempOutputPath
                         _progress.value = 100
-                        _exportState.value = Resource.Success(galleryPath ?: tempOutputPath)
+                        _exportState.value = if (exportWarning != null) {
+                            Resource.SuccessWithWarning(finalPath, exportWarning!!)
+                        } else {
+                            Resource.Success(finalPath)
+                        }
                         return
                     }
                 }

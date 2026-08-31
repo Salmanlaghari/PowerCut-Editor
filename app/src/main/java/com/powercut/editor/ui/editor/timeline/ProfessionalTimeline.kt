@@ -145,7 +145,13 @@ fun ProfessionalTimeline(
                                 onClipSelected = onClipSelected,
                                 onClipMoved = onClipMoved,
                                 onClipTrimmed = onClipTrimmed,
-                                snappingThresholdMs = (40 / project.timeline.zoomLevel).toLong()
+                                // Phase B: magnetic snap is a REAL setting — when
+                                // disabled the threshold becomes 0 so findSnapPoint
+                                // never engages and clips drag freely.
+                                snappingThresholdMs =
+                                    if (com.powercut.editor.core.utils.AppSettings.magneticSnap) {
+                                        (40 / project.timeline.zoomLevel).toLong()
+                                    } else 0L
                             )
                         }
                     }

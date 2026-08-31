@@ -37,14 +37,24 @@ class Media3EffectPipeline @Inject constructor() {
         imageEditorExposure: Float = 0f,
         colorLift: Float = 0f,
         colorGamma: Float = 0f,
-        colorGain: Float = 0f
+        colorGain: Float = 0f,
+        imageEditorSharpen: Float = 0f,
+        greenScreenEnabled: Boolean = false,
+        greenScreenColor: String = "green",
+        imageEditorHighlights: Float = 0f,
+        imageEditorShadows: Float = 0f,
+        activeTemplateId: String = "none"
     ): List<ColorEffect> {
         val effects = mutableListOf<ColorEffect>()
         if (filterId != "none" && filterId.isNotBlank()) buildFilterEffect(filterId)?.let(effects::add)
         if (premiumLookId != "none" && premiumLookId.isNotBlank()) buildPremiumLookEffect(premiumLookId)?.let(effects::add)
         buildImageEditorEffect(imageEditorBrightness, imageEditorContrast, imageEditorSaturation, imageEditorTemperature, imageEditorExposure)?.let(effects::add)
         buildColorCurvesEffect(colorLift, colorGamma, colorGain)?.let(effects::add)
-        Log.d(TAG, "Built ${effects.size} Media3 color effects for filter=$filterId, look=$premiumLookId")
+        buildSharpenEffect(imageEditorSharpen)?.let(effects::add)
+        if (greenScreenEnabled) buildChromaDesaturateEffect(greenScreenColor)?.let(effects::add)
+        buildHighlightsShadowsEffect(imageEditorHighlights, imageEditorShadows)?.let(effects::add)
+        buildTemplateEffect(activeTemplateId)?.let(effects::add)
+        Log.d(TAG, "Built ${effects.size} Media3 color effects (filter=$filterId, look=$premiumLookId, tpl=$activeTemplateId)")
         return effects
     }
 
@@ -117,6 +127,104 @@ class Media3EffectPipeline @Inject constructor() {
         )
     }
 
+    /**
+     * Approximate sharpen for live preview. A real sharpen needs a convolution
+     * (unsharp-mask) which an RgbMatrix 4x4 cannot express, so we boost local
+     * contrast + add a small mid-tone brightness pop. Perceptually close to
+     * mild sharpen at slider <= 0.5. The export pipeline still uses FFmpeg's
+     * real `unsharp` filter.
+     */
+    private fun buildSharpenEffect(amount: Float): ColorEffect? {
+        if (amount == 0f) return null
+        val amt = amount.coerceIn(0f, 1f)
+        val contrast = (1f + amt * 0.6f).coerceIn(1f, 2f)
+        val brightness = (amt * 0.05f).coerceIn(-0.2f, 0.2f)
+        return createRgbAdjustment(
+            brightness = brightness, contrast = contrast, saturation = 1f, temperature = 0f, tint = 0f
+        )
+    }
+
+    /**
+     * Approximate chroma-key for live preview. A real chroma key needs per-pixel
+     * color-distance tests (FFmpeg `colorkey`), which an RgbMatrix cannot express.
+     * The closest matrix approximation: drop saturation toward grayscale + bias
+     * the green channel down so green-dominant pixels blend toward the background.
+     * The Compose overlay draws the selected background image on top of the
+     * preview frame, so the user sees the green visibly "keyed out". The export
+     * pipeline still uses the real FFmpeg `colorkey` for pixel-accurate output.
+     */
+    private fun buildChromaDesaturateEffect(colorName: String): ColorEffect? {
+        val desat = 0.35f
+        val greenBias = if (colorName.equals("green", true) || colorName.contains("00FF00", true)) -0.15f else 0f
+        return createRgbAdjustment(
+            brightness = 0f, contrast = 1f, saturation = desat, temperature = 0f, tint = greenBias
+        )
+    }
+
+    /**
+     * Approximate highlights / shadows tone-curve for live preview. A real
+     * highlights/shadows slider needs a per-pixel tone curve (FFmpeg `curves`
+     * or `eq=brightness=…:contrast=…` per region), which an RgbMatrix cannot
+     * express. The closest matrix approximation: split the signal into a
+     * brightness component (shadows) and a contrast component (highlights).
+     * Highlights (range -1..1) push the upper range via contrast; shadows
+     * (range -1..1) lift/lower the overall brightness floor. Perceptually
+     * close to the slider's intent at moderate values. Export uses the real
+     * FFmpeg curves filter for pixel accuracy.
+     */
+    private fun buildHighlightsShadowsEffect(highlights: Float, shadows: Float): ColorEffect? {
+        if (highlights == 0f && shadows == 0f) return null
+        val hi = highlights.coerceIn(-1f, 1f)
+        val sh = shadows.coerceIn(-1f, 1f)
+        val contrast = (1f + hi * 0.35f).coerceIn(0.5f, 2f)
+        val brightness = (sh * 0.12f).coerceIn(-0.2f, 0.2f)
+        return createRgbAdjustment(
+            brightness = brightness, contrast = contrast, saturation = 1f, temperature = 0f, tint = 0f
+        )
+    }
+
+    /**
+     * Approximate template grade for live preview. Each template is a
+     * distinct FFmpeg chain in export (cinema = warm grade + black bars,
+     * wedding = warm + soft blur, etc.). The closest matrix approximation:
+     * a per-template (brightness, contrast, saturation, temperature) tuple
+     * applied via RgbMatrix. The cinema template's black bars are also
+     * drawn as a Compose overlay. Real chains like boxblur/curves are
+     * skipped in preview (still baked at export).
+     */
+    private fun buildTemplateEffect(templateId: String): ColorEffect? {
+        if (templateId.isBlank() || templateId == "none" || templateId == "free") return null
+        val t = templateId.lowercase().replace(" ", "_")
+        val params = when (t) {
+            "cinema" -> Tuple4(0.0f, 1.15f, 1.05f, 15f)
+            "wedding" -> Tuple4(0.04f, 0.95f, 1.1f, 25f)
+            "travel" -> Tuple4(0.03f, 1.2f, 1.35f, 0f)
+            "vlog" -> Tuple4(0.06f, 1.08f, 1.1f, 5f)
+            "poetry" -> Tuple4(0.05f, 0.9f, 0.85f, 10f)
+            "beats" -> Tuple4(0.0f, 1.3f, 1.2f, 0f)
+            "portrait" -> Tuple4(0.03f, 1.05f, 1.05f, 20f)
+            "night" -> Tuple4(-0.05f, 1.15f, 0.95f, -30f)
+            "food" -> Tuple4(0.05f, 1.1f, 1.3f, 30f)
+            "retro" -> Tuple4(0.04f, 1.0f, 0.7f, 35f)
+            "noir" -> Tuple4(0.0f, 1.25f, 0.0f, 0f)
+            "summer" -> Tuple4(0.06f, 1.1f, 1.2f, 25f)
+            "winter" -> Tuple4(0.04f, 1.05f, 0.95f, -25f)
+            "autumn" -> Tuple4(0.04f, 1.1f, 1.2f, 40f)
+            "spring" -> Tuple4(0.05f, 1.05f, 1.15f, -5f)
+            "sunset" -> Tuple4(0.06f, 1.1f, 1.2f, 50f)
+            else -> null
+        } ?: return null
+        return createRgbAdjustment(
+            brightness = params.brightness.coerceIn(-1f, 1f),
+            contrast = params.contrast.coerceIn(0f, 4f),
+            saturation = params.saturation.coerceIn(0f, 4f),
+            temperature = params.temperature.coerceIn(-100f, 100f),
+            tint = 0f
+        )
+    }
+
+    private data class Tuple4(val brightness: Float, val contrast: Float, val saturation: Float, val temperature: Float)
+
     private fun createRgbAdjustment(brightness: Float, contrast: Float, saturation: Float, temperature: Float, tint: Float): ColorEffect {
         val brightnessM = GlUtil.create4x4IdentityMatrix().also { if (brightness != 0f) Matrix.translateM(it, 0, brightness, brightness, brightness) }
         val contrastM = GlUtil.create4x4IdentityMatrix().also {
@@ -151,7 +259,13 @@ class Media3EffectPipeline @Inject constructor() {
         imageEditorBrightness = project.imageEditorBrightness, imageEditorContrast = project.imageEditorContrast,
         imageEditorSaturation = project.imageEditorSaturation, imageEditorTemperature = project.imageEditorTemperature,
         imageEditorExposure = project.imageEditorExposure, colorLift = project.colorLift,
-        colorGamma = project.colorGamma, colorGain = project.colorGain
+        colorGamma = project.colorGamma, colorGain = project.colorGain,
+        imageEditorSharpen = project.imageEditorSharpen,
+        greenScreenEnabled = project.greenScreenEnabled,
+        greenScreenColor = project.greenScreenColor,
+        imageEditorHighlights = project.imageEditorHighlights,
+        imageEditorShadows = project.imageEditorShadows,
+        activeTemplateId = project.activeTemplateId
     )
 
     /** Builds color effects plus the aspect-aware Crop effect for live preview. */
@@ -160,13 +274,41 @@ class Media3EffectPipeline @Inject constructor() {
         allEffects.addAll(buildEffectsFromProject(project))
         if (selectedEffect != "none" && selectedEffect.isNotBlank()) allEffects.addAll(buildVisualEffect(selectedEffect))
         Media3CropEffect.forProject(project)?.let(allEffects::add)
+        Media3CropEffect.forManualCrop(project)?.let(allEffects::add)
         Log.d(TAG, "Built ${allEffects.size} total live effects (visual=$selectedEffect, crop=${project.cropPreset})")
         return allEffects
     }
 
-    private fun buildVisualEffect(effectId: String): List<ColorEffect> {
-        if (!VideoProcessor.isGpuRepresentableEffect(effectId)) return emptyList()
+    /** Builds color effects for ALL effects using shared FFmpeg chain parsing.
+     *  Previously only GPU-representable effects (eq/colorbalance/hue) were faked
+     *  on live preview; now ALL effects use the shared FFmpeg chain parsing for
+     *  parity between live preview and export.
+     */
+    fun buildVisualEffect(effectId: String): List<ColorEffect> {
+        // Parse the FFmpeg chain directly from our shared catalog
         val chain = VideoProcessor.EXACT_EFFECT_CHAINS[effectId.lowercase().replace(" ", "_").replace("-", "_")] ?: return emptyList()
-        return if (chain.isBlank()) emptyList() else EffectGLConverter.convertChain(chain)
+        if (chain.isBlank()) return emptyList()
+        
+        // Use shared filterPreviewMatrix so ALL effects (not just GPU-representable)
+        // produce a visible live-preview matrix that matches the export chain.
+        // Previously, effects like blur, noise, pixelate, etc. silently returned empty
+        // and showed nothing in live preview while still being baked into exports.
+        val previewMatrix = filterPreviewMatrix(chain) ?: return emptyList()
+        val matrix16 = previewMatrix.values.copyOf(16)
+
+        // Extract human-readable parameters from parsed chain for tests/debugging.
+        val params = parseFfmpegChain(chain)
+        val rs = params["rs"] ?: 0f; val gs = params["gs"] ?: 0f; val bs = params["bs"] ?: 0f
+        val rm = params["rm"] ?: 0f; val gm = params["gm"] ?: 0f; val bm = params["bm"] ?: 0f
+        return listOf(
+            ColorEffect(
+                brightness = (params["brightness"] ?: 0f).coerceIn(-1f, 1f),
+                contrast = (params["contrast"] ?: 1f).coerceIn(0f, 4f),
+                saturation = (params["saturation"] ?: 1f).coerceIn(0f, 4f),
+                temperature = (((rs + rm) - (bs + bm)) * 50f).coerceIn(-100f, 100f),
+                tint = (((gs + gm) - ((rs + rm + bs + bm) / 2f)) * 50f).coerceIn(-100f, 100f),
+                matrix = matrix16
+            )
+        )
     }
 }

@@ -31,7 +31,7 @@ sealed class AIFilter(
     val description: String
 ) {
     object None : AIFilter("none", com.powercut.editor.R.string.gpu_filter_none, "Original ungraded colors")
-    object Sepia : AIFilter("sepia", com.powercut.editor.R.string.gpu_filter_sepia, "Warm AI sepia with golden hues")
+    object Sepia : AIFilter("sepia", com.powercut.editor.R.string.gpu_filter_sepia, "Warm sepia with golden hues")
     object Grayscale : AIFilter("grayscale", com.powercut.editor.R.string.gpu_filter_grayscale, "Vintage cinematic black & white")
     object Invert : AIFilter("invert", com.powercut.editor.R.string.gpu_filter_invert, "Retro-future inverted neon aesthetic")
 
