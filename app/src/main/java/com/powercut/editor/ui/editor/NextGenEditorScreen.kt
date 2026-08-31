@@ -2902,160 +2902,133 @@ private fun TextPanel(
 // ─── 6. FILTERS PANEL ──────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+// Premium Glassmorphic Filters Panel (real integration)
+// Connected to existing FilterCatalog + onUpdateFilter + GPUImage preview + FFmpeg export.
+private val FiltersPanelCyan = Color(0xFF00D4FF)
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit) {
     var filterCategory by remember { mutableStateOf("all") }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    var filterIntensity by remember { mutableFloatStateOf(0.75f) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         LiveAnimatedHeader("FILTERS", "🎨", SignaturePurple)
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text("CINEMATIC FILTERS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-            Box(Modifier.background(CyberCyan.copy(0.15f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
-                Text("✓ Real FFmpeg", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
+        // Active filter + intensity slider
+        val activeFilter = project.selectedFilter.lowercase()
+        val activeDef = remember(activeFilter) { FilterCatalog.all.find { it.id == activeFilter } }
+        if (activeDef != null && activeFilter != "none") {
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Color(0xE0141420), RoundedCornerShape(8.dp))
+                    .border(1.dp, FiltersPanelCyan.copy(0.3f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text(activeDef.name, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FiltersPanelCyan)
+                    Spacer(Modifier.weight(1f))
+                    Text("${(filterIntensity * 100).toInt()}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FiltersPanelCyan)
+                }
+                Spacer(Modifier.height(2.dp))
+                Slider(
+                    value = filterIntensity,
+                    onValueChange = { filterIntensity = it },
+                    modifier = Modifier.fillMaxWidth().height(16.dp),
+                    colors = SliderDefaults.colors(
+                        thumbColor = FiltersPanelCyan,
+                        activeTrackColor = FiltersPanelCyan,
+                        inactiveTrackColor = Color(0xFF2A3040)
+                    )
+                )
             }
         }
+
         // Category tabs
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("all" to "All", "basic" to "Basic", "cinema" to "Cinema", "film" to "Film", "vintage" to "Vintage", "mood" to "Mood", "neon" to "Neon", "adjust" to "Adjust", "transform" to "Transform", "color" to "Color", "effect" to "Effect").forEach { (id, label) ->
+            listOf("all" to "All", "basic" to "Basic", "cinema" to "Cinema", "film" to "Film", "vintage" to "Vintage", "mood" to "Mood", "neon" to "Neon", "ai" to "AI", "adjust" to "Adjust", "transform" to "Transform", "color" to "Color", "effect" to "Effect").forEach { (id, label) ->
                 val sel = filterCategory == id
-                Box(Modifier.background(if (sel) CyberCyan.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { filterCategory = id }.padding(horizontal = 6.dp, vertical = 3.dp)) {
-                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) CyberCyan else Color.White)
+                Box(
+                    Modifier
+                        .background(if (sel) FiltersPanelCyan.copy(0.25f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp))
+                        .border(1.dp, if (sel) FiltersPanelCyan.copy(0.5f) else Color.Transparent, RoundedCornerShape(6.dp))
+                        .clickable { filterCategory = id }
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                ) {
+                    Text(label, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (sel) FiltersPanelCyan else Color.White.copy(0.7f))
                 }
             }
         }
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            // Sourced from FilterCatalog so the displayed list, the live preview,
-            // and the export command all agree on exactly which filters exist.
-            // (id, displayName, category)
-            val allFilters = FilterCatalog.all.map { Triple(it.id, it.name, it.category) }
-            allFilters.filter { filterCategory == "all" || it.third == filterCategory }.forEach { (id, name, cat) ->
-                val sel = project.selectedFilter.lowercase() == id
-                // 2027 8K: Real Canvas demo thumbnail with filter color preview
-                Box(
-                    Modifier
-                        .width(52.dp)
-                        .height(72.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (sel) Color(0xFFFF5A3C).copy(0.25f) else Color.White.copy(0.05f), RoundedCornerShape(8.dp))
-                        .border(if (sel) 2.dp else 1.dp, if (sel) Color(0xFFFF5A3C) else Color.White.copy(0.08f), RoundedCornerShape(8.dp))
-                        .clickable { onUpdateFilter(if (sel) "none" else id) }
+
+        // Filter carousel - circular thumbnails (reference image style)
+        val filters = remember(filterCategory) {
+            val all = FilterCatalog.all.map { Triple(it.id, it.name, it.category) }
+            if (filterCategory == "all") all else all.filter { it.third == filterCategory }
+        }
+        LazyRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp)
+        ) {
+            items(filters.size) { idx ->
+                val (id, name, cat) = filters[idx]
+                val sel = activeFilter == id
+                val bgColor = when (cat) {
+                    "basic" -> Color(0xFF1A1A2E)
+                    "cinema" -> Color(0xFF1A2030)
+                    "film" -> Color(0xFF1E1A15)
+                    "vintage" -> Color(0xFF201A18)
+                    "mood" -> Color(0xFF181A20)
+                    "neon" -> Color(0xFF201028)
+                    "ai" -> Color(0xFF0D1520)
+                    else -> Color(0xFF151820)
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(64.dp)
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize().padding(4.dp)) {
-                        // Draw a mini scene with the filter color applied
-                        val baseColor = when (id) {
-                            "none" -> Color(0xFF4A6FA5)
-                            "grayscale", "monochrome" -> Color(0xFF888888)
-                            "sepia", "sepia_warm" -> Color(0xFFA0703D)
-                            "sepia_cool" -> Color(0xFF8A8070)
-                            "invert", "negative" -> Color(0xFFBB5544)
-                            "warm", "sunset", "golden", "amber" -> Color(0xFFE8A040)
-                            "cool", "arctic", "winter" -> Color(0xFF5090D0)
-                            "vintage", "lomo", "polaroid", "holga", "diana", "analog" -> Color(0xFFB89968)
-                            "dramatic", "noir" -> Color(0xFF333344)
-                            "cinematic", "tokyo", "nyc", "paris" -> Color(0xFF5566AA)
-                            "teal" -> Color(0xFF008080)
-                            "orange" -> Color(0xFFFF8040)
-                            "film", "super8", "kodak", "fuji", "agfa" -> Color(0xFFCC8855)
-                            "ilford", "portra" -> Color(0xFF998877)
-                            "velvia" -> Color(0xFF22AA66)
-                            "provia" -> Color(0xFF4488CC)
-                            "astia" -> Color(0xFFDD99AA)
-                            "high_contrast" -> Color(0xFF222222)
-                            "low_contrast" -> Color(0xFFCCCCCC)
-                            "high_saturation" -> Color(0xFFFF0066)
-                            "low_saturation" -> Color(0xFF999999)
-                            "bright" -> Color(0xFFFFEECC)
-                            "dark" -> Color(0xFF221133)
-                            "soft", "dreamy", "glow" -> Color(0xFFE0D0F0)
-                            "sharp" -> Color(0xFF334455)
-                            "haze" -> Color(0xFFB0C0D0)
-                            "matte" -> Color(0xFF807060)
-                            "litho" -> Color(0xFF554433)
-                            "red_boost", "ruby" -> Color(0xFFDD2233)
-                            "blue_boost", "sapphire" -> Color(0xFF2255DD)
-                            "green_boost", "emerald" -> Color(0xFF22AA44)
-                            "purple_haze" -> Color(0xFF9944CC)
-                            "pink_dream" -> Color(0xFFFF66BB)
-                            "bronze" -> Color(0xFFCD7F32)
-                            "platinum" -> Color(0xFFE5E4E2)
-                            "neon_city", "miami" -> Color(0xFFFF00FF)
-                            "retro_wave", "synthwave" -> Color(0xFFFF0080)
-                            "desert" -> Color(0xFFDDBB88)
-                            "ocean" -> Color(0xFF0066BB)
-                            "autumn" -> Color(0xFFDD6622)
-                            "spring" -> Color(0xFF88DD44)
-                            "summer" -> Color(0xFFFFDD44)
-                            "blur_light", "blur_medium", "blur_heavy", "gaussian_blur" -> Color(0xFF6688AA)
-                            "sharpen_strong" -> Color(0xFF445566)
-                            "brightness_10", "brightness_20", "brightness_30" -> Color(0xFFFFEECC)
-                            "brightness_neg10", "brightness_neg20" -> Color(0xFF221133)
-                            "contrast_20", "contrast_40" -> Color(0xFF222222)
-                            "contrast_neg20" -> Color(0xFFBBBBBB)
-                            "saturation_0", "saturation_50" -> Color(0xFF999999)
-                            "saturation_150", "saturation_200" -> Color(0xFFFF0066)
-                            "vignette", "vignette_strong" -> Color(0xFF332211)
-                            "hflip", "vflip", "mirror_lr", "mirror_tb" -> Color(0xFF667788)
-                            "rotate_90", "rotate_180", "rotate_270" -> Color(0xFF778899)
-                            "green_tint" -> Color(0xFF22AA44)
-                            "curves_drama" -> Color(0xFF222222)
-                            "curves_retro" -> Color(0xFFCC8855)
-                            "curves_highlight" -> Color(0xFFBBBBBB)
-                            "increase_red", "decrease_red", "red_monochrome" -> Color(0xFFDD2233)
-                            "increase_green", "decrease_green", "green_monochrome" -> Color(0xFF22AA44)
-                            "increase_blue", "decrease_blue", "blue_monochrome" -> Color(0xFF2255DD)
-                            "solarize", "solarize_strong" -> Color(0xFFFF8800)
-                            "posterize_8", "posterize_4" -> Color(0xFFAA66CC)
-                            "edge_detect" -> Color(0xFF555555)
-                            "emboss_filter" -> Color(0xFF888888)
-                            "film_grain", "film_grain_heavy" -> Color(0xFF665544)
-                            "pixelate", "pixelate_medium" -> Color(0xFF776655)
-                            "color_swap" -> Color(0xFFCC44AA)
-                            "sepia_vignette" -> Color(0xFF907030)
-                            "warm_vintage_combo" -> Color(0xFFCC9955)
-                            "cold_blue_combo" -> Color(0xFF4488CC)
-                            "vivid_cinema" -> Color(0xFF5566AA)
-                            "soft_dreamy" -> Color(0xFFD0C0E0)
-                            "grayscale_contrast" -> Color(0xFF555555)
-                            "purple_tone" -> Color(0xFF9944CC)
-                            "yellow_tone" -> Color(0xFFDDCC22)
-                            "cyan_tone" -> Color(0xFF22AACC)
-                            "magenta_tone" -> Color(0xFFCC22AA)
-                            else -> Color(0xFF4A6FA5)
-                        }
-                        // Draw gradient sky
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(baseColor, baseColor.copy(alpha = 0.4f))
-                            )
-                        )
-                        // Draw sun/circle
-                        drawCircle(
-                            color = baseColor.copy(alpha = 0.9f).compositeOver(Color.White.copy(alpha = 0.3f)),
-                            radius = size.minDimension * 0.15f,
-                            center = androidx.compose.ui.geometry.Offset(size.width * 0.65f, size.height * 0.3f)
-                        )
-                        // Draw ground/horizon
-                        drawRect(
-                            color = baseColor.copy(alpha = 0.6f).compositeOver(Color.Black.copy(alpha = 0.3f)),
-                            topLeft = androidx.compose.ui.geometry.Offset(0f, size.height * 0.65f),
-                            size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.35f)
-                        )
-                    }
-                    // Label at bottom
                     Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.BottomCenter
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(bgColor)
+                            .then(
+                                if (sel) Modifier
+                                    .shadow(8.dp, CircleShape, ambientColor = FiltersPanelCyan)
+                                    .border(2.dp, FiltersPanelCyan, CircleShape)
+                                else Modifier.border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                            )
+                            .clickable { onUpdateFilter(if (sel) "none" else id) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            name, fontSize = 6.sp, fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
+                        Box(Modifier.size(28.dp).clip(CircleShape).background(bgColor.copy(alpha = 0.8f)))
+                        if (sel) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(FiltersPanelCyan),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(androidx.compose.material.icons.filled.Check, "Selected", tint = Color(0xFF0A0A0F), modifier = Modifier.size(10.dp))
+                            }
+                        }
                     }
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        name,
+                        fontSize = 8.sp,
+                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                        color = if (sel) FiltersPanelCyan else Color.White.copy(alpha = 0.5f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         }
     }
 }
+
+
 
 
 private data class EffectItem(val name: String, val effectId: String, val filterId: String, val category: String)

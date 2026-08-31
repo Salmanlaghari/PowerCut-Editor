@@ -55,6 +55,16 @@ sealed class AIFilter(
     object Golden : AIFilter("golden", com.powercut.editor.R.string.gpu_filter_none, "Golden hour glow grade")
     object Mist : AIFilter("mist", com.powercut.editor.R.string.gpu_filter_none, "Dreamy misty soft grade")
 
+    // ── AI Premium Filters (reference image presets) ──
+    object AIGlow : AIFilter("ai_glow", com.powercut.editor.R.string.gpu_filter_none, "AI-powered soft glow with skin smoothing")
+    object AINeon : AIFilter("ai_neon", com.powercut.editor.R.string.gpu_filter_none, "AI neon high-contrast color pop")
+    object CyberpunkNeon : AIFilter("cyberpunk_neon", com.powercut.editor.R.string.gpu_filter_none, "Cyberpunk neon grade with purple-blue shift")
+    object Film35mm : AIFilter("film_35mm", com.powercut.editor.R.string.gpu_filter_none, "Classic 35mm film with grain and warmth")
+    object BeautyPro : AIFilter("beauty_pro", com.powercut.editor.R.string.gpu_filter_none, "AI beauty enhancement with skin softening")
+    object CinematicTealOrange : AIFilter("cinematic_teal_orange", com.powercut.editor.R.string.gpu_filter_none, "Blockbuster cinematic teal & orange")
+    object NeonOutline : AIFilter("neon_outline", com.powercut.editor.R.string.gpu_filter_none, "Neon edge-detection outline effect")
+    object DepthBokeh : AIFilter("depth_bokeh", com.powercut.editor.R.string.gpu_filter_none, "Depth-aware background blur bokeh")
+
     /**
      * Build the real GPUImage filter(s) for live preview. Uses GPUImageFilterGroup
      * to combine multiple shaders for composite looks (e.g. teal-orange, vintage).
@@ -161,6 +171,50 @@ sealed class AIFilter(
                 GPUImageSaturationFilter(0.85f),
                 GPUImageExposureFilter(0.1f)
             ))
+            is AIGlow -> GPUImageFilterGroup(listOf(
+                GPUImageBrightnessFilter(0.12f),
+                GPUImageContrastFilter(1.15f),
+                GPUImageSaturationFilter(1.3f),
+                GPUImageSharpenFilter(1.0f)
+            ))
+            is AINeon -> GPUImageFilterGroup(listOf(
+                GPUImageContrastFilter(1.4f),
+                GPUImageSaturationFilter(1.8f),
+                GPUImageGammaFilter(0.85f)
+            ))
+            is CyberpunkNeon -> GPUImageFilterGroup(listOf(
+                GPUImageHueFilter(345f),
+                GPUImageSaturationFilter(1.9f),
+                GPUImageContrastFilter(1.35f),
+                GPUImageGammaFilter(0.85f)
+            ))
+            is Film35mm -> GPUImageFilterGroup(listOf(
+                GPUImageSaturationFilter(1.05f),
+                GPUImageContrastFilter(1.08f),
+                GPUImageVignetteFilter(),
+                GPUImageGammaFilter(1.03f)
+            ))
+            is BeautyPro -> GPUImageFilterGroup(listOf(
+                GPUImageBrightnessFilter(0.08f),
+                GPUImageContrastFilter(1.05f),
+                GPUImageSaturationFilter(1.15f),
+                GPUImageGammaFilter(1.05f)
+            ))
+            is CinematicTealOrange -> GPUImageFilterGroup(listOf(
+                GPUImageHueFilter(180f),
+                GPUImageSaturationFilter(1.3f),
+                GPUImageContrastFilter(1.15f)
+            ))
+            is NeonOutline -> GPUImageFilterGroup(listOf(
+                GPUImageContrastFilter(1.5f),
+                GPUImageSaturationFilter(1.8f),
+                GPUImageGammaFilter(0.8f)
+            ))
+            is DepthBokeh -> GPUImageFilterGroup(listOf(
+                GPUImageContrastFilter(1.1f),
+                GPUImageSaturationFilter(1.05f),
+                GPUImageBrightnessFilter(0.05f)
+            ))
         }
     }
 
@@ -188,6 +242,14 @@ sealed class AIFilter(
                 "mono" -> Mono
                 "golden" -> Golden
                 "mist" -> Mist
+                "ai_glow" -> AIGlow
+                "ai_neon" -> AINeon
+                "cyberpunk_neon" -> CyberpunkNeon
+                "film_35mm" -> Film35mm
+                "beauty_pro" -> BeautyPro
+                "cinematic_teal_orange" -> CinematicTealOrange
+                "neon_outline" -> NeonOutline
+                "depth_bokeh" -> DepthBokeh
                 else -> None
             }
         }
@@ -196,7 +258,9 @@ sealed class AIFilter(
         val all = listOf(
             None, Vivid, Warm, Cool, Sunset, Golden, TealOrange, Dramatic,
             Vintage, Fade, Pastel, Bloom, Mist, Cyberpunk, Noir, Mono,
-            Grayscale, Sepia, Rose, Forest, Arctic, Invert
+            Grayscale, Sepia, Rose, Forest, Arctic, Invert,
+            AIGlow, AINeon, CyberpunkNeon, Film35mm, BeautyPro,
+            CinematicTealOrange, NeonOutline, DepthBokeh
         )
     }
 }
