@@ -178,7 +178,7 @@ private fun SecondTickMarks(totalDurationMs: Long) {
         // Draw tick marks every second
         for (sec in 0..totalSeconds) {
             val x = (sec.toFloat() / totalSeconds) * width
-            val isMajor = sec % 5 == 0
+            val isMajor = sec % 5 == 0L
 
             drawLine(
                 color = if (isMajor) TextGray.copy(alpha = 0.6f) else TextGray.copy(alpha = 0.3f),
@@ -187,11 +187,13 @@ private fun SecondTickMarks(totalDurationMs: Long) {
                 strokeWidth = if (isMajor) 1.5f else 0.75f
             )
 
+            // Draw tick mark indicator for major seconds
             if (isMajor) {
-                // Draw second label
-                drawContext.canvas.nativeCanvas.apply {
-                    // Note: In production, use Compose Text for proper rendering
-                }
+                drawCircle(
+                    color = TextGray.copy(alpha = 0.5f),
+                    radius = 3f,
+                    center = Offset(x, height / 2)
+                )
             }
         }
     }

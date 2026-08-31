@@ -3,6 +3,7 @@ package com.powercut.editor.domain.keyframe
 import androidx.compose.ui.graphics.Color
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.math.sin
 
 /**
  * Precision keyframe engine supporting linear, bezier, and custom easing functions.
@@ -245,7 +246,7 @@ enum class EasingFunction(val displayName: String) {
     ELASTIC("Elastic") {
         override fun evaluate(t: Float): Float {
             if (t == 0f || t == 1f) return t
-            return -0.5f * kotlin.math.pow(2f, 10f * (t - 1)) * kotlin.math.sin((t - 1.1f) * 5 * Math.PI.toFloat())
+            return -0.5f * pow(2f, 10f * (t - 1)) * sin((t - 1.1f) * 5 * Math.PI.toFloat())
         }
     };
 
