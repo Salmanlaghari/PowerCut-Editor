@@ -53,7 +53,7 @@ private fun DataTrackType.displayIcon(): androidx.compose.ui.graphics.vector.Ima
     DataTrackType.STICKER -> Icons.Default.EmojiEmotions
     DataTrackType.OVERLAY -> Icons.Default.Layers
     DataTrackType.EFFECT -> Icons.Default.AutoAwesome
-    DataTrackType.TRANSITION -> Icons.Default.Transition
+    DataTrackType.TRANSITION -> Icons.Default.CompareArrows
 }
 
 private fun DataTrackType.clipColor(): Color = when (this) {

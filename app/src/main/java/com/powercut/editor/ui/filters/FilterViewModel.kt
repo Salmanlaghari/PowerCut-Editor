@@ -20,7 +20,7 @@ class FilterViewModel : ViewModel() {
     private val _filterIntensity = MutableStateFlow(0.75f)
     val filterIntensity: StateFlow<Float> = _filterIntensity.asStateFlow()
 
-    private val _selectedTab = MutableStateFlow(EditorTab.FILTERS)
+    private val _selectedTab = MutableStateFlow(EditorTab.FILTER)
     val selectedTab: StateFlow<EditorTab> = _selectedTab.asStateFlow()
 
     private val _selectedCategory = MutableStateFlow(FilterCategory.COLOR_LUTS)
@@ -86,7 +86,7 @@ class FilterViewModel : ViewModel() {
             }
             FilterCategory.COLOR_LUTS -> {
                 _colorGradingEnabled.value = true
-                _beautyEnabled.value = filter == FilterPreset.BEAUTY_FILTER
+                _beautyEnabled.value = filter == FilterPreset.BEAUTY_PRO
                 _segmentationEnabled.value = false
                 _audioReactiveEnabled.value = false
             }
@@ -151,8 +151,8 @@ class FilterViewModel : ViewModel() {
             FilterPreset.FILM_35MM -> ColorGradingPreset.FILM_35MM
             FilterPreset.BEAUTY_PRO -> ColorGradingPreset.BEAUTY_PRO
             FilterPreset.TEAL_ORANGE -> ColorGradingPreset.TEAL_ORANGE
-            FilterPreset.VINTAGE_FILM -> ColorGradingPreset.VINTAGE_FILM
-            FilterPreset.CYBER_NEON -> ColorGradingPreset.CYBERPUNK
+            FilterPreset.DRAMATIC -> ColorGradingPreset.TEAL_ORANGE
+            FilterPreset.CINEMATIC -> ColorGradingPreset.VINTAGE_FILM
             FilterPreset.FILM_NOIR -> ColorGradingPreset.FILM_NOIR
             FilterPreset.GOLDEN_HOUR -> ColorGradingPreset.GOLDEN_HOUR
             FilterPreset.RETRO_FILM -> ColorGradingPreset.RETRO_FILM
