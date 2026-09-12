@@ -1,5 +1,6 @@
 // Determinism + keyframe + graph-resolution tests (no WebGL needed).
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import {
   resolveGraph, evaluateKeyframes, makeNode, makeKeyframe,
   EffectKind, Ease, serializeEffectGraph
@@ -21,10 +22,10 @@ test('evaluateKeyframes: linear interpolation', () => {
   assert.strictEqual(evaluateKeyframes(kfs, 1000, 0), 1);
 });
 
-test('evaluateKeyframes: ease-in-out at 0.25 -> 0.09375', () => {
+test('evaluateKeyframes: ease-in-out at 0.25 -> 0.15625', () => {
   const kfs = [makeKeyframe(0, 0, 'opacity', Ease.EASE_IN_OUT), makeKeyframe(1000, 1, 'opacity', Ease.EASE_IN_OUT)];
   const v = evaluateKeyframes(kfs, 250, 0);
-  assert.ok(Math.abs(v - 0.09375) < 1e-6, `expected 0.09375 got ${v}`);
+  assert.ok(Math.abs(v - 0.15625) < 1e-6, `expected 0.15625 got ${v}`);
 });
 
 test('evaluateKeyframes: ease-in at 0.5 -> 0.25', () => {

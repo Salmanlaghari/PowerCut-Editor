@@ -60,7 +60,7 @@ export class SoftwareFallbackRenderer {
     ];
     for (let i = 0; i < d.length; i += 4) {
       const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
-      d[i]     clamp(m[0] * r + m[4] * g + m[8] * b + m[12] * a);
+d[i]     = clamp(m[0] * r + m[4] * g + m[8] * b + m[12] * a);
       d[i + 1] = clamp(m[1] * r + m[5] * g + m[9] * b + m[13] * a);
       d[i + 2] = clamp(m[2] * r + m[6] * g + m[10] * b + m[14] * a);
       d[i + 3] = a;

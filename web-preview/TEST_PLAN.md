@@ -11,7 +11,7 @@ Covers: paused-frame updates, transitions, chroma key, animations, context loss,
 ## 2. Transitions
 - Create two overlapping clips with a dissolve transition; set progress = 0.5.
 - Assert: the output frame is a 50/50 blend of clip A and clip B (sample pixels at the overlap region).
-- Easing check: progress 0.0 -> 0.25 with EASE_IN_OUT must produce a value of 0.03125 (ease(0.25) = 0.25^2 * (3 - 0.5) = 0.09375 for in/out; verify the shader uniform matches the JS `ease()` function).
+- Easing check: progress 0.0 -> 0.25 with EASE_IN_OUT must produce a value of 0.15625 (ease(frac) = frac*frac*(3 - 2*frac)); verify the shader uniform matches the JS `ease()` function).
 - Directional wipe: with dir=(0,1), progress=1.0 must fully reveal clip B.
 
 ## 3. Chroma Key
@@ -23,7 +23,7 @@ Covers: paused-frame updates, transitions, chroma key, animations, context loss,
 
 ## 4. Animations (keyframes)
 - Add keyframes: opacity 0@0us, 1@500us, 0@1000us with EASE_IN_OUT.
-- Assert: at t=0 -> 0, t=250us -> ~0.094, t=500us -> 1, t=750us -> ~0.906, t=1000us -> 0.
+- Assert: at t=0 -> 0, t=125us -> ~0.0156, t=250us -> ~0.15625, t=500us -> 1, t=750us -> ~0.84375, t=1000us -> 0.
 - Property binding: changing the `scale` keyframe must update the `u_intensity`/matrix uniform on the next render.
 - Determinism: the same keyframe set evaluated at the same t must always return the same value.
 
