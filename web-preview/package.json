@@ -1,0 +1,22 @@
+{
+  "name": "powercut-preview",
+  "version": "1.0.0",
+  "description": "PowerCut WebGL/WebGPU preview and export pipeline. Shared, deterministic effect graph for live preview and 1:1 export parity.",
+  "type": "module",
+  "main": "src/powercut-preview.js",
+  "exports": {
+    ".": "./src/powercut-preview.js",
+    "./effectgraph": "./src/effectgraph/powercut-effect-graph.js",
+    "./canvas": "./src/canvas/preview-engine.js",
+    "./export": "./src/export/export-worker.js",
+    "./fallback": "./src/fallback/software-fallback.js",
+    "./util/color-math": "./src/util/color-math.js"
+  },
+  "scripts": {
+    "test": "node --test tests/",
+    "lint": "echo 'lint placeholder'"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

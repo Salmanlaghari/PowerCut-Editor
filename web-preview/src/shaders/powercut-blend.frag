@@ -12,13 +12,13 @@ void main() {
   vec4 f = texture2D(u_frame, v_texCoord);
   vec4 bg = texture2D(u_bg, v_texCoord);
   vec4 out;
-  if (u_blendMode == 1) {        // multiply
+  if (u_blendMode == 1) {
     out = vec4(f.rgb * bg.rgb, f.a);
-  } else if (u_blendMode == 2) { // screen
+  } else if (u_blendMode == 2) {
     out = vec4(vec3(1.0) - (vec3(1.0) - f.rgb) * (vec3(1.0) - bg.rgb), f.a);
-  } else if (u_blendMode == 3) { // add
+  } else if (u_blendMode == 3) {
     out = vec4(f.rgb + bg.rgb, f.a);
-  } else {                        // over
+  } else {
     float a = f.a + bg.a * (1.0 - f.a);
     out = vec4((f.rgb * f.a + bg.rgb * bg.a * (1.0 - f.a)) / max(a, 0.001), a);
   }
