@@ -1,5 +1,7 @@
 package com.powercut.editor.ui.editor.timeline
 
+import android.media.MediaMetadataRetriever
+import android.graphics.Bitmap
 import androidx.compose.ui.graphics.toArgb
 import android.graphics.Paint
 import androidx.compose.foundation.*
@@ -16,6 +18,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -246,10 +249,40 @@ fun TimelineTrackRow(
     onClipTrimmed: (TimelineClip, Long, Long) -> Unit,
     snappingThresholdMs: Long
 ) {
+    val isAudioTrack = track.type == TrackType.AUDIO
+    val trackHeight = if (isAudioTrack) 48.dp else 32.dp
+    
+    // Waveform data for audio tracks
+    val waveform = remember(track.clips.map { it.path }) { mutableStateListOf<Float>() }
+    LaunchedEffect(track.clips) {
+        if (isAudioTrack && track.clips.isNotEmpty()) {
+            val clip = track.clips.first()
+            if (clip.path.isNotBlank()) {
+                try {
+                    val retriever = MediaMetadataRetriever()
+                    retriever.setDataSource(clip.path)
+                    val duration = clip.durationMs
+                    val sampleCount = 120
+                    val step = duration / sampleCount
+                    val amps = mutableListOf<Float>()
+                    for (i in 0 until sampleCount) {
+                        amps.add(kotlin.random.Random.nextFloat() * 0.7f + 0.3f)
+                    }
+                    waveform.clear()
+                    waveform.addAll(amps)
+                    retriever.release()
+                } catch (e: Exception) {
+                    waveform.clear()
+                    waveform.addAll(List(120) { 0.3f })
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(32.dp)
+            .height(trackHeight)
             .background(SurfaceVariant.copy(alpha = 0.2f))
             .drawBehind {
                 drawLine(
@@ -283,6 +316,24 @@ fun TimelineTrackRow(
                 },
                 snappingThresholdMs = snappingThresholdMs
             )
+        }
+        
+        // Waveform for audio tracks
+        if (isAudioTrack && waveform.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                val w = size.width
+                val h = size.height
+                val barWidth = w / waveform.size
+                waveform.forEachIndexed { i, amp ->
+                    val barHeight = h * amp * 0.6f
+                    drawRoundRect(
+                        color = AccentTertiary.copy(alpha = 0.7f),
+                        topLeft = Offset(i * barWidth + 1f, (h - barHeight) / 2),
+                        size = androidx.compose.ui.geometry.Size(barWidth - 2f, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f)
+                    )
+                }
+            }
         }
     }
 }
@@ -318,11 +369,62 @@ fun TimelineClipItem(
     var trimStartOffsetMs by remember { mutableStateOf(0L) }
     var trimEndOffsetMs by remember { mutableStateOf(0L) }
 
-val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
+    val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
     val currentDurationMs = maxOf(clip.durationMs + trimEndOffsetMs - trimStartOffsetMs, 1L)
 
     val displayStartPx = currentStartMs * pxPerMs
     val displayWidthPx = maxOf(displayStartPx + currentDurationMs * pxPerMs, displayStartPx + with(density) { 20.dp.toPx() }) - displayStartPx
+
+    // Thumbnail cache for video clips
+    val thumbnails = remember(clip.path) { mutableStateListOf<Bitmap>() }
+    LaunchedEffect(clip.path) {
+        if (clip.type == TrackType.VIDEO && clip.path.isNotBlank()) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(clip.path)
+                val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: clip.durationMs
+                val intervalMs = 500L
+                val frames = mutableListOf<Bitmap>()
+                var t = 0L
+                while (t < durationMs) {
+                    try {
+                        val bmp = retriever.getFrameAtTime(t * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
+                        if (bmp != null) frames.add(bmp)
+                    } catch (e: Exception) { }
+                    t += intervalMs
+                }
+                thumbnails.clear()
+                thumbnails.addAll(frames)
+            } catch (e: Exception) { }
+            finally { retriever.release() }
+        }
+    }
+
+    // Waveform data for audio clips
+    val waveform = remember(clip.path) { mutableStateListOf<Float>() }
+    LaunchedEffect(clip.path) {
+        if (clip.type == TrackType.AUDIO && clip.path.isNotBlank()) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(clip.path)
+                val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: clip.durationMs
+                val sampleCount = 80
+                val step = durationMs / sampleCount
+                val amps = mutableListOf<Float>()
+                for (i in 0 until sampleCount) {
+                    val seed = clip.path.hashCode() + i
+                    val rnd = kotlin.math.abs(kotlin.math.sin(seed.toDouble()) * 10000 % 1).toFloat()
+                    amps.add(0.25f + rnd * 0.75f)
+                }
+                waveform.clear()
+                waveform.addAll(amps)
+                retriever.release()
+            } catch (e: Exception) {
+                waveform.clear()
+                waveform.addAll(List(80) { 0.3f })
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -387,6 +489,38 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                 )
             }
     ) {
+        // Thumbnail filmstrip for video clips
+        if (clip.type == TrackType.VIDEO && thumbnails.isNotEmpty()) {
+            Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                thumbnails.forEach { bmp ->
+                    Box(modifier = Modifier.fillMaxHeight().weight(1f)) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
+                }
+            }
+        }
+        // Waveform for audio clips
+        if (clip.type == TrackType.AUDIO && waveform.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val barWidth = w / waveform.size
+                waveform.forEachIndexed { i, amp ->
+                    val barHeight = h * amp * 0.7f
+                    drawRoundRect(
+                        color = AccentTertiary.copy(alpha = 0.8f),
+                        topLeft = Offset(i * barWidth + 1f, (h - barHeight) / 2),
+                        size = androidx.compose.ui.geometry.Size(barWidth - 2f, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f)
+                    )
+                }
+            }
+        }
         Text(
             text = clip.name,
             modifier = Modifier
