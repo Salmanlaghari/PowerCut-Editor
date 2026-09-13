@@ -173,6 +173,15 @@ import com.powercut.editor.domain.filter.FilterCatalog
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.sliderValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusable
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.material3.Card
@@ -1903,33 +1912,6 @@ fun NextGenEditorScreen(
                     if (stickerEmoji.isNotEmpty()) {
                         Text(stickerEmoji, fontSize = 48.sp, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp))
                     }
-                }
-
-                // Filename pill (top-left, only when not playing)
-                if (!isPlaying) {
-                    val fileName = project.videoPath?.substringAfterLast("/")?.substringAfterLast("\\") ?: "Video"
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(10.dp)
-                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(fileName, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.85f), maxLines = 1)
-                    }
-                }
-
-                // Timecode pill (bottom-right)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(10.dp)
-                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text("${formatTime(currentPlaybackTime)} / ${formatTime(project.durationMs)}", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.85f), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                 }
 
                 // v6.3.0 — ACTIVE EFFECTS INDICATOR: Shows what effects/filters are
@@ -6203,11 +6185,36 @@ fun PowerSlider(
             }
         }
         val coercedValue = value.coerceIn(valueRange.start, valueRange.endInclusive)
+        val step = (valueRange.endInclusive - valueRange.start) / 100f
         var isDragging by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(22.dp)
+                .semantics {
+                    sliderValue = coercedValue
+                    setProgress {
+                        val newValue = it.coerceIn(valueRange.start, valueRange.endInclusive)
+                        onValueChange(newValue)
+                        true
+                    }
+                    if (!enabled) disabled()
+                }
+                .focusable(enabled = enabled)
+                .onKeyEvent { keyEvent ->
+                    if (!enabled) return@onKeyEvent false
+                    if (keyEvent.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onKeyEvent false
+                    val delta = when (keyEvent.key) {
+                        Key.ArrowRight -> step
+                        Key.ArrowUp -> step
+                        Key.ArrowLeft -> -step
+                        Key.ArrowDown -> -step
+                        else -> return@onKeyEvent false
+                    }
+                    val newValue = (coercedValue + delta).coerceIn(valueRange.start, valueRange.endInclusive)
+                    onValueChange(newValue)
+                    true
+                }
                 .pointerInput(enabled) {
                     if (!enabled) return@pointerInput
                     detectDragGestures(
