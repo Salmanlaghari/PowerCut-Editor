@@ -397,9 +397,6 @@ fun TimelineTrackRow(
                 snappingThresholdMs = snappingThresholdMs
             )
         }
-        
-        // End Padding: Allows last second to reach the center playhead
-        Spacer(modifier = Modifier.width(paddingStart))
     }
 }
 
