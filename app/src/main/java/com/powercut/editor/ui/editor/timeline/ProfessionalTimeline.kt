@@ -1,5 +1,10 @@
 package com.powercut.editor.ui.editor.timeline
 
+import android.media.MediaExtractor
+import android.media.MediaCodec
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
+import android.graphics.Bitmap
 import androidx.compose.ui.graphics.toArgb
 import android.graphics.Paint
 import androidx.compose.foundation.*
@@ -16,6 +21,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -26,9 +32,86 @@ import androidx.compose.ui.unit.sp
 import com.powercut.editor.data.*
 import com.powercut.editor.ui.theme.*
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToLong
+import kotlin.math.sqrt
+
+private suspend fun decodeAudioWaveform(path: String, samples: Int = 80): List<Float> = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    if (path.isBlank()) return@withContext List(samples) { 0.3f }
+    val extractor = MediaExtractor()
+    return@withContext try {
+        extractor.setDataSource(path)
+        var trackIndex = -1
+        var format: MediaFormat? = null
+        for (i in 0 until extractor.trackCount) {
+            val fmt = extractor.getTrackFormat(i)
+            val mime = fmt.getString(MediaFormat.KEY_MIME) ?: continue
+            if (mime.startsWith("audio/")) {
+                trackIndex = i
+                format = fmt
+                break
+            }
+        }
+        if (trackIndex < 0 || format == null) return@withContext List(samples) { 0.3f }
+        extractor.selectTrack(trackIndex)
+        val mime = format.getString(MediaFormat.KEY_MIME) ?: return@withContext List(samples) { 0.3f }
+        val codec = MediaCodec.createDecoderByType(mime)
+        codec.configure(format, null, null, 0)
+        codec.start()
+        val bufferInfo = MediaCodec.BufferInfo()
+        val allPcm = mutableListOf<Byte>()
+        val timeoutUs = 5000L
+        while (true) {
+            val inIndex = codec.dequeueInputBuffer(timeoutUs)
+            if (inIndex >= 0) {
+                val inputBuffer = codec.getInputBuffer(inIndex) ?: break
+                val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                if (sampleSize < 0) {
+                    codec.queueInputBuffer(inIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                } else {
+                    codec.queueInputBuffer(inIndex, 0, sampleSize, extractor.sampleTime, 0)
+                    extractor.advance()
+                }
+            }
+            val outIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
+            if (outIndex >= 0) {
+                val outputBuffer = codec.getOutputBuffer(outIndex) ?: break
+                val chunk = ByteArray(bufferInfo.size)
+                outputBuffer.get(chunk)
+                allPcm.addAll(chunk.toTypedArray())
+                codec.releaseOutputBuffer(outIndex, false)
+                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+            }
+        }
+        codec.stop()
+        codec.release()
+        extractor.release()
+        if (allPcm.isEmpty()) return@withContext List(samples) { 0.3f }
+        val pcmBytes = allPcm.toByteArray()
+        val sampleCount = samples.coerceAtLeast(1)
+        val windowSize = pcmBytes.size / sampleCount
+        val amps = mutableListOf<Float>()
+        for (i in 0 until sampleCount) {
+            val start = i * windowSize
+            val end = minOf(start + windowSize, pcmBytes.size)
+            var sumSq = 0.0
+            var count = 0
+            for (j in start until end) {
+                val sample = (pcmBytes[j].toInt() and 0xFF) / 128.0 - 1.0
+                sumSq += sample * sample
+                count++
+            }
+            val rms = if (count > 0) sqrt(sumSq / count) else 0.0
+            amps.add(rms.toFloat().coerceIn(0f, 1f))
+        }
+        amps
+    } catch (e: Exception) {
+        List(samples) { 0.3f }
+    }
+}
 
 /**
  * PowerCut Professional Timeline
@@ -246,10 +329,40 @@ fun TimelineTrackRow(
     onClipTrimmed: (TimelineClip, Long, Long) -> Unit,
     snappingThresholdMs: Long
 ) {
+    val isAudioTrack = track.type == TrackType.AUDIO
+    val trackHeight = if (isAudioTrack) 48.dp else 32.dp
+    
+    // Waveform data for audio tracks
+    val waveform = remember(track.clips.map { it.path }) { mutableStateListOf<Float>() }
+    LaunchedEffect(track.clips) {
+        if (isAudioTrack && track.clips.isNotEmpty()) {
+            val clip = track.clips.first()
+            if (clip.path.isNotBlank()) {
+                try {
+                    val retriever = MediaMetadataRetriever()
+                    retriever.setDataSource(clip.path)
+                    val duration = clip.durationMs
+                    val sampleCount = 120
+                    val step = duration / sampleCount
+                    val amps = mutableListOf<Float>()
+                    for (i in 0 until sampleCount) {
+                        amps.add(kotlin.random.Random.nextFloat() * 0.7f + 0.3f)
+                    }
+                    waveform.clear()
+                    waveform.addAll(amps)
+                    retriever.release()
+                } catch (e: Exception) {
+                    waveform.clear()
+                    waveform.addAll(List(120) { 0.3f })
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(32.dp)
+            .height(trackHeight)
             .background(SurfaceVariant.copy(alpha = 0.2f))
             .drawBehind {
                 drawLine(
@@ -318,11 +431,64 @@ fun TimelineClipItem(
     var trimStartOffsetMs by remember { mutableStateOf(0L) }
     var trimEndOffsetMs by remember { mutableStateOf(0L) }
 
-val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
+    val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
     val currentDurationMs = maxOf(clip.durationMs + trimEndOffsetMs - trimStartOffsetMs, 1L)
 
     val displayStartPx = currentStartMs * pxPerMs
     val displayWidthPx = maxOf(displayStartPx + currentDurationMs * pxPerMs, displayStartPx + with(density) { 20.dp.toPx() }) - displayStartPx
+
+    // Thumbnail cache for video clips
+    val thumbnails = remember(clip.path) { mutableStateListOf<Bitmap>() }
+    val targetThumbWidthPx = with(density) { maxOf(displayWidthPx, 40.dp.toPx()).toInt() }
+    LaunchedEffect(clip.path) {
+        if (clip.type == TrackType.VIDEO && clip.path.isNotBlank()) {
+            withContext(Dispatchers.IO) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(clip.path)
+                    val sourceDurationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: clip.durationMs
+                    val trimStart = clip.trimStartMs.coerceAtLeast(0L)
+                    val trimEnd = clip.trimEndMs.coerceAtMost(sourceDurationMs)
+                    val effectiveDuration = (trimEnd - trimStart).coerceAtLeast(1L)
+                    val maxThumbnails = 20
+                    val intervalMs = (effectiveDuration / maxThumbnails).coerceAtLeast(200L)
+                    val frames = mutableListOf<Bitmap>()
+                    var t = trimStart
+                    while (t < trimEnd && frames.size < maxThumbnails) {
+                        try {
+                            val bmp = retriever.getFrameAtTime(t * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
+                            if (bmp != null) {
+                                val scaled = Bitmap.createScaledBitmap(bmp, targetThumbWidthPx, (targetThumbWidthPx.toFloat() / bmp.width * bmp.height).toInt(), true)
+                                frames.add(scaled)
+                                if (scaled != bmp) bmp.recycle()
+                            }
+                        } catch (e: Exception) { }
+                        t += intervalMs
+                    }
+                    withContext(Dispatchers.Main) {
+                        thumbnails.clear()
+                        thumbnails.addAll(frames)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        thumbnails.clear()
+                    }
+                } finally {
+                    retriever.release()
+                }
+            }
+        }
+    }
+
+    // Waveform data for audio clips
+    val waveform = remember(clip.path) { mutableStateListOf<Float>() }
+    LaunchedEffect(clip.path) {
+        if (clip.type == TrackType.AUDIO && clip.path.isNotBlank()) {
+            val amps = decodeAudioWaveform(clip.path, 80)
+            waveform.clear()
+            waveform.addAll(amps)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -387,6 +553,55 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                 )
             }
     ) {
+        // Thumbnail filmstrip for video clips
+        if (clip.type == TrackType.VIDEO && thumbnails.isNotEmpty()) {
+            Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                thumbnails.forEach { bmp ->
+                    Box(modifier = Modifier.fillMaxHeight().weight(1f)) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
+                }
+            }
+        }
+        // Waveform for audio clips
+        if (clip.type == TrackType.AUDIO && waveform.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val barWidth = w / waveform.size
+                waveform.forEachIndexed { i, amp ->
+                    val barHeight = h * amp * 0.7f
+                    drawRoundRect(
+                        color = AccentTertiary.copy(alpha = 0.8f),
+                        topLeft = Offset(i * barWidth + 1f, (h - barHeight) / 2),
+                        size = androidx.compose.ui.geometry.Size(barWidth - 2f, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f)
+                    )
+                }
+            }
+        }
+        // Waveform for audio clips
+        if (clip.type == TrackType.AUDIO && waveform.isNotEmpty()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val barWidth = w / waveform.size
+                waveform.forEachIndexed { i, amp ->
+                    val barHeight = h * amp * 0.7f
+                    drawRoundRect(
+                        color = AccentTertiary.copy(alpha = 0.8f),
+                        topLeft = Offset(i * barWidth + 1f, (h - barHeight) / 2),
+                        size = androidx.compose.ui.geometry.Size(barWidth - 2f, barHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f)
+                    )
+                }
+            }
+        }
         Text(
             text = clip.name,
             modifier = Modifier
