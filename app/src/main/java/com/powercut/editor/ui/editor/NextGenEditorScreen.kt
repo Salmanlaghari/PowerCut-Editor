@@ -177,11 +177,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.sliderValue
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusable
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.material3.Card
