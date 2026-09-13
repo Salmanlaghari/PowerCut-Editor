@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.ui.theme.*
+import com.powercut.editor.ui.editor.PowerCutSlider
 
 /**
  * Eraser Tools Panel
@@ -77,12 +78,13 @@ fun EraserToolsPanel(
 
         // Tolerance
         Text("COLOR TOLERANCE: ${(eraserTolerance * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        Slider(
+        PowerCutSlider(
+            label = "COLOR TOLERANCE",
             value = eraserTolerance,
-            onValueChange = onUpdateTolerance,
             valueRange = 0.1f..0.9f,
-            colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
-            modifier = Modifier.height(24.dp)
+            onValueChange = onUpdateTolerance,
+            accentColor = NeonOrange,
+            valueFormatter = { "${(it * 100).toInt()}%" }
         )
 
         // Soft Edge Toggle

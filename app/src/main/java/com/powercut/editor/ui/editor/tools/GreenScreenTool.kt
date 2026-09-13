@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.ui.theme.*
+import com.powercut.editor.ui.editor.PowerCutSlider
 
 /**
  * Green Screen / Chroma Key Tool Panel
@@ -148,12 +149,13 @@ fun GreenScreenPanel(
 
         // Threshold Slider
         Text("SENSITIVITY: ${(greenScreenThreshold * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        Slider(
+        PowerCutSlider(
+            label = "SENSITIVITY",
             value = greenScreenThreshold,
-            onValueChange = onUpdateThreshold,
             valueRange = 0.1f..0.9f,
-            colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
-            modifier = Modifier.height(24.dp)
+            onValueChange = onUpdateThreshold,
+            accentColor = NeonOrange,
+            valueFormatter = { "${(it * 100).toInt()}%" }
         )
 
         // Auto Background Category Tabs

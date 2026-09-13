@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.ui.theme.*
+import com.powercut.editor.ui.editor.PowerCutSlider
 
 @Composable
 fun ImageEditorPanel(
@@ -126,12 +127,13 @@ fun ImageEditorPanel(
                     Text(activeParam.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(String.format("%.2f", currentValue), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
                 }
-                Slider(
+                PowerCutSlider(
+                    label = activeParam.uppercase(),
                     value = currentValue,
-                    onValueChange = currentOnUpdate,
                     valueRange = currentRange,
-                    colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
-                    modifier = Modifier.height(24.dp)
+                    onValueChange = currentOnUpdate,
+                    accentColor = NeonOrange,
+                    valueFormatter = { String.format("%.2f", it) }
                 )
             }
         }

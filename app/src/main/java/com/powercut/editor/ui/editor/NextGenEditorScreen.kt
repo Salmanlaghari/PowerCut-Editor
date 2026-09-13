@@ -55,18 +55,52 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoFix
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.BorderAll
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.Colorize
+import androidx.compose.material.icons.filled.CopyAll
+import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Cut
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sticker
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Vignette
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
+import com.powercut.editor.ui.editor.PowerCutSlider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -1871,17 +1905,29 @@ fun NextGenEditorScreen(
                     }
                 }
 
-                // ══ Clean preview — no hardcoded badges ══
-                // Resolution badge top-left
+                // ══ Clean preview — filename + timecode overlay ══
+                if (!isPlaying) {
+                    val fileName = project.videoPath?.substringAfterLast("/") ?: "clip"
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(fileName, fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
+                    }
+                }
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
+                        .align(Alignment.BottomEnd)
                         .padding(10.dp)
                         .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
-                    Text("PREVIEW", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f), letterSpacing = 1.sp)
+                    Text("${formatTime(currentPlaybackTime)} / ${formatTime(project.durationMs)}", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
 
                 // v6.3.0 — ACTIVE EFFECTS INDICATOR: Shows what effects/filters are
@@ -2059,8 +2105,6 @@ fun NextGenEditorScreen(
             currentTime = currentPlaybackTime,
             durationMs = project.durationMs,
             onPlayPause = { isPlaying = !isPlaying },
-            onPrevFrame = { exoPlayer.seekTo((exoPlayer.currentPosition - 33).coerceAtLeast(0)) },
-            onNextFrame = { exoPlayer.seekTo((exoPlayer.currentPosition + 33).coerceAtMost(exoPlayer.duration)) },
             onSeek = { seekMs ->
                 exoPlayer.seekTo(seekMs)
                 currentPlaybackTime = seekMs
@@ -2425,32 +2469,23 @@ private fun PlaybackControls(
     currentTime: Long,
     durationMs: Long,
     onPlayPause: () -> Unit,
-    onPrevFrame: () -> Unit,
-    onNextFrame: () -> Unit,
     onSeek: (Long) -> Unit = {}
 ) {
-    // v7.3 — Second-by-second / frame-by-frame scrub controls (CapCut-class).
-    // Icons: ⏮ -1s | ◀ frame -1 | ▶ play/pause | ▶ frame +1 | ⏭ +1s
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        ScrubButton("⏮", "-1s", onClick = { onSeek((currentTime - 1000).coerceAtLeast(0L)) })
+        ScrubButton("⏮", "start", onClick = { onSeek(0L) })
         Spacer(Modifier.width(8.dp))
-        ScrubButton("⏪", "frame", onClick = onPrevFrame)
+        ScrubButton("⏪", "-10s", onClick = { onSeek((currentTime - 10000).coerceAtLeast(0L)) })
         Spacer(Modifier.width(10.dp))
-        Box(modifier = Modifier.size(42.dp).neonGlow(NeonOrange, CircleShape).background(NeonOrange, CircleShape).tactileClick(onClick = onPlayPause), contentAlignment = Alignment.Center) {
-            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(20.dp))
+        Box(modifier = Modifier.size(52.dp).background(NeonOrange, CircleShape).tactileClick(onClick = onPlayPause), contentAlignment = Alignment.Center) {
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play", tint = Color.White, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.width(10.dp))
-        ScrubButton("⏩", "frame", onClick = onNextFrame)
+        ScrubButton("⏩", "+10s", onClick = { onSeek((currentTime + 10000).coerceAtMost(durationMs)) })
         Spacer(Modifier.width(8.dp))
-        ScrubButton("⏭", "+1s", onClick = { onSeek((currentTime + 1000).coerceAtMost(durationMs)) })
+        ScrubButton("⏭", "end", onClick = { onSeek(durationMs) })
         Spacer(Modifier.width(14.dp))
         Box(modifier = Modifier.background(Color.White.copy(0.05f), RoundedCornerShape(6.dp)).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) {
             Text("${speedFactor}x", fontSize = 10.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.width(6.dp))
-        // HH:MM:SS.cc readout
-        Box(modifier = Modifier.background(Color.Black.copy(0.4f), RoundedCornerShape(6.dp)).border(1.dp, CyberCyan.copy(0.3f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 3.dp)) {
-            Text(formatTimecode(currentTime, durationMs), fontSize = 9.sp, color = CyberCyan, fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
         }
     }
 }
@@ -2612,20 +2647,42 @@ private fun CapCutToolBar(
     onProTier: () -> Unit = {},
     onPremiumStudio: () -> Unit = {}
 ) {
+    data class ToolItem(val icon: @Composable () -> Unit, val name: String)
     val tools = listOf(
-        "✂️" to "Edit", "📑" to "Layers", "⚡" to "Speed", "📐" to "Crop",
-        "🔊" to "Audio", "🔤" to "Text", "🎨" to "Filters", "✨" to "Effects",
-        "😄" to "Stickers", "🔀" to "Trans", "🎭" to "Anim", "🎬" to "3D",
-        "🖼️" to "Image", "📋" to "Template",
-        "🎬" to "Chroma", "🧹" to "Erase", "🖌️" to "ImgEdit", "📐" to "Orient",
-        "🌈" to "Blend", "↺️" to "Reverse", "💉" to "ColorFX",
-        "🎧" to "AudioFX", "🎤" to "Voice", "🎉" to "Borders",
-        "✨" to "Vignette", "❄️" to "Freeze", "📷" to "Looks",
-        "🖍️" to "Canvas",
-        "💎" to "Keyframe",
+        ToolItem({ Icon(Icons.Default.Cut, null, Modifier.size(16.dp)) }, "Edit"),
+        ToolItem({ Icon(Icons.Default.Layers, null, Modifier.size(16.dp)) }, "Layers"),
+        ToolItem({ Icon(Icons.Default.Speed, null, Modifier.size(16.dp)) }, "Speed"),
+        ToolItem({ Icon(Icons.Default.Crop, null, Modifier.size(16.dp)) }, "Crop"),
+        ToolItem({ Icon(Icons.Default.MusicNote, null, Modifier.size(16.dp)) }, "Audio"),
+        ToolItem({ Icon(Icons.Default.TextFields, null, Modifier.size(16.dp)) }, "Text"),
+        ToolItem({ Icon(Icons.Default.Brush, null, Modifier.size(16.dp)) }, "Filters"),
+        ToolItem({ Icon(Icons.Default.AutoFix, null, Modifier.size(16.dp)) }, "Effects"),
+        ToolItem({ Icon(Icons.Default.Sticker, null, Modifier.size(16.dp)) }, "Stickers"),
+        ToolItem({ Icon(Icons.Default.Shuffle, null, Modifier.size(16.dp)) }, "Trans"),
+        ToolItem({ Icon(Icons.Default.Animation, null, Modifier.size(16.dp)) }, "Anim"),
+        ToolItem({ Icon(Icons.Default.ViewInAr, null, Modifier.size(16.dp)) }, "3D"),
+        ToolItem({ Icon(Icons.Default.Image, null, Modifier.size(16.dp)) }, "Image"),
+        ToolItem({ Icon(Icons.Default.CopyAll, null, Modifier.size(16.dp)) }, "Template"),
+        ToolItem({ Icon(Icons.Default.Colorize, null, Modifier.size(16.dp)) }, "Chroma"),
+        ToolItem({ Icon(Icons.Default.CleaningServices, null, Modifier.size(16.dp)) }, "Erase"),
+        ToolItem({ Icon(Icons.Default.Brush, null, Modifier.size(16.dp)) }, "ImgEdit"),
+        ToolItem({ Icon(Icons.Default.ScreenRotation, null, Modifier.size(16.dp)) }, "Orient"),
+        ToolItem({ Icon(Icons.Default.BlurOn, null, Modifier.size(16.dp)) }, "Blend"),
+        ToolItem({ Icon(Icons.Default.Replay, null, Modifier.size(16.dp)) }, "Reverse"),
+        ToolItem({ Icon(Icons.Default.ColorLens, null, Modifier.size(16.dp)) }, "ColorFX"),
+        ToolItem({ Icon(Icons.Default.GraphicEq, null, Modifier.size(16.dp)) }, "AudioFX"),
+        ToolItem({ Icon(Icons.Default.Mic, null, Modifier.size(16.dp)) }, "Voice"),
+        ToolItem({ Icon(Icons.Default.BorderAll, null, Modifier.size(16.dp)) }, "Borders"),
+        ToolItem({ Icon(Icons.Default.Vignette, null, Modifier.size(16.dp)) }, "Vignette"),
+        ToolItem({ Icon(Icons.Default.AcUnit, null, Modifier.size(16.dp)) }, "Freeze"),
+        ToolItem({ Icon(Icons.Default.CameraAlt, null, Modifier.size(16.dp)) }, "Looks"),
+        ToolItem({ Icon(Icons.Default.Edit, null, Modifier.size(16.dp)) }, "Canvas"),
+        ToolItem({ Icon(Icons.Default.Diamond, null, Modifier.size(16.dp)) }, "Keyframe"),
         // 2027 8K: Premium tools merged into bottom toolbar as gradient pills
-        "🤖" to "Smart Hub", "📱" to "Presets",
-        "👑" to "Pro", "✨" to "Studio"
+        ToolItem({ Icon(Icons.Default.SmartToy, null, Modifier.size(16.dp)) }, "Smart Hub"),
+        ToolItem({ Icon(Icons.Default.PhoneAndroid, null, Modifier.size(16.dp)) }, "Presets"),
+        ToolItem({ Icon(Icons.Default.Verified, null, Modifier.size(16.dp)) }, "Pro"),
+        ToolItem({ Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp)) }, "Studio")
     )
     Row(
         modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -2636,7 +2693,7 @@ private fun CapCutToolBar(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        tools.forEachIndexed { idx, (emoji, name) ->
+        tools.forEachIndexed { idx, tool ->
             val isActive = selectedTool == idx
             // 2027 8K: Premium tools (last 4) get gradient pill styling
             val isPremium = idx >= tools.size - 4
@@ -2665,10 +2722,12 @@ private fun CapCutToolBar(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(emoji, fontSize = 16.sp)
+                    Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+                        tool.icon()
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        name, fontSize = 7.sp, fontWeight = FontWeight.Black,
+                        tool.name, fontSize = 7.sp, fontWeight = FontWeight.Black,
                         color = if (isPremium) Color.White else if (isActive) Color(0xFFFF5A3C) else Color.Gray,
                         letterSpacing = 0.5.sp
                     )
@@ -2968,13 +3027,14 @@ private fun EditPanel(
                     Quint("📸", "Grain", project.imageEditorGrain.coerceIn(0f, 1f), 0f..1f, onUpdateGrain)
                 )
                 adjData.forEach { (emoji, name, value, range, onChange) ->
-                    Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(emoji, fontSize = 12.sp)
-                        Spacer(Modifier.width(6.dp))
-                        Text(name, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(60.dp))
-                        Slider(value = value.coerceIn(range.start, range.endInclusive), onValueChange = onChange, valueRange = range, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(18.dp))
-                        Text("${(value * 100).toInt()}%", fontSize = 7.sp, color = NeonOrange, fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
-                    }
+                    PowerCutSlider(
+                        label = name,
+                        value = value.coerceIn(range.start, range.endInclusive),
+                        valueRange = range,
+                        onValueChange = onChange,
+                        accentColor = NeonOrange,
+                        valueFormatter = { v -> "${(v * 100).toInt()}%" }
+                    )
                 }
                 // Reset button
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.End) {
@@ -3017,11 +3077,14 @@ private fun EditPanel(
                     Triple("➡️ Right", cropRight, { v: Float -> cropRight = v; commitCrop(cropLeft, cropTop, v, cropBottom) }),
                     Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v; commitCrop(cropLeft, cropTop, cropRight, v) })
                 ).forEach { (label, value, onChange) ->
-                    Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(55.dp))
-                        Slider(value = value, onValueChange = onChange, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(16.dp))
-                        Text("${(value * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
-                    }
+                    PowerCutSlider(
+                        label = label,
+                        value = value,
+                        valueRange = 0f..1f,
+                        onValueChange = onChange,
+                        accentColor = CyberCyan,
+                        valueFormatter = { v -> "${(v * 100).toInt()}%" }
+                    )
                 }
 
                 Spacer(Modifier.height(4.dp))
@@ -3057,12 +3120,13 @@ private fun EditPanel(
                 // Manual Speed Slider
                 Spacer(Modifier.height(4.dp))
                 Text("MANUAL SPEED: ${String.format("%.2f", project.speedFactor)}x", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Slider(
+                PowerCutSlider(
+                    label = "Speed",
                     value = project.speedFactor,
-                    onValueChange = { onUpdateSpeed(String.format("%.2f", it).toFloat()) },
                     valueRange = 0.1f..16f,
-                    colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)),
-                    modifier = Modifier.fillMaxWidth().height(20.dp)
+                    onValueChange = { onUpdateSpeed(String.format("%.2f", it).toFloat()) },
+                    accentColor = NeonOrange,
+                    valueFormatter = { v -> String.format("%.2f", v) + "x" }
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("0.1x", fontSize = 7.sp, color = Color.Gray)
@@ -3172,10 +3236,10 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
         Text("ADD LAYER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray.copy(0.8f))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(
-                "📝" to "text",
-                "🖼️" to "image",
-                "⭐" to "sticker",
-                "✨" to "effect"
+                "text" to "text",
+                "image" to "image",
+                "sticker" to "sticker",
+                "effect" to "effect"
             ).forEach { (icon, layerId) ->
                 Box(
                     Modifier.weight(1f)
@@ -3189,7 +3253,18 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(icon, fontSize = 16.sp)
+                        Icon(
+                            imageVector = when (icon) {
+                                "text" -> Icons.Default.TextFields
+                                "image" -> Icons.Default.Image
+                                "sticker" -> Icons.Default.Sticker
+                                "effect" -> Icons.Default.AutoFix
+                                else -> Icons.Default.Help
+                            },
+                            contentDescription = layerId,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Text(layerId.replaceFirstChar { it.uppercase() }, fontSize = 7.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -3201,12 +3276,12 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
 
         // 3D styled layer items — real content detection + functional remove/visibility
         val layers = listOf(
-            Triple("🎬", "Video Layer", "video"),
-            Triple("🔊", "Audio Layer", "audio"),
-            Triple("📝", "Text Layer", "text"),
-            Triple("🖼️", "Image Layer", "image"),
-            Triple("⭐", "Sticker Layer", "sticker"),
-            Triple("✨", "Effect Layer", "effect")
+            Triple("video", "Video Layer", "video"),
+            Triple("audio", "Audio Layer", "audio"),
+            Triple("text", "Text Layer", "text"),
+            Triple("image", "Image Layer", "image"),
+            Triple("sticker", "Sticker Layer", "sticker"),
+            Triple("effect", "Effect Layer", "effect")
         )
         layers.forEach { (icon, name, layerId) ->
             val hasContent = when (layerId) {
@@ -3239,7 +3314,20 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                             .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(6.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(icon, fontSize = 14.sp)
+                        Icon(
+                            imageVector = when (icon) {
+                                "video" -> Icons.Default.Videocam
+                                "audio" -> Icons.Default.Audiotrack
+                                "text" -> Icons.Default.TextFields
+                                "image" -> Icons.Default.Image
+                                "sticker" -> Icons.Default.Sticker
+                                "effect" -> Icons.Default.AutoFix
+                                else -> Icons.Default.Help
+                            },
+                            contentDescription = name,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
                     }
                     Column {
                         Text(name, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (hasContent) Color.White else Color.Gray)
@@ -3267,7 +3355,12 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(if (isActive) "👁️" else "🙈", fontSize = 10.sp)
+                        Icon(
+                            imageVector = if (isActive) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (isActive) "Hide" else "Show",
+                            tint = if (isActive) CyberCyan else Color.Gray,
+                            modifier = Modifier.size(10.dp)
+                        )
                     }
                     // Remove button (functional)
                     if (hasContent) {
@@ -3281,7 +3374,12 @@ private fun LayersPanel(project: VideoProject, context: android.content.Context,
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("✕", fontSize = 9.sp, color = Color(0xFFFF3D7F), fontWeight = FontWeight.Bold)
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remove",
+                                tint = Color(0xFFFF3D7F),
+                                modifier = Modifier.size(9.dp)
+                            )
                         }
                     }
                 }
@@ -3309,12 +3407,13 @@ private fun SpeedPanel(project: VideoProject, onUpdateSpeed: (Float) -> Unit, on
         }
         // Manual Speed Slider
         Text("MANUAL: ${String.format("%.2f", project.speedFactor)}x", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-        Slider(
+        PowerCutSlider(
+            label = "Speed",
             value = project.speedFactor,
-            onValueChange = { onUpdateSpeed(String.format("%.2f", it).toFloat()) },
             valueRange = 0.1f..16f,
-            colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange, inactiveTrackColor = Color.White.copy(0.08f)),
-            modifier = Modifier.fillMaxWidth().height(20.dp)
+            onValueChange = { onUpdateSpeed(String.format("%.2f", it).toFloat()) },
+            accentColor = NeonOrange,
+            valueFormatter = { v -> String.format("%.2f", v) + "x" }
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("0.1x", fontSize = 7.sp, color = Color.Gray)
@@ -3382,11 +3481,14 @@ private fun CropPanel(project: VideoProject, onUpdateCrop: (String) -> Unit, onU
             Triple("➡️ Right", cropRight, { v: Float -> cropRight = v; commitCrop(cropLeft, cropTop, v, cropBottom) }),
             Triple("⬇️ Bottom", cropBottom, { v: Float -> cropBottom = v; commitCrop(cropLeft, cropTop, cropRight, v) })
         ).forEach { (label, value, onChange) ->
-            Row(Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(55.dp))
-                Slider(value = value, onValueChange = onChange, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan, inactiveTrackColor = Color.White.copy(0.08f)), modifier = Modifier.weight(1f).height(16.dp))
-                Text("${(value * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan, fontWeight = FontWeight.Bold, modifier = Modifier.width(30.dp))
-            }
+            PowerCutSlider(
+                label = label,
+                value = value,
+                valueRange = 0f..1f,
+                onValueChange = onChange,
+                accentColor = CyberCyan,
+                valueFormatter = { v -> "${(v * 100).toInt()}%" }
+            )
         }
         // Rotate & Flip
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -3447,8 +3549,8 @@ private fun AudioPanel(
             "mixer" -> {
                 // Volume mixing controls
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) { Text("VIDEO VOL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White); Slider(value = project.videoVolume, onValueChange = onUpdateVideoVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.height(18.dp)) }
-                    Column(Modifier.weight(1f)) { Text("BGM VOL", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White); Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.height(18.dp)) }
+                    PowerCutSlider(label = "Video Vol", value = project.videoVolume, valueRange = 0f..1f, onValueChange = onUpdateVideoVol, accentColor = NeonOrange, valueFormatter = { v -> "${(v * 100).toInt()}%" })
+                    PowerCutSlider(label = "BGM Vol", value = project.backgroundMusicVolume, valueRange = 0f..1f, onValueChange = onUpdateMusicVol, accentColor = CyberCyan, valueFormatter = { v -> "${(v * 100).toInt()}%" })
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.weight(1f).background(if (project.isMuted) NeonOrange.copy(0.2f) else Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable { onToggleMute() }.padding(6.dp), contentAlignment = Alignment.Center) { Text(if (project.isMuted) "UNMUTE" else "MUTE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (project.isMuted) NeonOrange else Color.White) }
@@ -3509,7 +3611,7 @@ private fun AudioPanel(
                     }
                     // Volume slider for imported audio
                     Text("AUDIO VOLUME: ${(project.backgroundMusicVolume * 100).toInt()}%", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                    Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(24.dp))
+                    PowerCutSlider(label = "Volume", value = project.backgroundMusicVolume, valueRange = 0f..1f, onValueChange = onUpdateMusicVol, accentColor = CyberCyan, valueFormatter = { v -> "${(v * 100).toInt()}%" })
                 }
             }
 
@@ -3662,11 +3764,11 @@ private fun AudioPanel(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text("Video ${(project.videoVolume * 100).toInt()}%", fontSize = 7.sp, color = NeonOrange)
-                        Slider(value = project.videoVolume, onValueChange = onUpdateVideoVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.height(20.dp))
+                        PowerCutSlider(label = "Video", value = project.videoVolume, valueRange = 0f..1f, onValueChange = onUpdateVideoVol, accentColor = NeonOrange, valueFormatter = { v -> "${(v * 100).toInt()}%" })
                     }
                     Column(Modifier.weight(1f)) {
                         Text("Music ${(project.backgroundMusicVolume * 100).toInt()}%", fontSize = 7.sp, color = CyberCyan)
-                        Slider(value = project.backgroundMusicVolume, onValueChange = onUpdateMusicVol, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.height(20.dp))
+                        PowerCutSlider(label = "Music", value = project.backgroundMusicVolume, valueRange = 0f..1f, onValueChange = onUpdateMusicVol, accentColor = CyberCyan, valueFormatter = { v -> "${(v * 100).toInt()}%" })
                     }
                 }
 
@@ -3731,7 +3833,7 @@ private fun TextPanel(
 
                 // Font size slider
                 Text("FONT SIZE: ${project.textFontSize.toInt()}pt", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                Slider(value = project.textFontSize, onValueChange = { onUpdateFontSize(it) }, valueRange = 8f..120f, colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange), modifier = Modifier.fillMaxWidth().height(28.dp))
+                PowerCutSlider(label = "Font Size", value = project.textFontSize, valueRange = 8f..120f, onValueChange = { onUpdateFontSize(it) }, accentColor = NeonOrange, valueFormatter = { v -> "${v.toInt()}pt" })
 
                 // Quick text presets
                 Text("QUICK TEXT PRESETS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
@@ -3827,11 +3929,11 @@ private fun TextPanel(
 
                 // X position slider
                 Text("X POSITION: ${(project.textPositionX * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Slider(value = project.textPositionX, onValueChange = { onUpdatePosX(it) }, valueRange = 0f..1f, colors = SliderDefaults.colors(thumbColor = CyberCyan, activeTrackColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(28.dp))
+                PowerCutSlider(label = "X Position", value = project.textPositionX, valueRange = 0f..1f, onValueChange = { onUpdatePosX(it) }, accentColor = CyberCyan, valueFormatter = { v -> "${(v * 100).toInt()}%" })
 
                 // Y position slider
                 Text("Y POSITION: ${(project.textPositionY * 100).toInt()}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Slider(value = project.textPositionY, onValueChange = { onUpdatePosY(it) }, valueRange = 0f..1f, colors = SliderDefaults.colors(thumbColor = CyberCyan, activeTrackColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(28.dp))
+                PowerCutSlider(label = "Y Position", value = project.textPositionY, valueRange = 0f..1f, onValueChange = { onUpdatePosY(it) }, accentColor = CyberCyan, valueFormatter = { v -> "${(v * 100).toInt()}%" })
 
                 // Quick presets
                 Text("PRESET POSITIONS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
@@ -3869,7 +3971,7 @@ private fun TextPanel(
                     }
                 }
                 Text("CUSTOM SIZE: ${project.textFontSize.toInt()}px", fontSize = 7.sp, color = Color.Gray)
-                Slider(value = project.textFontSize, onValueChange = { onUpdateFontSize(it) }, valueRange = 8f..120f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.fillMaxWidth().height(20.dp))
+                PowerCutSlider(label = "Custom Size", value = project.textFontSize, valueRange = 8f..120f, onValueChange = { onUpdateFontSize(it) }, accentColor = NeonOrange, valueFormatter = { v -> "${v.toInt()}px" })
             }
             "color" -> {
                 // Color picker for text
@@ -4004,15 +4106,13 @@ private fun FiltersPanel(project: VideoProject, onUpdateFilter: (String) -> Unit
                     Text("${(filterIntensity * 100).toInt()}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = FiltersPanelCyan)
                 }
                 Spacer(Modifier.height(2.dp))
-                Slider(
+                PowerCutSlider(
+                    label = "Intensity",
                     value = filterIntensity,
                     onValueChange = { filterIntensity = it },
-                    modifier = Modifier.fillMaxWidth().height(16.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = FiltersPanelCyan,
-                        activeTrackColor = FiltersPanelCyan,
-                        inactiveTrackColor = Color(0xFF2A3040)
-                    )
+                    valueRange = 0f..1f,
+                    accentColor = FiltersPanelCyan,
+                    valueFormatter = { v -> "${(v * 100).toInt()}%" }
                 )
             }
         }
@@ -5084,16 +5184,16 @@ private fun ImagePanel(
                 }
                 // Fine position sliders
                 Text("X POSITION: ${String.format("%.0f", project.imageOverlayX * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Slider(value = project.imageOverlayX, onValueChange = onUpdateX, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(18.dp))
+                PowerCutSlider(label = "X Position", value = project.imageOverlayX, valueRange = 0f..1f, onValueChange = onUpdateX, accentColor = CyberCyan, valueFormatter = { v -> "${String.format("%.0f", v * 100)}%" })
                 Text("Y POSITION: ${String.format("%.0f", project.imageOverlayY * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Slider(value = project.imageOverlayY, onValueChange = onUpdateY, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(18.dp))
+                PowerCutSlider(label = "Y Position", value = project.imageOverlayY, valueRange = 0f..1f, onValueChange = onUpdateY, accentColor = CyberCyan, valueFormatter = { v -> "${String.format("%.0f", v * 100)}%" })
             }
             "scale" -> {
                 Text("SCALE & OPACITY", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Text("SIZE: ${String.format("%.0f", project.imageOverlayScale * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
-                Slider(value = project.imageOverlayScale, onValueChange = onUpdateScale, valueRange = 0.1f..3f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(18.dp))
+                PowerCutSlider(label = "Scale", value = project.imageOverlayScale, valueRange = 0.1f..3f, onValueChange = onUpdateScale, accentColor = CyberCyan, valueFormatter = { v -> "${String.format("%.0f", v * 100)}%" })
                 Text("OPACITY: ${String.format("%.0f", project.imageOverlayOpacity * 100)}%", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = NeonOrange)
-                Slider(value = project.imageOverlayOpacity, onValueChange = onUpdateOpacity, valueRange = 0f..1f, colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange), modifier = Modifier.fillMaxWidth().height(18.dp))
+                PowerCutSlider(label = "Opacity", value = project.imageOverlayOpacity, valueRange = 0f..1f, onValueChange = onUpdateOpacity, accentColor = NeonOrange, valueFormatter = { v -> "${String.format("%.0f", v * 100)}%" })
                 // Quick scale presets
                 Text("QUICK SIZE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -5364,15 +5464,14 @@ private fun ColorCurvesPanel(
 
 @Composable
 private fun ColorSliderRow(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
-    Column {
-        Text("$label: ${"%.2f".format(value)}", fontSize = 9.sp, color = Color.Gray)
-        Slider(
-            value = value, onValueChange = onChange,
-            valueRange = min..max,
-            colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange),
-            modifier = Modifier.fillMaxWidth().height(36.dp)
-        )
-    }
+    PowerCutSlider(
+        label = label,
+        value = value,
+        valueRange = min..max,
+        onValueChange = onChange,
+        accentColor = NeonOrange,
+        valueFormatter = { v -> "%.2f".format(v) }
+    )
 }
 
 // 21. AUDIO EFFECTS PANEL — 25 audio effects + ducking toggle
@@ -5434,12 +5533,7 @@ private fun VoiceChangerPanel(
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Voice Changer Pitch", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text("Pitch: ${"%.1f".format(project.voiceChangerPitch)} semitones", fontSize = 9.sp, color = Color.Gray)
-        Slider(
-            value = project.voiceChangerPitch, onValueChange = onUpdateVoiceChangerPitch,
-            valueRange = -12f..12f,
-            colors = SliderDefaults.colors(thumbColor = NeonOrange, activeTrackColor = NeonOrange),
-            modifier = Modifier.fillMaxWidth().height(36.dp)
-        )
+        PowerCutSlider(label = "Pitch", value = project.voiceChangerPitch, valueRange = -12f..12f, onValueChange = onUpdateVoiceChangerPitch, accentColor = NeonOrange, valueFormatter = { v -> "${"%.1f".format(v)} st" })
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(-12f to "Deep", -6f to "Low", 0f to "Normal", 6f to "High", 12f to "Chipmunk").forEach { (pitch, label) ->
                 val sel = project.voiceChangerPitch == pitch
@@ -5930,7 +6024,7 @@ private fun CanvasPanel(
                 }
                 // Brush size slider
                 Text("BRUSH SIZE: ${brushSize.toInt()}px", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                Slider(value = brushSize, onValueChange = { brushSize = it }, valueRange = 1f..50f, colors = SliderDefaults.colors(activeTrackColor = CyberCyan, thumbColor = CyberCyan), modifier = Modifier.fillMaxWidth().height(20.dp))
+                PowerCutSlider(label = "Brush Size", value = brushSize, valueRange = 1f..50f, onValueChange = { brushSize = it }, accentColor = CyberCyan, valueFormatter = { v -> "${v.toInt()}px" })
                 // Undo / Clear / Save
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.weight(1f).background(Color.White.copy(0.04f), RoundedCornerShape(6.dp)).clickable {

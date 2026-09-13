@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.ui.theme.*
+import com.powercut.editor.ui.editor.PowerCutSlider
 
 // ═══════════════════════════════════════════════════════════════════
 // IMAGE STUDIO — Premium image editing with 20+ filters, adjustments,
@@ -526,15 +527,13 @@ private fun ImageStudioAdjustTab(
                     color = CyberCyan
                 )
             }
-            Slider(
+            PowerCutSlider(
+                label = activeParam.uppercase(),
                 value = currentValue,
-                onValueChange = { onAdjust(activeParam, it) },
                 valueRange = range,
-                colors = SliderDefaults.colors(
-                    activeTrackColor = NeonOrange,
-                    thumbColor = NeonOrange
-                ),
-                modifier = Modifier.height(24.dp)
+                onValueChange = { onAdjust(activeParam, it) },
+                accentColor = NeonOrange,
+                valueFormatter = { String.format("%.2f", it) }
             )
         }
     }
@@ -780,12 +779,13 @@ private fun ImageStudioTextTab() {
         Text("FONT SIZE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
         Text("${fontSize.toInt()}sp", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CyberCyan)
     }
-    Slider(
+    PowerCutSlider(
+        label = "FONT SIZE",
         value = fontSize,
-        onValueChange = { fontSize = it },
         valueRange = 8f..72f,
-        colors = SliderDefaults.colors(activeTrackColor = NeonOrange, thumbColor = NeonOrange),
-        modifier = Modifier.height(20.dp)
+        onValueChange = { fontSize = it },
+        accentColor = NeonOrange,
+        valueFormatter = { "${it.toInt()}sp" }
     )
 }
 

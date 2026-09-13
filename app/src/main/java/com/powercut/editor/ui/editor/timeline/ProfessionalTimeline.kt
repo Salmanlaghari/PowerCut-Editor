@@ -1,9 +1,17 @@
 package com.powercut.editor.ui.editor.timeline
 
-import androidx.compose.ui.graphics.toArgb
-import android.graphics.Paint
-import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.*
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.media.MediaExtractor
+import android.media.MediaCodec
+import android.media.MediaFormat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -15,7 +23,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -25,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powercut.editor.data.*
 import com.powercut.editor.ui.theme.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 import kotlin.math.abs
 import kotlin.math.max
@@ -278,8 +290,8 @@ fun TimelineTrackRow(
                 keyframes = clipKeyframes,
                 onSelected = { onClipSelected(clip) },
                 onMoved = { newStartMs -> onClipMoved(clip, newStartMs) },
-                onTrimmed = { newTrimStart, newTrimEnd -> 
-                    onClipTrimmed(clip, newTrimStart, newTrimEnd) 
+                onTrimmed = { newTrimStart, newTrimEnd ->
+                    onClipTrimmed(clip, newTrimStart, newTrimEnd)
                 },
                 snappingThresholdMs = snappingThresholdMs
             )
@@ -318,11 +330,31 @@ fun TimelineClipItem(
     var trimStartOffsetMs by remember { mutableStateOf(0L) }
     var trimEndOffsetMs by remember { mutableStateOf(0L) }
 
-val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
+    val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
     val currentDurationMs = maxOf(clip.durationMs + trimEndOffsetMs - trimStartOffsetMs, 1L)
 
     val displayStartPx = currentStartMs * pxPerMs
     val displayWidthPx = maxOf(displayStartPx + currentDurationMs * pxPerMs, displayStartPx + with(density) { 20.dp.toPx() }) - displayStartPx
+
+    // Thumbnail cache for video clips
+    var thumbnails by remember(clip.id, clip.path) { mutableStateOf<List<Bitmap>?>(null) }
+    LaunchedEffect(clip.id, clip.path) {
+        if (clip.type == TrackType.VIDEO && thumbnails == null) {
+            thumbnails = withContext(Dispatchers.IO) {
+                extractThumbnails(clip.path, clip.durationMs)
+            }
+        }
+    }
+
+    // Waveform cache for audio clips
+    var waveform by remember(clip.id, clip.path) { mutableStateOf<List<Float>?>(null) }
+    LaunchedEffect(clip.id, clip.path) {
+        if (clip.type == TrackType.AUDIO && waveform == null) {
+            waveform = withContext(Dispatchers.IO) {
+                extractWaveform(clip.path, clip.durationMs)
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -346,7 +378,7 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                     if (xPx in 0f..clipW) {
                         val diamondSize = 6f
                         val y = 8f
-                        val diamond = androidx.compose.ui.graphics.Path().apply {
+                        val diamond = Path().apply {
                             moveTo(xPx, y - diamondSize)
                             lineTo(xPx + diamondSize, y)
                             lineTo(xPx, y + diamondSize)
@@ -354,7 +386,44 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                             close()
                         }
                         drawPath(diamond, Color.White.copy(alpha = 0.9f))
-                        drawPath(diamond, Color.White.copy(alpha = 0.3f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f))
+                        drawPath(diamond, Color.White.copy(alpha = 0.3f), style = Stroke(width = 1f))
+                    }
+                }
+                // Thumbnail filmstrip for video clips
+                if (clip.type == TrackType.VIDEO) {
+                    val thumbs = thumbnails
+                    if (thumbs != null && thumbs.isNotEmpty()) {
+                        val thumbWidth = clipW / thumbs.size
+                        thumbs.forEachIndexed { index, bitmap ->
+                            val left = index * thumbWidth
+                            val top = 0f
+                            val right = left + thumbWidth
+                            val bottom = clipH
+                            drawImage(
+                                image = bitmap.asImageBitmap(),
+                                dstOffset = androidx.compose.ui.geometry.IntOffset(left.toInt(), top.toInt()),
+                                dstSize = androidx.compose.ui.geometry.Size(right - left, bottom - top)
+                            )
+                        }
+                    }
+                }
+                // Waveform for audio clips
+                if (clip.type == TrackType.AUDIO) {
+                    val wave = waveform
+                    if (wave != null && wave.isNotEmpty()) {
+                        val centerY = clipH / 2f
+                        val maxBarHeight = clipH * 0.7f
+                        val barWidth = clipW / wave.size
+                        wave.forEachIndexed { index, amplitude ->
+                            val x = index * barWidth
+                            val barHeight = amplitude * maxBarHeight
+                            drawLine(
+                                color = clipColor.copy(alpha = 0.8f),
+                                start = Offset(x, centerY - barHeight / 2f),
+                                end = Offset(x, centerY + barHeight / 2f),
+                                strokeWidth = maxOf(barWidth - 0.5f, 1f)
+                            )
+                        }
                     }
                 }
             }
@@ -370,7 +439,6 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                         val nextStartMs = (clip.startTimeMs + dragOffsetMs + requestedDeltaMs).coerceAtLeast(0L)
                         dragOffsetMs = nextStartMs - clip.startTimeMs
 
-                        // Snapping logic
                         val snappedTime = findSnapPoint(nextStartMs, allClips, clip.id, snappingThresholdMs)
                         if (snappedTime != null) {
                             val snapDelta = snappedTime - nextStartMs
@@ -391,7 +459,12 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
             text = clip.name,
             modifier = Modifier
                 .padding(horizontal = 12.dp)
-                .align(Alignment.CenterStart),
+                .align(Alignment.CenterStart)
+                .then(
+                    if (clip.type == TrackType.VIDEO && thumbnails != null && thumbnails!!.isNotEmpty()) {
+                        Modifier.background(Color.Black.copy(alpha = 0.4f))
+                    } else Modifier
+                ),
             color = Color.White,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
@@ -399,7 +472,6 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
         )
         
         if (clip.isSelected) {
-            // Trim Handles
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -422,7 +494,6 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                         )
                     }
             ) {
-                // Handle Icon
                 Box(Modifier.size(2.dp, 12.dp).background(Color.White).align(Alignment.Center))
             }
             
@@ -448,7 +519,6 @@ val currentStartMs = (clip.startTimeMs + dragOffsetMs).coerceAtLeast(0L)
                         )
                     }
             ) {
-                // Handle Icon
                 Box(Modifier.size(2.dp, 12.dp).background(Color.White).align(Alignment.Center))
             }
         }
@@ -493,4 +563,139 @@ private fun findSnapPoint(
         if (abs(currentTime - clipEnd) < threshold) return clipEnd
     }
     return null
-} // Trailing newline
+}
+
+private fun extractThumbnails(path: String, durationMs: Long): List<Bitmap>? {
+    return try {
+        val retriever = MediaMetadataRetriever()
+        retriever.setDataSource(path)
+        val thumbnails = mutableListOf<Bitmap>()
+        val interval = if (durationMs < 5000) 500L else 1000L
+        var timeUs = 0L
+        while (timeUs < durationMs * 1000) {
+            retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let { frame ->
+                thumbnails.add(Bitmap.createScaledBitmap(frame, 80, 45, true))
+            }
+            timeUs += interval * 1000
+        }
+        retriever.release()
+        if (thumbnails.isEmpty()) null else thumbnails
+    } catch (e: Exception) {
+        null
+    }
+}
+
+private fun extractWaveform(path: String, durationMs: Long): List<Float>? {
+    return try {
+        val extractor = MediaExtractor()
+        extractor.setDataSource(path)
+        var trackIndex = -1
+        var format: MediaFormat? = null
+        for (i in 0 until extractor.trackCount) {
+            val f = extractor.getTrackFormat(i)
+            val mime = f.getString(MediaFormat.KEY_MIME) ?: continue
+            if (mime.startsWith("audio/")) {
+                trackIndex = i
+                format = f
+                break
+            }
+        }
+        if (trackIndex < 0 || format == null) {
+            extractor.release()
+            return null
+        }
+        extractor.selectTrack(trackIndex)
+        val mime = format.getString(MediaFormat.KEY_MIME)!!
+        val codec = MediaCodec.createDecoderByType(mime)
+        codec.configure(format, null, null, 0)
+        codec.start()
+        val sampleCount = 64
+        val amplitudes = FloatArray(sampleCount)
+        val bufferInfo = MediaCodec.BufferInfo()
+        var chunkIndex = 0
+        var sawEos = false
+        while (!sawEos && chunkIndex < sampleCount) {
+            val inputId = codec.dequeueInputBuffer(10000)
+            if (inputId >= 0) {
+                val inputBuf = codec.getInputBuffer(inputId)!!
+                val size = extractor.readSampleData(inputBuf, 0)
+                if (size >= 0) {
+                    codec.queueInputBuffer(inputId, 0, size, extractor.sampleTime, 0)
+                    extractor.advance()
+                } else {
+                    codec.queueInputBuffer(inputId, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                }
+            }
+            val outputId = codec.dequeueOutputBuffer(bufferInfo, 10000)
+            if (outputId >= 0) {
+                val outputBuf = codec.getOutputBuffer(outputId)!!
+                val size = bufferInfo.size
+                if (size > 0 && chunkIndex < sampleCount) {
+                    val chunk = ByteArray(size)
+                    outputBuf.get(chunk)
+                    var peak = 0f
+                    var i = 0
+                    while (i < chunk.size - 1) {
+                        val sample = ((chunk[i + 1].toInt() shl 8) or (chunk[i].toInt() and 0xFF)).toShort()
+                        val absSample = kotlin.math.abs(sample.toFloat()) / 32768f
+                        if (absSample > peak) peak = absSample
+                        i += 2
+                    }
+                    amplitudes[chunkIndex] = peak.coerceIn(0.05f, 1f)
+                    chunkIndex++
+                }
+                codec.releaseOutputBuffer(outputId, false)
+                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                    sawEos = true
+                }
+            }
+        }
+        codec.stop()
+        codec.release()
+        extractor.release()
+        amplitudes.toList()
+    } catch (e: Exception) {
+        null
+    }
+}
+
+@Composable
+fun rememberWaveform(path: String): List<Float>? {
+    var waveform by remember(path) { mutableStateOf<List<Float>?>(null) }
+    LaunchedEffect(path) {
+        if (waveform == null) {
+            waveform = withContext(Dispatchers.IO) {
+                extractWaveform(path, 0L)
+            }
+        }
+    }
+    return waveform
+}
+
+@Composable
+fun TimelineWaveform(
+    clip: TimelineClip,
+    pxPerMs: Float,
+    modifier: Modifier = Modifier
+) {
+    var waveform by rememberWaveform(clip.path)
+    Canvas(modifier = modifier.height(16.dp)) {
+        val wave = waveform ?: return@Canvas
+        val centerY = size.height / 2f
+        val maxBarHeight = size.height * 0.8f
+        val barWidth = size.width / wave.size
+        wave.forEachIndexed { index, amplitude ->
+            val x = index * barWidth
+            val barHeight = amplitude * maxBarHeight
+            drawLine(
+                color = when (clip.type) {
+                    TrackType.AUDIO -> AccentTertiary
+                    else -> Color.Gray
+                }.copy(alpha = 0.7f),
+                start = Offset(x, centerY - barHeight / 2f),
+                end = Offset(x, centerY + barHeight / 2f),
+                strokeWidth = maxOf(barWidth - 0.5f, 1f)
+            )
+        }
+    }
+}

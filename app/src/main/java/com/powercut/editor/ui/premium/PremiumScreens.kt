@@ -36,9 +36,8 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import com.powercut.editor.ui.editor.PowerCutSlider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -228,16 +227,15 @@ fun SliderControlRow(slider: SliderControl) {
                 color = CyberCyan
             )
         }
-        Slider(
+        PowerCutSlider(
+            label = slider.name,
             value = value,
-            onValueChange = { slider.currentValue.value = it },
             valueRange = slider.minValue..slider.maxValue,
-            colors = SliderDefaults.colors(
-                activeTrackColor = CyberCyan,
-                thumbColor = CyberCyan,
-                inactiveTrackColor = Color.White.copy(alpha = 0.08f)
-            ),
-            modifier = Modifier.height(24.dp)
+            onValueChange = { slider.currentValue.value = it },
+            accentColor = CyberCyan,
+            valueFormatter = {
+                if (slider.stepSize >= 1f) "${it.toInt()}" else String.format("%.2f", it)
+            }
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
