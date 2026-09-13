@@ -79,6 +79,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Portrait
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Speed
@@ -2667,7 +2669,7 @@ private fun CapCutToolBar(
     onProTier: () -> Unit = {},
     onPremiumStudio: () -> Unit = {}
 ) {
-    val tools = listOf(
+    val tools = listOf<Pair<ImageVector, String>>(
         Icons.Default.Tune to "Edit", Icons.Default.Widgets to "Layers", Icons.Default.Speed to "Speed", Icons.Default.Crop to "Crop",
         Icons.Default.MusicNote to "Audio", Icons.Default.TextFields to "Text", Icons.Default.AutoFixHigh to "Filters", Icons.Default.Star to "Effects",
         Icons.Default.EmojiEmotions to "Stickers", Icons.Default.SwapHoriz to "Trans", Icons.Default.Animation to "Anim", Icons.Default.ViewInAr to "3D",
