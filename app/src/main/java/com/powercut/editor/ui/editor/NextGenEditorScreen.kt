@@ -2691,7 +2691,7 @@ private fun CapCutToolBar(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        tools.forEachIndexed { idx, (emoji, name) ->
+        tools.forEachIndexed { idx, (icon, name) ->
             val isActive = selectedTool == idx
             // 2027 8K: Premium tools (last 4) get gradient pill styling
             val isPremium = idx >= tools.size - 4
@@ -3202,7 +3202,7 @@ private fun EditPanel(
                     android.widget.Toast.makeText(ctx, "Section deleted!", android.widget.Toast.LENGTH_SHORT).show()
                 }.padding(12.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🗑️", fontSize = 28.sp)
+                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFFF1744), modifier = Modifier.size(28.dp))
                         Text("Delete Selected", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF1744))
                         Text("Remove clip section", fontSize = 8.sp, color = Color.Gray)
                     }
